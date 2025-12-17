@@ -179,21 +179,6 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
                   { label: '元', value: 'yuan' },
                   { label: '万元', value: 'wanyuan' },
                 ]}
-                styles={{
-                  root: {
-                    backgroundColor: '#ffffff', // 白色背景
-                    border: '0px solid #d1d5db', // 灰色边框
-                  },
-                  indicator: {
-                    backgroundColor: '#d1d5db', // 灰色选中背景
-                  },
-                  label: {
-                    color: '#000000', // 黑色文字
-                    '&[data-active]': {
-                      color: '#ffffff', // 白色选中文字
-                    },
-                  },
-                }}
               />
             </Group>
           </div>

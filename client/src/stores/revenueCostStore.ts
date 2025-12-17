@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
+import { devtools } from 'zustand/middleware'
 
 /**
  * 达产率配置
@@ -20,36 +20,41 @@ export interface ValidationError {
 }
 
 /**
- * 营业收入类型（AI推荐）
+ * AI分析结果类型
  */
-export interface AIRevenueType {
-  type_name: string
-  priority: 'high' | 'medium' | 'low'
-  suggested_vat_rate: number
-  typical_pricing_model: string
-  estimated_proportion: string
-}
-
-/**
- * 营收类别（AI推荐）
- */
-export interface AIRevenueCategory {
-  category_code: string
-  category_name: string
-  category_icon: string
-  relevance_score: number
-  reasoning: string
-  recommended_revenue_types: AIRevenueType[]
-}
-
-/**
- * AI分析结果
- */
-export interface AIAnalysisResult {
-  selected_categories: AIRevenueCategory[]
+export interface AiAnalysisResult {
+  selected_categories: Array<{
+    category_code: string
+    category_name: string
+    category_icon: string
+    relevance_score: number
+    reasoning: string
+    recommended_revenue_types: Array<{
+      type_name: string
+      priority: 'high' | 'medium' | 'low'
+      suggested_vat_rate: number
+      typical_pricing_model: string
+      estimated_proportion: string
+    }>
+  }>
   total_categories: number
   analysis_summary: string
 }
+
+/**
+ * AI营收类别类型（从AiAnalysisResult中提取）
+ */
+export type AIRevenueCategory = AiAnalysisResult['selected_categories'][number]
+
+/**
+ * AI营收类型（从AIRevenueCategory中提取）
+ */
+export type AIRevenueType = AIRevenueCategory['recommended_revenue_types'][number]
+
+/**
+ * 为了兼容性，同时导出AI开头的类型别名
+ */
+export type AIAnalysisResult = AiAnalysisResult
 
 /**
  * 收入项类别
@@ -84,20 +89,20 @@ export interface RevenueItem {
   
   // 动态字段（根据fieldTemplate显示不同字段）
   quantity?: number         // 数量
-  unit?: string             // 数量单位（AI测算后自动填充）
-  unitPrice?: number        // 单价（根据priceUnit，可能是元或万元）
-  priceUnit?: 'yuan' | 'wan-yuan' // 单价单位，默认万元
+  unitPrice?: number        // 单价
   area?: number            // 面积（亩）
   yieldPerArea?: number    // 亩产量
   capacity?: number        // 产能
-  capacityUnit?: string    // 产能单位（AI测算后自动填充）
   utilizationRate?: number // 利用率
   subscriptions?: number   // 订阅数
   directAmount?: number    // 直接金额
+  unit?: string            // 单位
+  capacityUnit?: string    // 产能单位
   
-  // 涨价参数
-  priceIncreaseInterval?: number // 涨价间隔（年），0表示不涨价
-  priceIncreaseRate?: number     // 涨价幅度（%），如 5 表示 5%
+  // 价格相关字段
+  priceUnit?: 'yuan' | 'wan-yuan'  // 货币单位：元或万元
+  priceIncreaseInterval?: number   // 涨价间隔年数
+  priceIncreaseRate?: number       // 涨价幅度（%）
   
   // 税务字段
   vatRate: number          // 增值税率（如 0.13 表示13%）
@@ -124,6 +129,10 @@ export interface CostItem {
   quantity?: number
   unitPrice?: number
   directAmount?: number
+  
+  // 关联收入字段
+  linkedRevenueId?: string  // 关联的收入项ID
+  percentage?: number       // 占收入的百分比(如2表示2%)
   
   // 计算字段
   totalAmount?: number
@@ -169,9 +178,9 @@ interface RevenueCostState {
   calculationPeriod: number // 总计算期（建设期+运营期）
   baseYear: number          // 生产启动年（默认 constructionYears + 1）
   
-  // ========== AI推荐数据 ==========
-  aiAnalysisResult: AIAnalysisResult | null
-  revenueStructureLocked: boolean
+  // ========== AI分析结果 ==========
+  aiAnalysisResult: AiAnalysisResult | null
+  revenueStructureLocked: boolean  // 营收结构是否锁定
   
   // ========== 主体数据 ==========
   revenueItems: RevenueItem[]
@@ -189,12 +198,13 @@ interface RevenueCostState {
   // 上下文管理
   setContext: (context: ProjectContext) => void
   
+  // AI分析结果管理
+  setAiAnalysisResult: (result: AiAnalysisResult | null) => void
+  setAIAnalysisResult: (result: AiAnalysisResult | null) => void  // 兼容性别名
+  setRevenueStructureLocked: (locked: boolean) => void
+  
   // 计算期管理
   updateCalculationPeriod: (calculationPeriod: number, baseYear?: number) => void
-  
-  // AI推荐管理
-  setAIAnalysisResult: (result: AIAnalysisResult | null) => void
-  setRevenueStructureLocked: (locked: boolean) => void
   
   // 收入项管理
   addRevenueItem: (item: Partial<RevenueItem>) => void
@@ -229,35 +239,22 @@ interface RevenueCostState {
 
 /**
  * 生成默认达产率曲线
- * 规则：只配置前3年，第1年75%，第2年85%，第3年及以后100%
- * 未配置的年份按最后一年执行
+ * 规则：第1年50%，第2年75%，第3年及以后100%
  */
 const generateDefaultProductionRates = (operationYears: number): ProductionRateConfig[] => {
-  // 只配置前3年
-  return [
-    { yearIndex: 1, rate: 0.75 },
-    { yearIndex: 2, rate: 0.85 },
-    { yearIndex: 3, rate: 1.0 },
-  ]
-}
-
-/**
- * 获取指定年份的达产率，如果未配置则使用最后一年的达产率
- */
-export const getProductionRateForYear = (
-  rates: ProductionRateConfig[],
-  yearIndex: number
-): number => {
-  if (rates.length === 0) return 1.0
-  
-  // 查找是否有配置
-  const config = rates.find(r => r.yearIndex === yearIndex)
-  if (config) return config.rate
-  
-  // 未配置则使用最后一年的配置
-  const maxYearIndex = Math.max(...rates.map(r => r.yearIndex))
-  const lastConfig = rates.find(r => r.yearIndex === maxYearIndex)
-  return lastConfig?.rate || 1.0
+  const rates: ProductionRateConfig[] = []
+  for (let i = 1; i <= operationYears; i++) {
+    let rate = 1.0
+    if (i === 1) rate = 0.5
+    else if (i === 2) rate = 0.75
+    else rate = 1.0
+    
+    rates.push({
+      yearIndex: i,
+      rate
+    })
+  }
+  return rates
 }
 
 /**
@@ -266,27 +263,18 @@ export const getProductionRateForYear = (
 export const calculateTaxableIncome = (item: RevenueItem): number => {
   let baseAmount = 0
   
-  // 获取单价（统一转为万元）
-  const getPriceInWanYuan = () => {
-    const price = item.unitPrice || 0
-    if (item.priceUnit === 'yuan') {
-      return price / 10000 // 元转万元
-    }
-    return price // 默认已经是万元
-  }
-  
   switch (item.fieldTemplate) {
     case 'quantity-price':
-      baseAmount = (item.quantity || 0) * getPriceInWanYuan()
+      baseAmount = (item.quantity || 0) * (item.unitPrice || 0)
       break
     case 'area-yield-price':
-      baseAmount = (item.area || 0) * (item.yieldPerArea || 0) * getPriceInWanYuan()
+      baseAmount = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0)
       break
     case 'capacity-utilization':
-      baseAmount = (item.capacity || 0) * (item.utilizationRate || 0) * getPriceInWanYuan()
+      baseAmount = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0)
       break
     case 'subscription':
-      baseAmount = (item.subscriptions || 0) * getPriceInWanYuan()
+      baseAmount = (item.subscriptions || 0) * (item.unitPrice || 0)
       break
     case 'direct-amount':
       baseAmount = item.directAmount || 0
@@ -314,44 +302,39 @@ export const calculateVatAmount = (item: RevenueItem): number => {
 }
 
 /**
- * 计算指定运营年份的价格乘数（考虑涨价）
- * @param item 收入项
- * @param yearIndex 运营第N年（1-based）
- * @returns 价格乘数，例如第4年涨价5%则返回1.05
+ * 获取指定年份的达产率
  */
-export const calculatePriceMultiplier = (item: RevenueItem, yearIndex: number): number => {
-  const interval = item.priceIncreaseInterval || 0
-  const rate = item.priceIncreaseRate || 0
-
-  if (interval === 0 || rate === 0) {
-    return 1.0 // 不涨价
-  }
-
-  // 计算已经涨价的次数：yearIndex除以interval，向下取整
-  // 例如：间隔3年，则第1-3年为0次，第4-6年为1次，第7-9年为2次
-  const increaseCount = Math.floor((yearIndex - 1) / interval)
-
-  // 计算价格乘数：(1 + rate/100)^increaseCount
-  const multiplier = Math.pow(1 + rate / 100, increaseCount)
-
-  return multiplier
+export const getProductionRateForYear = (rates: ProductionRateConfig[], year: number): number => {
+  const rateConfig = rates.find(r => r.yearIndex === year)
+  return rateConfig ? rateConfig.rate : 1.0
 }
 
 /**
- * 计算指定年份的收入（考虑达产率和涨价）
+ * 计算某年的收入（含税收入）
  * @param item 收入项
- * @param yearIndex 运营第N年（1-based）
- * @param productionRate 达产率（0-1之间）
+ * @param year 运营年份（1-based）
+ * @param productionRate 达产率（0-1之间的小数）
  */
-export const calculateYearlyRevenue = (
-  item: RevenueItem,
-  yearIndex: number,
-  productionRate: number
-): number => {
-  const baseRevenue = calculateTaxableIncome(item)
-  const priceMultiplier = calculatePriceMultiplier(item, yearIndex)
-
-  return baseRevenue * priceMultiplier * productionRate
+export const calculateYearlyRevenue = (item: RevenueItem, year: number, productionRate: number): number => {
+  // 1. 计算基础含税收入（万元）
+  let baseRevenue = calculateTaxableIncome(item)
+  
+  // 2. 如果单价单位是元，需要转换为万元
+  if (item.priceUnit === 'yuan') {
+    baseRevenue = baseRevenue / 10000
+  }
+  
+  // 3. 应用涨价规则
+  if (item.priceIncreaseInterval && item.priceIncreaseInterval > 0 && item.priceIncreaseRate && item.priceIncreaseRate > 0) {
+    // 计算当前年份处于第几个涨价周期
+    const priceRoundIndex = Math.floor((year - 1) / item.priceIncreaseInterval)
+    // 应用涨价：每个周期涨价一次
+    const priceMultiplier = Math.pow(1 + item.priceIncreaseRate / 100, priceRoundIndex)
+    baseRevenue = baseRevenue * priceMultiplier
+  }
+  
+  // 4. 应用达产率
+  return baseRevenue * productionRate
 }
 
 /**
@@ -359,21 +342,20 @@ export const calculateYearlyRevenue = (
  */
 export const useRevenueCostStore = create<RevenueCostState>()(
   devtools(
-    persist(
-      (set, get) => ({
-        // ========== 初始状态 ==========
-        context: null,
-        calculationPeriod: 0,
-        baseYear: 0,
-        aiAnalysisResult: null,
-        revenueStructureLocked: false,
-        revenueItems: [],
-        costItems: [],
-        productionRates: [],
-        currentStep: 'period',
-        isSubmitting: false,
-        isSaving: false,
-        errors: [],
+    (set, get) => ({
+      // ========== 初始状态 ==========
+      context: null,
+      calculationPeriod: 0,
+      baseYear: 0,
+      aiAnalysisResult: null,
+      revenueStructureLocked: false,
+      revenueItems: [],
+      costItems: [],
+      productionRates: [],
+      currentStep: 'period',
+      isSubmitting: false,
+      isSaving: false,
+      errors: [],
       
       // ========== 操作方法实现 ==========
       
@@ -384,6 +366,19 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           baseYear: context.constructionYears + 1,
           productionRates: generateDefaultProductionRates(context.operationYears)
         })
+      },
+      
+      setAiAnalysisResult: (result) => {
+        set({ aiAnalysisResult: result })
+      },
+      
+      // 兼容性别名
+      setAIAnalysisResult: (result) => {
+        set({ aiAnalysisResult: result })
+      },
+      
+      setRevenueStructureLocked: (locked) => {
+        set({ revenueStructureLocked: locked })
       },
       
       updateCalculationPeriod: (calculationPeriod, baseYear) => {
@@ -398,14 +393,6 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         })
       },
       
-      setAIAnalysisResult: (result) => {
-        set({ aiAnalysisResult: result })
-      },
-      
-      setRevenueStructureLocked: (locked) => {
-        set({ revenueStructureLocked: locked })
-      },
-      
       addRevenueItem: (item) => {
         const state = get()
         const newItem: RevenueItem = {
@@ -415,9 +402,6 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           category: item.category || 'other',
           fieldTemplate: item.fieldTemplate || 'quantity-price',
           vatRate: item.vatRate || 0.13,
-          priceUnit: item.priceUnit || 'wan-yuan', // 默认万元
-          priceIncreaseInterval: item.priceIncreaseInterval || 0, // 默认不涨价
-          priceIncreaseRate: item.priceIncreaseRate || 0,
           ...item
         }
         set({ revenueItems: [...state.revenueItems, newItem] })
@@ -609,22 +593,6 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         })
       }
     }),
-      {
-        name: 'revenue-cost-storage', // localStorage key
-        partialize: (state) => ({
-          // 只持久化需要的字段
-          context: state.context,
-          calculationPeriod: state.calculationPeriod,
-          baseYear: state.baseYear,
-          aiAnalysisResult: state.aiAnalysisResult,
-          revenueStructureLocked: state.revenueStructureLocked,
-          revenueItems: state.revenueItems,
-          costItems: state.costItems,
-          productionRates: state.productionRates,
-          currentStep: state.currentStep,
-        })
-      }
-    ),
     { name: 'RevenueCostStore' }
   )
 )
