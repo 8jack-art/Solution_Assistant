@@ -522,3 +522,127 @@ ${projectInfo}
     { role: 'user', content: userPrompt }
   ]
 }
+
+/**
+ * 分析营业收入类型的税率和计费模式
+ */
+export function analyzePricingPrompt(typeName: string): LLMMessage[] {
+  const systemPrompt = `作为一个专业的财务顾问，根据营业收入类型的名称，推理其合适的增值税税率和计费模式。
+
+参考规则：
+- 农产品销售：9%
+- 服务业：6%
+- 工业产品销售：13%
+- 租赁服务：9%
+- 不动产租赁：9%
+- 现代服务（咨询、技术）：6%
+- 生活服务：6%
+
+计费模式示例：
+- 销售类：按重量销售、按数量销售、按件销售
+- 服务类：按服务次数、按面积、按小时、按天
+- 租赁类：按月租赁、按年租赁、按平方米
+- 订阅类：按月订阅、按年订阅
+- 加工类：按重量加工、按件加工
+- 技术类：按项目报价、按工作量
+
+请严格按照以下JSON格式返回：
+{
+  "vat_rate": 增值税率（单位：%，如：9、13、6）,
+  "pricing_model": "计费模式（不超过15字）"
+}
+
+只返回JSON格式，不要包含其他文字说明`
+
+  const userPrompt = `营业收入类型：${typeName}
+
+请分析其合适的增值税税率和计费模式。`
+
+  return [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ]
+}
+
+/**
+ * 根据项目信息和营收结构表生成具体的收入项目表
+ */
+export function generateRevenueItemsPrompt(
+  projectInfo: {
+    name: string
+    description: string
+    totalInvestment: number
+    constructionYears: number
+    operationYears: number
+    constructionCost?: number
+    equipmentCost?: number
+  },
+  revenueSummary: string
+): LLMMessage[] {
+  const systemPrompt = `作为一个专业的财务分析师，根据项目信息、投资数据和营收结构表，生成详细的营业收入项目表。
+
+请严格按照以下JSON格式返回：
+{
+  "revenue_items": [
+    {
+      "name": "收入项名称",
+      "category": "agriculture-crop | agriculture-livestock | agriculture-aquaculture | digital-platform | transaction-hub | processing | agri-service | new-energy | agri-tourism | other",
+      "unit": "计量单位",
+      "quantity": 年产量数值,
+      "unitPrice": 单价数值(元),
+      "vatRate": 增值税率数值(%)
+    }
+  ]
+}
+
+类别枚举值说明：
+- agriculture-crop: 农业种植
+- agriculture-livestock: 畜牧养殖
+- agriculture-aquaculture: 渔业水产
+- digital-platform: 数字平台
+- transaction-hub: 交易撮合
+- processing: 加工服务
+- agri-service: 综合农服
+- new-energy: 新能源融合
+- agri-tourism: 农旅融合
+- other: 其他
+
+要求：
+1. 生成 3-8 个收入项目，覆盖主要营收类型
+2. 数据要符合行业常识和项目规模
+3. category 必须是上述枚举值之一
+4. 增值税率参考：农产品 9%、服务业 6%、工业产品 13%
+5. 单价以"元"为单位
+6. 年产量/规模要符合实际，考虑项目投资规模
+7. 只返回JSON格式，不要包含其他文字说明`
+
+  const investmentSummary = `
+总投资：${projectInfo.totalInvestment}万元
+建设期：${projectInfo.constructionYears}年
+运营期：${projectInfo.operationYears}年${projectInfo.constructionCost ? `
+建筑工程费：${projectInfo.constructionCost}万元` : ''}${projectInfo.equipmentCost ? `
+设备购置费：${projectInfo.equipmentCost}万元` : ''}
+  `.trim()
+
+  const userPrompt = `请为以下项目生成详细的营业收入项目表：
+
+## 项目基本信息
+项目名称：${projectInfo.name}
+项目描述：${projectInfo.description || '无'}
+
+## 投资简表数据
+${investmentSummary}
+
+## 营收结构表
+${revenueSummary}
+
+请根据上述信息，生成合理的营业收入项目表。确保：
+1. 收入项与营收结构表对应
+2. 规模与投资额匹配
+3. 数据符合行业常识`
+
+  return [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ]
+}

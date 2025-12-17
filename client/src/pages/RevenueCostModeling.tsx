@@ -27,12 +27,13 @@ import {
   IconTool, 
   IconFileText,
   IconCoin,
+  IconCurrencyDollar,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { projectApi, investmentApi } from '@/lib/api'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
 import { InvestmentEstimate } from '@/types'
-import AIRecommendationEngine from '@/components/revenue-cost/AIRecommendationEngine'
+import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
 import DynamicRevenueTable from '@/components/revenue-cost/DynamicRevenueTable'
 import ProductionRateModel from '@/components/revenue-cost/ProductionRateModel'
 import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
@@ -77,6 +78,16 @@ const RevenueCostModeling: React.FC = () => {
   const [constructionOriginalValue, setConstructionOriginalValue] = useState(0)
   const [equipmentOriginalValue, setEquipmentOriginalValue] = useState(0)
   const [deductibleInputTax, setDeductibleInputTax] = useState(0)
+  
+  // 还本付息计划表状态
+  const [repaymentPlanOpened, setRepaymentPlanOpened] = useState(false)
+  const [repaymentTableData, setRepaymentTableData] = useState<Array<{
+    序号: string
+    项目: string
+    合计: number | null
+    分年数据: number[]
+    isMainRow?: boolean
+  }>>([])
   
   // 弹窗状态控制
   const [editModalOpened, setEditModalOpened] = useState(false)
@@ -248,6 +259,137 @@ const RevenueCostModeling: React.FC = () => {
     setDeductibleInputTax(deductibleTax)
   }, [project, investmentEstimate, constructionInputTaxRate, equipmentInputTaxRate])
 
+  /**
+   * 计算还本付息计划表（等额本金还款方式）
+   * 新公式：当年利息 = (期初借款余额 - 当期还本/2) × 年利率
+   */
+  useEffect(() => {
+    if (!project || !investmentEstimate) return
+
+    const loanAmount = Number(investmentEstimate.loan_amount) || 0
+    if (loanAmount === 0 || repaymentPeriod === 0) {
+      setRepaymentTableData([])
+      return
+    }
+
+    const loanYears = repaymentPeriod
+    const interestRate = Number(project.loan_interest_rate) || 0.049 // 默认4.9%
+    const operationYears = project.operation_years || 0
+    const totalMonths = loanYears * 12
+    const monthlyPrincipal = loanAmount / totalMonths // 每月固定本金
+
+    console.log('📋 还本付息计算参数:', {
+      '贷款总额': loanAmount,
+      '贷款年限': loanYears,
+      '年利率': interestRate,
+      '运营期': operationYears,
+      '每月还本': monthlyPrincipal.toFixed(2)
+    })
+
+    // 预先计算总利息
+    let totalInterest = 0
+    for (let y = 0; y < loanYears; y++) {
+      const yearOpeningBalance = loanAmount - (monthlyPrincipal * y * 12)
+      if (yearOpeningBalance <= 0) break
+
+      const monthsInYear = Math.min(12, totalMonths - y * 12)
+      const yearPrincipal = monthlyPrincipal * monthsInYear
+
+      // 关键公式：当年利息 = (期初余额 - 当期还本/2) × 年利率
+      const yearInterest = Math.max(0, (yearOpeningBalance - yearPrincipal / 2) * interestRate)
+      totalInterest += yearInterest
+    }
+
+    console.log('💰 总利息:', totalInterest.toFixed(2))
+
+    // 生成表格数据
+    const data: Array<{
+      序号: string
+      项目: string
+      合计: number | null
+      分年数据: number[]
+      isMainRow?: boolean
+    }> = []
+
+    // 1. 期初借款余额
+    data.push({
+      序号: '1',
+      项目: '期初借款余额',
+      合计: null,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        if (i === 0) return loanAmount
+        if (i >= loanYears) return 0
+        const monthsPassed = i * 12
+        return Math.max(0, loanAmount - monthlyPrincipal * monthsPassed)
+      })
+    })
+
+    // 2. 当期还本付息（主行）
+    data.push({
+      序号: '2',
+      项目: '当期还本付息',
+      合计: loanAmount + totalInterest,
+      isMainRow: true,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        if (i >= loanYears) return 0
+
+        const yearOpeningBalance = loanAmount - (monthlyPrincipal * i * 12)
+        if (yearOpeningBalance <= 0) return 0
+
+        const monthsRemaining = Math.min(12, totalMonths - i * 12)
+        const yearPrincipal = monthlyPrincipal * monthsRemaining
+        const yearInterest = Math.max(0, (yearOpeningBalance - yearPrincipal / 2) * interestRate)
+
+        return yearPrincipal + yearInterest
+      })
+    })
+
+    // 3. 还本（子行）
+    data.push({
+      序号: '2.1',
+      项目: '还本',
+      合计: loanAmount,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        if (i >= loanYears) return 0
+        const monthsRemaining = Math.min(12, totalMonths - i * 12)
+        return monthlyPrincipal * monthsRemaining
+      })
+    })
+
+    // 4. 付息（子行）
+    data.push({
+      序号: '2.2',
+      项目: '付息',
+      合计: totalInterest,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        if (i >= loanYears) return 0
+
+        const yearOpeningBalance = loanAmount - (monthlyPrincipal * i * 12)
+        if (yearOpeningBalance <= 0) return 0
+
+        const monthsRemaining = Math.min(12, totalMonths - i * 12)
+        const yearPrincipal = monthlyPrincipal * monthsRemaining
+
+        return Math.max(0, (yearOpeningBalance - yearPrincipal / 2) * interestRate)
+      })
+    })
+
+    // 5. 期末借款余额
+    data.push({
+      序号: '3',
+      项目: '期末借款余额',
+      合计: null,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        if (i >= loanYears) return 0
+        const monthsPassed = (i + 1) * 12
+        if (monthsPassed >= totalMonths) return 0
+        return Math.max(0, loanAmount - monthlyPrincipal * monthsPassed)
+      })
+    })
+
+    setRepaymentTableData(data)
+  }, [project, investmentEstimate, repaymentPeriod])
+
   // 打开编辑弹窗（年限和残值率同时编辑）
   const openEditModal = (
     type: string, 
@@ -361,16 +503,29 @@ const RevenueCostModeling: React.FC = () => {
                         基础数据确认
                       </Text>
                     </Group>
-                    <Tooltip label="查看折旧与摊销简表">
-                      <ActionIcon 
-                        variant="light" 
-                        color="blue" 
-                        size="lg"
-                        onClick={() => setDepreciationTableOpened(true)}
-                      >
-                        <IconFileText size={20} />
-                      </ActionIcon>
-                    </Tooltip>
+                    <Group gap="xs">
+                      <Tooltip label="查看还本付息计划表">
+                        <ActionIcon 
+                          variant="light" 
+                          color="green" 
+                          size="lg"
+                          onClick={() => setRepaymentPlanOpened(true)}
+                          disabled={!investmentEstimate || repaymentPeriod === 0}
+                        >
+                          <IconCurrencyDollar size={20} />
+                        </ActionIcon>
+                      </Tooltip>
+                      <Tooltip label="查看折旧与摊销简表">
+                        <ActionIcon 
+                          variant="light" 
+                          color="blue" 
+                          size="lg"
+                          onClick={() => setDepreciationTableOpened(true)}
+                        >
+                          <IconFileText size={20} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
                   </Group>
                   <Text size="sm" c="#86909C">
                     确认项目基础参数和折旧摊销相关数据，点击编辑图标可修改
@@ -984,6 +1139,149 @@ const RevenueCostModeling: React.FC = () => {
                 </Button>
               </Group>
             </Modal>
+
+            {/* 还本付息计划表弹窗 */}
+            <Modal
+              opened={repaymentPlanOpened}
+              onClose={() => setRepaymentPlanOpened(false)}
+              title={
+                <Group gap="xs">
+                  <IconCurrencyDollar size={20} color="#00C48C" />
+                  <Text fw={600} c="#1D2129">还本付息计划表（等额本金还款）</Text>
+                </Group>
+              }
+              size="1400px"
+              centered
+            >
+              <Stack gap="md">
+                {/* 计算公式说明 */}
+                <div style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#E6F4FF',
+                  borderRadius: '8px',
+                  border: '1px solid #91CAFF'
+                }}>
+                  <Text size="sm" c="#165DFF" fw={500} mb={4}>
+                    📊 计算公式
+                  </Text>
+                  <Text size="xs" c="#4E5969">
+                    • 还款方式：等额本金（每月偏还固定本金）<br />
+                    • <strong>当年利息 = (期初借款余额 - 当期还本/2) × 年利率</strong><br />
+                    • 还款期：{repaymentPeriod} 年 | 年利率：{((Number(project?.loan_interest_rate) || 0.049) * 100).toFixed(2)}%
+                  </Text>
+                </div>
+
+                {/* 还本付息表格 */}
+                {repaymentTableData.length > 0 ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <Table
+                      striped
+                      withTableBorder
+                      styles={{
+                        th: {
+                          backgroundColor: '#F7F8FA',
+                          color: '#1D2129',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          textAlign: 'center'
+                        },
+                        td: {
+                          fontSize: '13px',
+                          textAlign: 'center'
+                        }
+                      }}
+                    >
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th style={{ width: '60px' }}>序号</Table.Th>
+                          <Table.Th style={{ width: '180px', textAlign: 'left' }}>项目</Table.Th>
+                          <Table.Th style={{ width: '120px' }}>合计</Table.Th>
+                          {Array.from({ length: project?.operation_years || 0 }, (_, i) => (
+                            <Table.Th key={i} style={{ width: '100px' }}>
+                              第{i + 1}年
+                            </Table.Th>
+                          ))}
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {repaymentTableData.map((row, idx) => (
+                          <Table.Tr 
+                            key={idx}
+                            style={{
+                              backgroundColor: row.isMainRow ? '#E6F7FF' : undefined,
+                              fontWeight: row.isMainRow ? 600 : undefined
+                            }}
+                          >
+                            <Table.Td>
+                              {row.序号.includes('.') ? (
+                                <Text size="xs" c="#86909C" ml="md">{row.序号}</Text>
+                              ) : (
+                                <Text fw={600}>{row.序号}</Text>
+                              )}
+                            </Table.Td>
+                            <Table.Td style={{ textAlign: 'left' }}>
+                              {row.序号.includes('.') ? (
+                                <Text size="sm" c="#4E5969" ml="md">{row.项目}</Text>
+                              ) : (
+                                <Text fw={row.isMainRow ? 600 : 500}>{row.项目}</Text>
+                              )}
+                            </Table.Td>
+                            <Table.Td>
+                              {row.合计 !== null ? (
+                                <Text 
+                                  fw={row.isMainRow ? 700 : 600} 
+                                  c={row.isMainRow ? '#00C48C' : '#165DFF'}
+                                >
+                                  {row.合计.toFixed(2)}
+                                </Text>
+                              ) : (
+                                <Text size="xs" c="#86909C">-</Text>
+                              )}
+                            </Table.Td>
+                            {row.分年数据.map((value, yearIdx) => (
+                              <Table.Td key={yearIdx}>
+                                {value > 0 ? (
+                                  <Text size="xs" c={row.isMainRow ? '#00C48C' : '#4E5969'}>
+                                    {value.toFixed(2)}
+                                  </Text>
+                                ) : (
+                                  <Text size="xs" c="#C9CDD4">0.00</Text>
+                                )}
+                              </Table.Td>
+                            ))}
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '40px',
+                    textAlign: 'center',
+                    backgroundColor: '#FFF7E6',
+                    borderRadius: '8px',
+                    border: '1px dashed #FFD591'
+                  }}>
+                    <Text size="sm" c="#FF7D00">
+                      ⚠️ 请先设置还款期，系统将自动计算还本付息计划表
+                    </Text>
+                  </div>
+                )}
+
+                {/* 关闭按钮 */}
+                <Group justify="flex-end">
+                  <Button 
+                    onClick={() => setRepaymentPlanOpened(false)}
+                    style={{ 
+                      height: '36px',
+                      backgroundColor: '#00C48C'
+                    }}
+                  >
+                    关闭
+                  </Button>
+                </Group>
+              </Stack>
+            </Modal>
           </>
         )
 
@@ -1042,7 +1340,7 @@ const RevenueCostModeling: React.FC = () => {
         )
 
       case 2:
-        return <AIRecommendationEngine />
+        return <AIRevenueStructure />
 
       case 3:
         return (

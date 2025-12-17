@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { pool } from '../db/config.js'
 import { ApiResponse, AuthRequest } from '../types/index.js'
 import { InvestmentProjectModel } from '../models/InvestmentProject.js'
-import { LLMService, analyzeRevenueStructurePrompt } from '../lib/llm.js'
+import { LLMService, analyzeRevenueStructurePrompt, analyzePricingPrompt, generateRevenueItemsPrompt } from '../lib/llm.js'
 import { LLMConfigModel } from '../models/LLMConfig.js'
 
 /**
@@ -216,125 +216,334 @@ export class RevenueCostController {
     }
   }
 
-  /**
-   * AI推荐营收结构
-   */
-  static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
-    try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-      const { projectId } = req.params
+/**
+ * AI推荐营收结构
+ */
+static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
+  try {
+    const userId = req.user?.userId
+    const isAdmin = req.user?.isAdmin
+    const { projectId } = req.params
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      const params = aiRecommendSchema.parse(req.body)
-
-      // 验证项目存在且有权限
-      const project = await InvestmentProjectModel.findById(projectId)
-      if (!project) {
-        return res.status(404).json({
-          success: false,
-          error: '项目不存在'
-        })
-      }
-
-      if (!isAdmin && project.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权操作此项目'
-        })
-      }
-
-      // 获取默认LLM配置
-      const llmConfig = await LLMConfigModel.findDefaultByUserId(userId)
-      if (!llmConfig) {
-        return res.status(400).json({
-          success: false,
-          error: '未找到可用的LLM配置，请先配置LLM服务'
-        })
-      }
-
-      // 准备工程项数据（如果有）
-      const engineeringItems = params.engineeringItems || []
-
-      // 构建LLM提示
-      const messages = analyzeRevenueStructurePrompt(
-        project.project_name,
-        params.projectInfo || project.project_info || '',
-        project.total_investment,
-        engineeringItems
-      )
-
-      console.log('🤖 调用LLM分析营收结构...')
-      console.log('配置:', llmConfig.name)
-      console.log('项目:', project.project_name)
-
-      // 调用LLM服务
-      const llmResponse = await LLMService.generateContent(llmConfig, messages, {
-        maxTokens: 2000,
-        temperature: 0.7
-      })
-
-      if (!llmResponse.success || !llmResponse.content) {
-        console.error('❌ LLM调用失败:', llmResponse.error)
-        return res.status(500).json({
-          success: false,
-          error: `AI分析失败: ${llmResponse.error || '未知错误'}`
-        })
-      }
-
-      // 解析LLM返回的JSON
-      let analysisResult
-      try {
-        // 提取JSON内容（移除可能的markdown标记）
-        let jsonContent = llmResponse.content.trim()
-        if (jsonContent.startsWith('```json')) {
-          jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?$/g, '')
-        } else if (jsonContent.startsWith('```')) {
-          jsonContent = jsonContent.replace(/```\n?/g, '')
-        }
-        
-        analysisResult = JSON.parse(jsonContent)
-        console.log('✅ LLM分析成功，返回', analysisResult.total_categories, '个类别')
-      } catch (parseError: any) {
-        console.error('❌ 解析LLM响应失败:', parseError.message)
-        console.error('解析错误详情:', parseError)
-        console.error('原始LLM响应前500字符:', llmResponse.content.substring(0, 500))
-        console.error('原始LLM响应后500字符:', llmResponse.content.substring(llmResponse.content.length - 500))
-        return res.status(500).json({
-          success: false,
-          error: `AI返回格式错误: ${parseError.message}`
-        })
-      }
-
-      // 返回分析结果
-      res.json({
-        success: true,
-        data: {
-          analysis: analysisResult,
-          config_name: llmConfig.name
-        }
-      })
-    } catch (error) {
-      console.error('AI推荐失败:', error)
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({
-          success: false,
-          error: '输入验证失败',
-          message: error.errors[0].message
-        })
-      }
-      res.status(500).json({
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        error: '服务器内部错误'
+        error: '用户未认证'
       })
     }
+
+    const params = aiRecommendSchema.parse(req.body)
+
+    // 验证项目存在且有权限
+    const project = await InvestmentProjectModel.findById(projectId)
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: '项目不存在'
+      })
+    }
+
+    if (!isAdmin && project.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: '无权操作此项目'
+      })
+    }
+
+    // 获取默认LLM配置
+    const llmConfig = await LLMConfigModel.findDefaultByUserId(userId)
+    if (!llmConfig) {
+      return res.status(400).json({
+        success: false,
+        error: '未找到可用的LLM配置，请先配置LLM服务'
+      })
+    }
+
+    // 准备工程项数据（如果有）
+    const engineeringItems = params.engineeringItems || []
+
+    // 构建LLM提示
+    const messages = analyzeRevenueStructurePrompt(
+      project.project_name,
+      params.projectInfo || project.project_info || '',
+      project.total_investment,
+      engineeringItems
+    )
+
+    console.log('🤖 调用LLM分析营收结构...')
+    console.log('配置:', llmConfig.name)
+    console.log('项目:', project.project_name)
+
+    // 调用LLM服务
+    const llmResponse = await LLMService.generateContent(llmConfig, messages, {
+      maxTokens: 2000,
+      temperature: 0.7
+    })
+
+    if (!llmResponse.success || !llmResponse.content) {
+      console.error('❌ LLM调用失败:', llmResponse.error)
+      return res.status(500).json({
+        success: false,
+        error: `AI分析失败: ${llmResponse.error || '未知错误'}`
+      })
+    }
+
+    // 解析LLM返回的JSON
+    let analysisResult
+    try {
+      // 提取JSON内容（移除可能的markdown标记）
+      let jsonContent = llmResponse.content.trim()
+      if (jsonContent.startsWith('```json')) {
+        jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?$/g, '')
+      } else if (jsonContent.startsWith('```')) {
+        jsonContent = jsonContent.replace(/```\n?/g, '')
+      }
+      
+      analysisResult = JSON.parse(jsonContent)
+      console.log('✅ LLM分析成功，返回', analysisResult.total_categories, '个类别')
+    } catch (parseError: any) {
+      console.error('❌ 解析LLM响应失败:', parseError.message)
+      console.error('解析错误详情:', parseError)
+      console.error('原始LLM响应前500字符:', llmResponse.content.substring(0, 500))
+      console.error('原始LLM响应后500字符:', llmResponse.content.substring(llmResponse.content.length - 500))
+      return res.status(500).json({
+        success: false,
+        error: `AI返回格式错误: ${parseError.message}`
+      })
+    }
+
+    // 返回分析结果
+    res.json({
+      success: true,
+      data: {
+        analysis: analysisResult,
+        config_name: llmConfig.name
+      }
+    })
+  } catch (error) {
+    console.error('AI推荐失败:', error)
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: '输入验证失败',
+        message: error.errors[0].message
+      })
+    }
+    res.status(500).json({
+      success: false,
+      error: '服务器内部错误'
+    })
   }
+}
+
+/**
+ * AI分析税率和计费模式
+ */
+static async analyzePricing(req: AuthRequest, res: Response<ApiResponse>) {
+  try {
+    const userId = req.user?.userId
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '用户未认证'
+      })
+    }
+
+    const { type_name } = req.body
+    if (!type_name) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少营业收入类型名称'
+      })
+    }
+
+    // 获取默认LLM配置
+    const llmConfig = await LLMConfigModel.findDefaultByUserId(userId)
+    if (!llmConfig) {
+      return res.status(400).json({
+        success: false,
+        error: '未找到可用的LLM配置，请先配置LLM服务'
+      })
+    }
+
+    // 构建LLM提示
+    const messages = analyzePricingPrompt(type_name)
+
+    console.log('🤖 调用LLM分析税率和计费模式...')
+    console.log('收入类型:', type_name)
+
+    // 调用LLM服务
+    const llmResponse = await LLMService.generateContent(llmConfig, messages, {
+      maxTokens: 500,
+      temperature: 0.5
+    })
+
+    if (!llmResponse.success || !llmResponse.content) {
+      console.error('❌ LLM调用失败:', llmResponse.error)
+      return res.status(500).json({
+        success: false,
+        error: `AI分析失败: ${llmResponse.error || '未知错误'}`
+      })
+    }
+
+    // 解析LLM返回的JSON
+    let pricingResult
+    try {
+      let jsonContent = llmResponse.content.trim()
+      if (jsonContent.startsWith('```json')) {
+        jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?$/g, '')
+      } else if (jsonContent.startsWith('```')) {
+        jsonContent = jsonContent.replace(/```\n?/g, '')
+      }
+      
+      pricingResult = JSON.parse(jsonContent)
+      console.log('✅ LLM分析成功:', pricingResult)
+    } catch (parseError: any) {
+      console.error('❌ 解析LLM响应失败:', parseError.message)
+      return res.status(500).json({
+        success: false,
+        error: `AI返回格式错误: ${parseError.message}`
+      })
+    }
+
+    // 返回分析结果
+    res.json({
+      success: true,
+      data: pricingResult
+    })
+  } catch (error) {
+    console.error('AI分析税率计费模式失败:', error)
+    res.status(500).json({
+      success: false,
+      error: '服务器内部错误'
+    })
+  }
+}
+
+/**
+ * AI生成收入项目表
+ */
+static async generateItems(req: AuthRequest, res: Response<ApiResponse>) {
+  try {
+    const userId = req.user?.userId
+    const isAdmin = req.user?.isAdmin
+    const { projectId } = req.params
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '用户未认证'
+      })
+    }
+
+    const { revenueStructure, investmentData } = req.body
+    if (!revenueStructure || !investmentData) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必要参数'
+      })
+    }
+
+    // 验证项目存在且有权限
+    const project = await InvestmentProjectModel.findById(projectId)
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: '项目不存在'
+      })
+    }
+
+    if (!isAdmin && project.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: '无权操作此项目'
+      })
+    }
+
+    // 获取默认LLM配置
+    const llmConfig = await LLMConfigModel.findDefaultByUserId(userId)
+    if (!llmConfig) {
+      return res.status(400).json({
+        success: false,
+        error: '未找到可用的LLM配置，请先配置LLM服务'
+      })
+    }
+
+    // 构建营收结构摘要
+    const revenueSummary = revenueStructure.selected_categories
+      .map((cat: any) => {
+        const types = cat.recommended_revenue_types
+          .map((t: any) => t.type_name)
+          .join('、')
+        return `${cat.category_name}：${types}`
+      })
+      .join('\n')
+
+    // 构建项目信息
+    const projectInfo = {
+      name: project.project_name,
+      description: project.project_info || '',
+      totalInvestment: investmentData.total_investment || project.total_investment,
+      constructionYears: investmentData.construction_years || project.construction_years,
+      operationYears: investmentData.operation_years || project.operation_years,
+      constructionCost: investmentData.construction_cost,
+      equipmentCost: investmentData.equipment_cost
+    }
+
+    // 构建LLM提示
+    const messages = generateRevenueItemsPrompt(projectInfo, revenueSummary)
+
+    console.log('🤖 调用LLM生成收入项目表...')
+    console.log('项目:', project.project_name)
+
+    // 调用LLM服务
+    const llmResponse = await LLMService.generateContent(llmConfig, messages, {
+      maxTokens: 2000,
+      temperature: 0.7
+    })
+
+    if (!llmResponse.success || !llmResponse.content) {
+      console.error('❌ LLM调用失败:', llmResponse.error)
+      return res.status(500).json({
+        success: false,
+        error: `AI生成失败: ${llmResponse.error || '未知错误'}`
+      })
+    }
+
+    // 解析LLM返回的JSON
+    let itemsResult
+    try {
+      let jsonContent = llmResponse.content.trim()
+      if (jsonContent.startsWith('```json')) {
+        jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?$/g, '')
+      } else if (jsonContent.startsWith('```')) {
+        jsonContent = jsonContent.replace(/```\n?/g, '')
+      }
+      
+      itemsResult = JSON.parse(jsonContent)
+      console.log('✅ LLM生成成功，返回', itemsResult.revenue_items?.length || 0, '个收入项')
+    } catch (parseError: any) {
+      console.error('❌ 解析LLM响应失败:', parseError.message)
+      return res.status(500).json({
+        success: false,
+        error: `AI返回格式错误: ${parseError.message}`
+      })
+    }
+
+    // 返回生成结果
+    res.json({
+      success: true,
+      data: itemsResult
+    })
+  } catch (error) {
+    console.error('AI生成收入项目失败:', error)
+    res.status(500).json({
+      success: false,
+      error: '服务器内部错误'
+    })
+  }
+}
 
   /**
    * 更新工作流步骤

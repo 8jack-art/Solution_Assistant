@@ -196,7 +196,54 @@ export const revenueCostApi = {
     api.get<any, ApiResponse<{ estimate?: any }>>(`/revenue-cost/project/${projectId}`),
 
   aiRecommend: (projectId: string, params?: any) =>
-    api.post<any, ApiResponse<{ recommendations: any[] }>>(`/revenue-cost/ai-recommend/${projectId}`, params || {}),
+    api.post<any, ApiResponse<{ 
+      analysis: {
+        selected_categories: Array<{
+          category_code: string
+          category_name: string
+          category_icon: string
+          relevance_score: number
+          reasoning: string
+          recommended_revenue_types: Array<{
+            type_name: string
+            priority: 'high' | 'medium' | 'low'
+            suggested_vat_rate: number
+            typical_pricing_model: string
+            estimated_proportion: string
+          }>
+        }>
+        total_categories: number
+        analysis_summary: string
+      }
+      config_name: string
+    }>>(`/revenue-cost/ai-recommend/${projectId}`, params || {}, {
+      timeout: 120000 // AI分析需要更长的超时时间（2分钟）
+    }),
+
+  analyzePricing: (type_name: string) =>
+    api.post<any, ApiResponse<{
+      vat_rate: number
+      pricing_model: string
+    }>>('/revenue-cost/analyze-pricing', { type_name }, {
+      timeout: 60000 // 1分钟超时
+    }),
+
+  generateItems: (projectId: string, params: {
+    revenueStructure: any
+    investmentData: any
+  }) =>
+    api.post<any, ApiResponse<{
+      revenue_items: Array<{
+        name: string
+        category: string
+        unit: string
+        quantity: number
+        unitPrice: number
+        vatRate: number
+      }>
+    }>>(`/revenue-cost/generate-items/${projectId}`, params, {
+      timeout: 120000 // AI生成需要更长的超时时间（2分钟）
+    }),
 
   updateWorkflowStep: (projectId: string, step: string) =>
     api.patch<any, ApiResponse<{ step: string }>>(`/revenue-cost/workflow/${projectId}`, { step }),
