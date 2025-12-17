@@ -19,10 +19,8 @@ export interface InvestmentItem {
  * @param partATotal 第一部分工程费用总额
  * @param landCost 土地费用
  * @param totalFunding 项目总资金（可选，用于建设单位管理费计算）
- * @param partAItems 第一部分的子项数据（可选，用于精确计算各项费用）
- * @param isAgricultureWaterProject 是否为农田、水利项目（默认true，开启后市政公用设施费为0）
  */
-export declare function calculatePartB(partATotal: number, landCost: number, totalFunding?: number, partAItems?: InvestmentItem[], isAgricultureWaterProject?: boolean): InvestmentItem;
+export declare function calculatePartB(partATotal: number, landCost: number, totalFunding?: number): InvestmentItem;
 /**
  * 生成A部分的初始子项（使用AI生成的数据或默认数据）
  */

@@ -13,9 +13,5 @@ export declare class LLMController {
     static analyzeProjectInfo(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
     static analyzeEngineeringItems(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
     static subdivideEngineeringItem(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
-    /**
-     * AI分析项目营收结构
-     */
-    static analyzeRevenueStructure(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
 }
 //# sourceMappingURL=llmController.d.ts.map

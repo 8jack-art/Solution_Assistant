@@ -21,7 +21,6 @@ interface ProjectParams {
         remark?: string;
     }>;
     customLoanAmount?: number;
-    isAgricultureWaterProject?: boolean;
 }
 type PartF = LoanCalculationResult;
 interface InvestmentEstimateResult {

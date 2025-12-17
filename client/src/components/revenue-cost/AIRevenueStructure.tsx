@@ -14,6 +14,9 @@ import {
   NumberInput,
   Switch,
   Loader,
+  Textarea,
+  Code,
+  Collapse,
 } from '@mantine/core'
 import {
   IconSparkles,
@@ -24,11 +27,16 @@ import {
   IconX,
   IconLock,
   IconLockOpen,
+  IconBug,
+  IconChevronDown,
+  IconChevronUp,
+  IconCopy,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
 import { revenueCostApi } from '@/lib/api'
 import { useRevenueCostStore, AIAnalysisResult, AIRevenueCategory, AIRevenueType } from '@/stores/revenueCostStore'
+import AIDebugPanel from './AIDebugPanel'
 
 /**
  * AI推荐营收结构组件（步骤2）
@@ -44,6 +52,18 @@ const AIRevenueStructure: React.FC = () => {
   
   // 状态管理
   const [generatingSuggestions, setGeneratingSuggestions] = useState(false)
+  
+  // 调试信息状态
+  const [debugPanelOpened, setDebugPanelOpened] = useState(false) // 调试面板是否展开
+  const [debugInfo, setDebugInfo] = useState<{
+    timestamp: string
+    requestUrl: string
+    requestBody: any
+    responseStatus?: number
+    responseData?: any
+    errorMessage?: string
+    errorStack?: string
+  } | null>(null)
   
   // 编辑类别弹窗
   const [editCategoryModalOpened, setEditCategoryModalOpened] = useState(false)
@@ -70,21 +90,57 @@ const AIRevenueStructure: React.FC = () => {
     }
 
     setGeneratingSuggestions(true)
+    
+    // 记录请求信息
+    const requestBody = {
+      projectInfo: context.projectName || '',
+    }
+    const requestUrl = `/api/revenue-cost/ai-recommend/${context.projectId}`
+    
+    setDebugInfo({
+      timestamp: new Date().toISOString(),
+      requestUrl,
+      requestBody,
+    })
+    
     try {
-      const response = await revenueCostApi.aiRecommend(context.projectId, {
-        projectInfo: context.projectName || '',
-      })
+      const response = await revenueCostApi.aiRecommend(context.projectId, requestBody)
+
+      // 记录响应信息
+      setDebugInfo(prev => ({
+        ...prev!,
+        responseStatus: 200,
+        responseData: response,
+      }))
 
       if (!response.success || !response.data) {
+        // 记录业务错误
+        setDebugInfo(prev => ({
+          ...prev!,
+          errorMessage: response.error || '未知错误',
+        }))
+        
         notifications.show({
           title: 'AI分析失败',
           message: response.error || '未知错误',
           color: 'red',
         })
+            
+        // 不自动打开调试面板，由用户手动点击按钮
         return
       }
 
       setAIAnalysisResult(response.data.analysis)
+      
+      console.log('✅ AI分析成功，数据已设置:', response.data.analysis)
+      console.log('✅ 营收类别数量:', response.data.analysis.total_categories)
+      console.log('✅ 类别详情:', response.data.analysis.selected_categories)
+      
+      // 强制触发重新渲染
+      setTimeout(() => {
+        console.log('🔄 验证数据是否已保存到store...')
+      }, 100)
+      
       notifications.show({
         title: 'AI分析成功',
         message: `已推荐 ${response.data.analysis.total_categories} 个营收类别`,
@@ -92,11 +148,23 @@ const AIRevenueStructure: React.FC = () => {
       })
     } catch (error: any) {
       console.error('AI分析错误:', error)
+      
+      // 记录异常信息
+      setDebugInfo(prev => ({
+        ...prev!,
+        responseStatus: error.response?.status || 500,
+        errorMessage: error.message || '请求失败',
+        errorStack: error.stack,
+        responseData: error.response?.data,
+      }))
+      
       notifications.show({
         title: 'AI分析失败',
         message: error.message || '请稍后重试',
         color: 'red',
       })
+      
+      // 不自动打开调试面板，由用户手动点击按钮
     } finally {
       setGeneratingSuggestions(false)
     }
@@ -106,7 +174,12 @@ const AIRevenueStructure: React.FC = () => {
    * 点击AI分析按钮（带确认）
    */
   const handleAIAnalysisClick = () => {
+    console.log('🔵 点击开始AI分析按钮')
+    console.log('📋 当前aiAnalysisResult:', aiAnalysisResult)
+    console.log('📋 revenueStructureLocked:', revenueStructureLocked)
+    
     if (aiAnalysisResult && aiAnalysisResult.selected_categories && aiAnalysisResult.selected_categories.length > 0) {
+      console.log('⚠️ 检测到已有数据，弹出确认对话框')
       modals.openConfirmModal({
         title: '确认重新分析',
         centered: true,
@@ -119,9 +192,16 @@ const AIRevenueStructure: React.FC = () => {
         ),
         labels: { confirm: '继续', cancel: '取消' },
         confirmProps: { color: 'red' },
-        onConfirm: () => generateAISuggestions(),
+        onConfirm: () => {
+          console.log('✅ 用户点击了「继续」，开始分析...')
+          generateAISuggestions()
+        },
+        onCancel: () => {
+          console.log('❌ 用户取消了操作')
+        },
       })
     } else {
+      console.log('✅ 无数据，直接分析')
       generateAISuggestions()
     }
   }
@@ -477,6 +557,20 @@ const AIRevenueStructure: React.FC = () => {
             >
               {generatingSuggestions ? 'AI分析中...' : '开始AI分析'}
             </Button>
+            
+            {/* 调试按钮（只在有调试信息时显示） */}
+            {debugInfo && (
+              <Tooltip label="查看调试信息">
+                <ActionIcon
+                  variant="light"
+                  color="orange"
+                  size="lg"
+                  onClick={() => setDebugPanelOpened(!debugPanelOpened)}
+                >
+                  <IconBug size={18} />
+                </ActionIcon>
+              </Tooltip>
+            )}
           </Group>
         </Group>
 
@@ -572,6 +666,18 @@ const AIRevenueStructure: React.FC = () => {
               点击「开始AI分析」按钮，系统将根据项目信息智能推荐营收结构
             </Text>
           </div>
+        )}
+        
+        {/* 调试面板（只在用户点击按钮后显示） */}
+        {debugInfo && debugPanelOpened && (
+          <AIDebugPanel 
+            debugInfo={debugInfo} 
+            currentStoreData={{
+              aiAnalysisResult,
+              revenueStructureLocked,
+              context,
+            }}
+          />
         )}
       </Stack>
 

@@ -17,6 +17,5 @@ router.post('/generate-investment-content', LLMController.generateInvestmentCont
 router.post('/analyze-project-info', LLMController.analyzeProjectInfo);
 router.post('/analyze-engineering-items', LLMController.analyzeEngineeringItems);
 router.post('/subdivide-engineering-item', LLMController.subdivideEngineeringItem);
-router.post('/analyze-revenue-structure', LLMController.analyzeRevenueStructure);
 export default router;
 //# sourceMappingURL=llm.js.map

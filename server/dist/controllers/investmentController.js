@@ -239,7 +239,7 @@ export class InvestmentController {
     static async generateSummary(req, res) {
         try {
             const { projectId } = req.params;
-            const { ai_items, custom_loan_amount, custom_land_cost, is_agriculture_water_project } = req.body; // 接收AI生成的子项、自定义贷款额、自定义土地费用、农田水利项目开关
+            const { ai_items, custom_loan_amount, custom_land_cost } = req.body; // 接收AI生成的子项、自定义贷款额、自定义土地费用
             const userId = req.user?.userId;
             const isAdmin = req.user?.isAdmin;
             if (!userId) {
@@ -286,14 +286,11 @@ export class InvestmentController {
             }
             const customLoanRatio = finalCustomLoanAmount ? undefined : project.loan_ratio;
             const landCost = finalCustomLandCost !== undefined ? finalCustomLandCost : (project.land_cost || 0);
-            // 使用传入的开关值，默认为true（农田、水利项目）
-            const isAgricultureWaterProject = is_agriculture_water_project !== undefined ? is_agriculture_water_project : true;
             console.log('计算参数:', {
                 customLoanRatio,
                 landCost,
                 finalCustomLoanAmount,
-                finalCustomLandCost,
-                isAgricultureWaterProject
+                finalCustomLandCost
             });
             // 使用统一循环迭代算法生成投资估算简表
             const result = calculateInvestmentEstimate({
@@ -305,8 +302,7 @@ export class InvestmentController {
                 loanInterestRate: project.loan_interest_rate,
                 landCost: landCost,
                 aiGeneratedItems: ai_items, // 传递AI生成的子项
-                customLoanAmount: finalCustomLoanAmount, // 传递自定义贷款额
-                isAgricultureWaterProject: isAgricultureWaterProject // 传递农田、水利项目开关
+                customLoanAmount: finalCustomLoanAmount // 传递自定义贷款额
             });
             // 辅助函数：确保数值有效并格式化
             const toDecimal = (val) => {

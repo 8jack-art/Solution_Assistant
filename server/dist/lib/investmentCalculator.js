@@ -36,8 +36,7 @@ function finalizeResult(parts, iterationCount, gapRate) {
  * - 最大迭代次数：10次（熔断保护）
  */
 export function calculateInvestmentEstimate(params) {
-    const { projectName, targetInvestment, constructionYears, loanRatio, loanInterestRate, landCost, customLoanAmount, isAgricultureWaterProject = true // 默认为true
-     } = params;
+    const { projectName, targetInvestment, constructionYears, loanRatio, loanInterestRate, landCost, customLoanAmount } = params;
     let partAItems = generatePartAItems(projectName, targetInvestment, params.aiGeneratedItems);
     enforceMinimumShare(partAItems);
     const adjustmentTrackers = partAItems.map(() => 0);
@@ -58,7 +57,7 @@ export function calculateInvestmentEstimate(params) {
         };
         // 使用上一次迭代的项目总资金来计算建设单位管理费
         const estimatedTotalFunding = previousTotalFunding > 0 ? previousTotalFunding : partATotal * 1.5;
-        const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, partAItems, isAgricultureWaterProject);
+        const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding);
         const partC = {
             序号: 'C',
             工程或费用名称: '第一、二部分合计',
@@ -124,7 +123,7 @@ export function calculateInvestmentEstimate(params) {
             };
             // 使用上一次迭代的项目总资金来计算建设单位管理费
             const estimatedTotalFunding = previousTotalFunding > 0 ? previousTotalFunding : partATotal * 1.5;
-            const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, partAItems, isAgricultureWaterProject);
+            const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding);
             const partC = {
                 序号: 'C',
                 工程或费用名称: '第一、二部分合计',

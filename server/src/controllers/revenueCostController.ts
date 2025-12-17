@@ -276,7 +276,7 @@ static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
 
     // 调用LLM服务
     const llmResponse = await LLMService.generateContent(llmConfig, messages, {
-      maxTokens: 2000,
+      maxTokens: 4000, // 增加到4000，避免JSON被截断
       temperature: 0.7
     })
 
@@ -299,6 +299,20 @@ static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
         jsonContent = jsonContent.replace(/```\n?/g, '')
       }
       
+      // 尝试修复不完整的JSON（只修复简单的情况）
+      jsonContent = jsonContent.trim()
+      
+      // 如果缺少右大括号，尝试添加
+      if (!jsonContent.endsWith('}')) {
+        console.warn('⚠️ JSON可能不完整，尝试修复...')
+        // 找到最后一个完整的对象
+        const lastCompleteIndex = jsonContent.lastIndexOf('}]')
+        if (lastCompleteIndex > 0) {
+          jsonContent = jsonContent.substring(0, lastCompleteIndex + 2) + '}'
+          console.log('✅ 修复JSON成功')
+        }
+      }
+      
       analysisResult = JSON.parse(jsonContent)
       console.log('✅ LLM分析成功，返回', analysisResult.total_categories, '个类别')
     } catch (parseError: any) {
@@ -306,9 +320,10 @@ static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
       console.error('解析错误详情:', parseError)
       console.error('原始LLM响应前500字符:', llmResponse.content.substring(0, 500))
       console.error('原始LLM响应后500字符:', llmResponse.content.substring(llmResponse.content.length - 500))
+      console.error('完整响应长度:', llmResponse.content.length)
       return res.status(500).json({
         success: false,
-        error: `AI返回格式错误: ${parseError.message}`
+        error: `AI返回格式错误: ${parseError.message}，响应长度${llmResponse.content.length}字符，请重试`
       })
     }
 
@@ -540,8 +555,7 @@ static async generateItems(req: AuthRequest, res: Response<ApiResponse>) {
       console.error('原LLM输出:', llmResponse.content)
       return res.status(500).json({
         success: false,
-        error: `AI返回格式错误: ${parseError.message}`,
-        details: llmResponse.content.substring(0, 500) // 返回前500字符供调试
+        error: `AI返回格式错误: ${parseError.message}`
       })
     }
 

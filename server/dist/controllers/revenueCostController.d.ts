@@ -17,6 +17,14 @@ export declare class RevenueCostController {
      */
     static aiRecommend(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
     /**
+     * AI分析税率和计费模式
+     */
+    static analyzePricing(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
+    /**
+     * AI生成收入项目表
+     */
+    static generateItems(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
+    /**
      * 更新工作流步骤
      */
     static updateWorkflowStep(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;

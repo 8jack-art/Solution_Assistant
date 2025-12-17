@@ -34,4 +34,20 @@ export declare function analyzeRevenueStructurePrompt(projectName: string, proje
     amount: number;
 }>): LLMMessage[];
 export declare function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[];
+/**
+ * 分析营业收入类型的税率和计费模式
+ */
+export declare function analyzePricingPrompt(typeName: string): LLMMessage[];
+/**
+ * 根据项目信息和营收结构表生成具体的收入项目表
+ */
+export declare function generateRevenueItemsPrompt(projectInfo: {
+    name: string;
+    description: string;
+    totalInvestment: number;
+    constructionYears: number;
+    operationYears: number;
+    constructionCost?: number;
+    equipmentCost?: number;
+}, revenueSummary: string): LLMMessage[];
 //# sourceMappingURL=llm.d.ts.map

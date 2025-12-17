@@ -13,8 +13,9 @@ import {
   Tooltip,
   Badge,
 } from '@mantine/core'
-import { IconEdit, IconTrash, IconPlus } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconPlus, IconChartLine } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
+import ProductionRateModal from './ProductionRateModal'
 import {
   RevenueItem,
   RevenueCategory,
@@ -57,6 +58,7 @@ const DynamicRevenueTable: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingItem, setEditingItem] = useState<RevenueItem | null>(null)
   const [isNewItem, setIsNewItem] = useState(false)
+  const [productionRateModalOpened, setProductionRateModalOpened] = useState(false) // 达产率配置弹窗
 
   // 编辑表单状态
   const [formData, setFormData] = useState<Partial<RevenueItem>>({})
@@ -336,14 +338,26 @@ const DynamicRevenueTable: React.FC = () => {
           <Text size="md" fw={600} c="#1D2129">
             营业收入配置
           </Text>
-          <Button
-            leftSection={<IconPlus size={16} />}
-            onClick={handleAdd}
-            size="sm"
-            style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
-          >
-            新增收入项
-          </Button>
+          <Group gap="xs">
+            <Tooltip label="配置达产率">
+              <ActionIcon
+                variant="light"
+                color="orange"
+                size="lg"
+                onClick={() => setProductionRateModalOpened(true)}
+              >
+                <IconChartLine size={20} />
+              </ActionIcon>
+            </Tooltip>
+            <Button
+              leftSection={<IconPlus size={16} />}
+              onClick={handleAdd}
+              size="sm"
+              style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
+            >
+              新增收入项
+            </Button>
+          </Group>
         </Group>
 
         {revenueItems.length === 0 ? (
@@ -494,6 +508,12 @@ const DynamicRevenueTable: React.FC = () => {
           </Button>
         </Group>
       </Modal>
+      
+      {/* 达产率配置弹窗 */}
+      <ProductionRateModal
+        opened={productionRateModalOpened}
+        onClose={() => setProductionRateModalOpened(false)}
+      />
     </>
   )
 }

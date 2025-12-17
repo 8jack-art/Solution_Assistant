@@ -10,6 +10,10 @@ router.post('/save', RevenueCostController.save);
 router.get('/project/:projectId', RevenueCostController.getByProjectId);
 // AI推荐营收结构
 router.post('/ai-recommend/:projectId', RevenueCostController.aiRecommend);
+// AI分析税率和计费模式
+router.post('/analyze-pricing', RevenueCostController.analyzePricing);
+// AI生成收入项目表
+router.post('/generate-items/:projectId', RevenueCostController.generateItems);
 // 更新工作流步骤
 router.patch('/workflow/:projectId', RevenueCostController.updateWorkflowStep);
 // 删除收入成本建模数据
