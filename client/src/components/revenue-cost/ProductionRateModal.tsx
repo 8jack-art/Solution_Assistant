@@ -85,6 +85,14 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
    * 删除年份
    */
   const handleDelete = (yearIndex: number) => {
+    if (editedRates.length <= 1) {
+      notifications.show({
+        title: '无法删除',
+        message: '至少要保留一年的达产率配置',
+        color: 'orange',
+      })
+      return
+    }
     setEditedRates(prev => prev.filter(r => r.yearIndex !== yearIndex))
   }
 
@@ -118,7 +126,7 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
       <Stack gap="md">
         <Group justify="space-between">
           <Text size="sm" c="#86909C">
-            设置项目运营期各年份的达产率。第1年75%，第2年85%，第3年起100%满产。
+            设置项目运营期各年份的达产率。默认3年：第1年75%、第2年85%、第3年100%。未配置年份按最后一年执行。
           </Text>
           <Button
             size="xs"

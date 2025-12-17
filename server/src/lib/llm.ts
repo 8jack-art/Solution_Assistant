@@ -667,14 +667,17 @@ export function estimateSingleRevenueItemPrompt(
   "category": "agriculture-crop | digital-platform | manufacturing | service | real-estate | other",
   "fieldTemplate": "quantity-price | area-yield-price | capacity-utilization | subscription | direct-amount",
   "quantity": 数量或面积或产能或订阅数,
+  "unit": "数量单位（如：公斤、吨、台、个等）",
   "unitPrice": 单价(万元),
   "vatRate": 增值税率(0-1之间的小数),
   "area": 面积(亩)，仅area-yield-price模板,
   "yieldPerArea": 亩产量，仅area-yield-price模板,
   "capacity": 产能，仅capacity-utilization模板,
+  "capacityUnit": "产能单位（如：台、件、类等）"，仅capacity-utilization模板,
   "utilizationRate": 利用率(0-1之间的小数)，仅capacity-utilization模板,
   "subscriptions": 订阅数，仅subscription模板,
-  "directAmount": 直接金额(万元)，仅direct-amount模板
+  "directAmount": 直接金额(万元)，仅direct-amount模板,
+  "remark": "测算理由说明（150字以内，说明数据来源、估算逻辑和依据）"
 }
 
 类别说明：
@@ -697,7 +700,9 @@ export function estimateSingleRevenueItemPrompt(
 2. 数据要符合行业常识和项目规模
 3. 增值税率参考：农产品 0.09、服务业 0.06、工业产品 0.13
 4. 单价以"万元"为单位
-5. 只返回JSON格式，不要包含其他文字说明`
+5. unit字段必须填写，指明数量的单位（如：公斤、吨、台、个、人次等）
+6. remark字段必须填写，说明估算依据、数据来源和计算逻辑，例如："根据项目总投资XXX万元和行业平均亩产YYY吨/亩，结合市场价格ZZZ元/吨推算"
+7. 只返回JSON格式，不要包含其他文字说明`
 
   const userPrompt = `请为以下项目的收入项进行估算：
 

@@ -1,3 +1,4 @@
+import { modals } from '@mantine/modals'
 import React, { useState, useEffect } from 'react'
 import {
   Table,
@@ -13,8 +14,9 @@ import {
   Tooltip,
   Badge,
   Grid,
+  Switch,
 } from '@mantine/core'
-import { IconEdit, IconTrash, IconPlus, IconChartLine, IconSparkles } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconPlus, IconChartLine, IconSparkles, IconTable } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import ProductionRateModal from './ProductionRateModal'
 import { revenueCostApi } from '@/lib/api'
@@ -26,6 +28,8 @@ import {
   calculateTaxableIncome,
   calculateNonTaxIncome,
   calculateVatAmount,
+  calculateYearlyRevenue,
+  getProductionRateForYear,
 } from '../../stores/revenueCostStore'
 
 /**
@@ -69,6 +73,7 @@ const DynamicRevenueTable: React.FC = () => {
   const [isNewItem, setIsNewItem] = useState(false)
   const [productionRateModalOpened, setProductionRateModalOpened] = useState(false) // 达产率配置弹窗
   const [aiEstimating, setAiEstimating] = useState(false) // AI测算中
+  const [showRevenueDetailModal, setShowRevenueDetailModal] = useState(false) // 收入详表弹窗
 
   // 编辑表单状态
   const [formData, setFormData] = useState<Partial<RevenueItem>>({})
@@ -82,6 +87,9 @@ const DynamicRevenueTable: React.FC = () => {
       category: 'other',
       fieldTemplate: 'quantity-price',
       vatRate: 0.13,
+      priceUnit: 'wan-yuan', // 默认万元
+      priceIncreaseInterval: 0, // 默认不涨价
+      priceIncreaseRate: 0,
     })
     setEditingItem(null)
     setIsNewItem(true)
@@ -102,14 +110,24 @@ const DynamicRevenueTable: React.FC = () => {
    * 删除收入项
    */
   const handleDelete = (item: RevenueItem) => {
-    if (confirm(`确定要删除"${item.name}"吗？`)) {
-      deleteRevenueItem(item.id)
-      notifications.show({
-        title: '成功',
-        message: '收入项已删除',
-        color: 'green',
-      })
-    }
+    modals.openConfirmModal({
+      title: '确认删除',
+      children: (
+        <Text size="sm">
+          确定要删除收入项“<Text component="span" fw={600} c="red">{item.name}</Text>”吗？
+        </Text>
+      ),
+      labels: { confirm: '确定删除', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        deleteRevenueItem(item.id)
+        notifications.show({
+          title: '成功',
+          message: '收入项已删除',
+          color: 'green',
+        })
+      },
+    })
   }
 
   /**
@@ -139,20 +157,24 @@ const DynamicRevenueTable: React.FC = () => {
       const response = await revenueCostApi.estimateItem(context.projectId, formData.name)
 
       if (response.success && response.data) {
-        // 应用AI估算结果
+        // 应用AI估算结果，包括 remark 和 unit
         setFormData({
           ...formData,
           category: response.data.category as RevenueCategory,
           fieldTemplate: response.data.fieldTemplate as FieldTemplate,
           quantity: response.data.quantity,
+          unit: response.data.unit || '', // AI返回的数量单位
           unitPrice: response.data.unitPrice,
+          priceUnit: 'wan-yuan', // AI返回的是万元
           vatRate: response.data.vatRate,
           area: response.data.area,
           yieldPerArea: response.data.yieldPerArea,
           capacity: response.data.capacity,
+          capacityUnit: response.data.capacityUnit || '', // AI返回的产能单位
           utilizationRate: response.data.utilizationRate,
           subscriptions: response.data.subscriptions,
           directAmount: response.data.directAmount,
+          remark: response.data.remark || '', // AI测算的理由填入备注
         })
 
         notifications.show({
@@ -357,28 +379,75 @@ const DynamicRevenueTable: React.FC = () => {
 
         {/* 根据模板显示不同字段 */}
         {template === 'quantity-price' && (
-          <Grid gutter="md">
-            <Grid.Col span={6}>
-              <NumberInput
-                label="数量"
-                placeholder="请输入数量"
-                value={formData.quantity || 0}
-                onChange={(value) => setFormData({ ...formData, quantity: Number(value) })}
-                min={0}
-                decimalScale={4}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <NumberInput
-                label="单价（万元）"
-                placeholder="请输入单价"
-                value={formData.unitPrice || 0}
-                onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
-                min={0}
-                decimalScale={4}
-              />
-            </Grid.Col>
-          </Grid>
+          <>
+            <Grid gutter="md">
+              <Grid.Col span={8}>
+                <NumberInput
+                  label={formData.unit ? `数量（${formData.unit}）` : '数量'}
+                  placeholder="请输入数量"
+                  value={formData.quantity || 0}
+                  onChange={(value) => setFormData({ ...formData, quantity: Number(value) })}
+                  min={0}
+                  decimalScale={4}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <TextInput
+                  label="单位"
+                  placeholder="如：公斤、吨"
+                  value={formData.unit || ''}
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                />
+              </Grid.Col>
+            </Grid>
+            
+            <Grid gutter="md">
+              <Grid.Col span={8}>
+                <NumberInput
+                  label={`单价（${formData.priceUnit === 'yuan' ? '元' : '万元'}）`}
+                  placeholder="请输入单价"
+                  value={formData.unitPrice || 0}
+                  onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
+                  min={0}
+                  decimalScale={4}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <Stack gap={0}>
+                  <Text size="sm" fw={500} mb={4}>
+                    单位
+                  </Text>
+                  <Switch
+                    checked={formData.priceUnit === 'yuan'}
+                    onChange={(event) => {
+                      const isYuan = event.currentTarget.checked
+                      const newUnit = isYuan ? 'yuan' : 'wan-yuan'
+                      const currentPrice = formData.unitPrice || 0
+                      let newPrice = currentPrice
+
+                      // 单位切换时转换数值
+                      if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
+                        // 万元 -> 元
+                        newPrice = currentPrice * 10000
+                      } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
+                        // 元 -> 万元
+                        newPrice = currentPrice / 10000
+                      }
+
+                      setFormData({ 
+                        ...formData, 
+                        priceUnit: newUnit,
+                        unitPrice: newPrice
+                      })
+                    }}
+                    onLabel="元"
+                    offLabel="万元"
+                    size="md"
+                  />
+                </Stack>
+              </Grid.Col>
+            </Grid>
+          </>
         )}
 
         {template === 'area-yield-price' && (
@@ -417,39 +486,83 @@ const DynamicRevenueTable: React.FC = () => {
         )}
 
         {template === 'capacity-utilization' && (
-          <Grid gutter="md">
-            <Grid.Col span={4}>
-              <NumberInput
-                label="产能"
-                placeholder="请输入产能"
-                value={formData.capacity || 0}
-                onChange={(value) => setFormData({ ...formData, capacity: Number(value) })}
-                min={0}
-                decimalScale={4}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <NumberInput
-                label="利用率（%）"
-                placeholder="请输入利用率"
-                value={(formData.utilizationRate || 0) * 100}
-                onChange={(value) => setFormData({ ...formData, utilizationRate: Number(value) / 100 })}
-                min={0}
-                max={100}
-                decimalScale={2}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <NumberInput
-                label="单价（万元）"
-                placeholder="请输入单价"
-                value={formData.unitPrice || 0}
-                onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
-                min={0}
-                decimalScale={4}
-              />
-            </Grid.Col>
-          </Grid>
+          <>
+            <Grid gutter="md">
+              <Grid.Col span={8}>
+                <NumberInput
+                  label={formData.capacityUnit ? `产能（${formData.capacityUnit}）` : '产能'}
+                  placeholder="请输入产能"
+                  value={formData.capacity || 0}
+                  onChange={(value) => setFormData({ ...formData, capacity: Number(value) })}
+                  min={0}
+                  decimalScale={4}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <TextInput
+                  label="单位"
+                  placeholder="如：台、件"
+                  value={formData.capacityUnit || ''}
+                  onChange={(e) => setFormData({ ...formData, capacityUnit: e.target.value })}
+                />
+              </Grid.Col>
+            </Grid>
+
+            <Grid gutter="md">
+              <Grid.Col span={4}>
+                <NumberInput
+                  label="利用率（%）"
+                  placeholder="请输入利用率"
+                  value={(formData.utilizationRate || 0) * 100}
+                  onChange={(value) => setFormData({ ...formData, utilizationRate: Number(value) / 100 })}
+                  min={0}
+                  max={100}
+                  decimalScale={2}
+                />
+              </Grid.Col>
+              <Grid.Col span={8}>
+                <Group align="flex-end" gap="xs" style={{ height: '100%' }}>
+                  <div style={{ flex: 1 }}>
+                    <NumberInput
+                      label="单价"
+                      placeholder="请输入单价"
+                      value={formData.unitPrice || 0}
+                      onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
+                      min={0}
+                      decimalScale={4}
+                    />
+                  </div>
+                  <div>
+                    <Switch
+                      checked={formData.priceUnit === 'yuan'}
+                      onChange={(event) => {
+                        const isYuan = event.currentTarget.checked
+                        const newUnit = isYuan ? 'yuan' : 'wan-yuan'
+                        const currentPrice = formData.unitPrice || 0
+                        let newPrice = currentPrice
+
+                        if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
+                          newPrice = currentPrice * 10000
+                        } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
+                          newPrice = currentPrice / 10000
+                        }
+
+                        setFormData({ 
+                          ...formData, 
+                          priceUnit: newUnit,
+                          unitPrice: newPrice
+                        })
+                      }}
+                      onLabel="元"
+                      offLabel="万元"
+                      size="md"
+                      style={{ marginBottom: '2px' }}
+                    />
+                  </div>
+                </Group>
+              </Grid.Col>
+            </Grid>
+          </>
         )}
 
         {template === 'subscription' && (
@@ -488,6 +601,35 @@ const DynamicRevenueTable: React.FC = () => {
           />
         )}
 
+        {/* 涨价参数 - 2栏 */}
+        <Grid gutter="md">
+          <Grid.Col span={6}>
+            <NumberInput
+              label="涨价间隔（年）"
+              placeholder="0表示不涨价"
+              description="每隔N年涨价一次，0表示不涨价"
+              value={formData.priceIncreaseInterval || 0}
+              onChange={(value) => setFormData({ ...formData, priceIncreaseInterval: Number(value) })}
+              min={0}
+              max={30}
+              decimalScale={0}
+            />
+          </Grid.Col>
+          <Grid.Col span={6}>
+            <NumberInput
+              label="涨价幅度（%）"
+              placeholder="请输入涨价幅度"
+              description="每次涨价的百分比，例如：5 表示 5%"
+              value={formData.priceIncreaseRate || 0}
+              onChange={(value) => setFormData({ ...formData, priceIncreaseRate: Number(value) })}
+              min={0}
+              max={100}
+              decimalScale={2}
+              disabled={(formData.priceIncreaseInterval || 0) === 0}
+            />
+          </Grid.Col>
+        </Grid>
+
         {/* 增值税率和备注 - 2栏 */}
         <Grid gutter="md">
           <Grid.Col span={6}>
@@ -503,12 +645,14 @@ const DynamicRevenueTable: React.FC = () => {
           </Grid.Col>
 
           <Grid.Col span={6}>
-            <TextInput
-              label="备注"
-              placeholder="请输入备注（可选）"
-              value={formData.remark || ''}
-              onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-            />
+            <Tooltip label={formData.remark || '无备注'} multiline w={300} withArrow>
+              <TextInput
+                label="备注"
+                placeholder="请输入备注（可选）"
+                value={formData.remark || ''}
+                onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+              />
+            </Tooltip>
           </Grid.Col>
         </Grid>
       </Stack>
@@ -533,14 +677,27 @@ const DynamicRevenueTable: React.FC = () => {
                 <IconChartLine size={20} />
               </ActionIcon>
             </Tooltip>
-            <Button
-              leftSection={<IconPlus size={16} />}
-              onClick={handleAdd}
-              size="sm"
-              style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
-            >
-              新增收入项
-            </Button>
+            <Tooltip label="查看收入详表">
+              <ActionIcon
+                variant="light"
+                color="cyan"
+                size="lg"
+                onClick={() => setShowRevenueDetailModal(true)}
+                disabled={revenueItems.length === 0}
+              >
+                <IconTable size={20} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="新增收入项">
+              <ActionIcon
+                variant="filled"
+                color="blue"
+                size="lg"
+                onClick={handleAdd}
+              >
+                <IconPlus size={20} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
 
@@ -643,35 +800,35 @@ const DynamicRevenueTable: React.FC = () => {
                         </Group>
                       </Table.Td>
                     </Table.Tr>
-                  )
+                  )}
                 })}
+                {/* 合计行 */}
+                <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                  <Table.Td style={{ textAlign: 'center' }}></Table.Td>
+                  <Table.Td>
+                    <Text fw={600}>合计</Text>
+                  </Table.Td>
+                  <Table.Td colSpan={3}></Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>
+                    <Text fw={600} c="#1D2129">
+                      {formatAmount(revenueItems.reduce((sum, item) => sum + calculateTaxableIncome(item), 0))}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>
+                    <Text fw={600} c="#165DFF">
+                      {formatAmount(revenueItems.reduce((sum, item) => sum + calculateNonTaxIncome(item), 0))}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>
+                    <Text fw={600} c="#F7BA1E">
+                      {formatAmount(revenueItems.reduce((sum, item) => sum + calculateVatAmount(item), 0))}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td colSpan={2}></Table.Td>
+                </Table.Tr>
               </Table.Tbody>
             </Table>
           </div>
-        )}
-
-        {/* 合计行 */}
-        {revenueItems.length > 0 && (
-          <Group justify="flex-end" gap="xl" style={{ padding: '8px 16px', backgroundColor: '#F7F8FA', borderRadius: '4px' }}>
-            <div>
-              <Text size="xs" c="#86909C" mb={4}>含税收入合计</Text>
-              <Text size="md" fw={600} c="#1D2129">
-                {formatAmount(revenueItems.reduce((sum, item) => sum + calculateTaxableIncome(item), 0))} 万元
-              </Text>
-            </div>
-            <div>
-              <Text size="xs" c="#86909C" mb={4}>不含税收入合计</Text>
-              <Text size="md" fw={600} c="#165DFF">
-                {formatAmount(revenueItems.reduce((sum, item) => sum + calculateNonTaxIncome(item), 0))} 万元
-              </Text>
-            </div>
-            <div>
-              <Text size="xs" c="#86909C" mb={4}>增值税合计</Text>
-              <Text size="md" fw={600} c="#F7BA1E">
-                {formatAmount(revenueItems.reduce((sum, item) => sum + calculateVatAmount(item), 0))} 万元
-              </Text>
-            </div>
-          </Group>
         )}
       </Stack>
 
@@ -694,7 +851,7 @@ const DynamicRevenueTable: React.FC = () => {
             </Button>
           </Group>
         }
-        size="xl"
+        size="md"
       >
         {renderFormFields()}
         <Group justify="flex-end" mt="xl">
@@ -712,6 +869,160 @@ const DynamicRevenueTable: React.FC = () => {
         opened={productionRateModalOpened}
         onClose={() => setProductionRateModalOpened(false)}
       />
+
+      {/* 收入详表弹窗 */}
+      <Modal
+        opened={showRevenueDetailModal}
+        onClose={() => setShowRevenueDetailModal(false)}
+        title={
+          <Text size="md">
+            📊 营业收入、营业税金及附加和增值税估算表
+          </Text>
+        }
+        size="calc(100vw - 100px)"
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        {(() => {
+          if (!context) return <Text c="red">项目上下文未加载</Text>
+
+          const operationYears = context.operationYears
+          const years = Array.from({ length: operationYears }, (_, i) => i + 1)
+
+          return (
+            <Table striped withTableBorder size="xs">
+              <Table.Thead>
+                <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                  <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle' }}>序号</Table.Th>
+                  <Table.Th rowSpan={2} style={{ verticalAlign: 'middle' }}>项目</Table.Th>
+                  <Table.Th colSpan={operationYears} style={{ textAlign: 'center' }}>运营期</Table.Th>
+                </Table.Tr>
+                <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                  {years.map((year) => (
+                    <Table.Th key={year} style={{ textAlign: 'center' }}>
+                      {year}
+                    </Table.Th>
+                  ))}
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {/* 1. 营业收入区块 */}
+                {revenueItems.map((item, idx) => {
+                  const yearlyRevenues = years.map((year) => {
+                    const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                    return calculateYearlyRevenue(item, year, productionRate)
+                  })
+
+                  return (
+                    <Table.Tr key={`revenue-${item.id}`}>
+                      <Table.Td style={{ textAlign: 'center' }}>{idx + 1}</Table.Td>
+                      <Table.Td>{item.name}</Table.Td>
+                      {yearlyRevenues.map((revenue, i) => (
+                        <Table.Td key={i} style={{ textAlign: 'right' }}>
+                          {revenue.toFixed(2)}
+                        </Table.Td>
+                      ))}
+                    </Table.Tr>
+                  )
+                })}
+                {/* 营业收入合计 */}
+                <Table.Tr style={{ backgroundColor: '#F0F5FF' }}>
+                  <Table.Td colSpan={2}>营业收入合计</Table.Td>
+                  {years.map((year) => {
+                    const yearTotal = revenueItems.reduce((sum, item) => {
+                      const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                      return sum + calculateYearlyRevenue(item, year, productionRate)
+                    }, 0)
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                        {yearTotal.toFixed(2)}
+                      </Table.Td>
+                    )
+                  })}
+                </Table.Tr>
+
+                {/* 2. 增值税区块 */}
+                {revenueItems.map((item, idx) => {
+                  const yearlyVATs = years.map((year) => {
+                    const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                    const revenue = calculateYearlyRevenue(item, year, productionRate)
+                    return revenue - revenue / (1 + item.vatRate)
+                  })
+
+                  return (
+                    <Table.Tr key={`vat-${item.id}`}>
+                      <Table.Td style={{ textAlign: 'center' }}>{idx + 1}</Table.Td>
+                      <Table.Td>
+                        {item.name}(增值税{(item.vatRate * 100).toFixed(0)}%)
+                      </Table.Td>
+                      {yearlyVATs.map((vat, i) => (
+                        <Table.Td key={i} style={{ textAlign: 'right' }}>
+                          {vat.toFixed(2)}
+                        </Table.Td>
+                      ))}
+                    </Table.Tr>
+                  )
+                })}
+                {/* 增值税合计 */}
+                <Table.Tr style={{ backgroundColor: '#FFF7E6' }}>
+                  <Table.Td colSpan={2}>增值税合计</Table.Td>
+                  {years.map((year) => {
+                    const yearTotal = revenueItems.reduce((sum, item) => {
+                      const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                      const revenue = calculateYearlyRevenue(item, year, productionRate)
+                      return sum + (revenue - revenue / (1 + item.vatRate))
+                    }, 0)
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                        {yearTotal.toFixed(2)}
+                      </Table.Td>
+                    )
+                  })}
+                </Table.Tr>
+
+                {/* 3. 营业税金及附加区块 */}
+                <Table.Tr>
+                  <Table.Td colSpan={2}>城市维护建设税（增值税×7%）</Table.Td>
+                  {years.map((year) => {
+                    const vatTotal = revenueItems.reduce((sum, item) => {
+                      const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                      const revenue = calculateYearlyRevenue(item, year, productionRate)
+                      return sum + (revenue - revenue / (1 + item.vatRate))
+                    }, 0)
+                    const urbanTax = vatTotal * 0.07
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                        {urbanTax.toFixed(2)}
+                      </Table.Td>
+                    )
+                  })}
+                </Table.Tr>
+                {/* 营业税金及附加合计 */}
+                <Table.Tr style={{ backgroundColor: '#E6F7F0' }}>
+                  <Table.Td colSpan={2}>营业税金及附加合计</Table.Td>
+                  {years.map((year) => {
+                    const vatTotal = revenueItems.reduce((sum, item) => {
+                      const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                      const revenue = calculateYearlyRevenue(item, year, productionRate)
+                      return sum + (revenue - revenue / (1 + item.vatRate))
+                    }, 0)
+                    const urbanTax = vatTotal * 0.07
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                        {urbanTax.toFixed(2)}
+                      </Table.Td>
+                    )
+                  })}
+                </Table.Tr>
+              </Table.Tbody>
+            </Table>
+          )
+        })()}
+      </Modal>
     </>
   )
 }

@@ -84,13 +84,20 @@ export interface RevenueItem {
   
   // 动态字段（根据fieldTemplate显示不同字段）
   quantity?: number         // 数量
-  unitPrice?: number        // 单价
+  unit?: string             // 数量单位（AI测算后自动填充）
+  unitPrice?: number        // 单价（根据priceUnit，可能是元或万元）
+  priceUnit?: 'yuan' | 'wan-yuan' // 单价单位，默认万元
   area?: number            // 面积（亩）
   yieldPerArea?: number    // 亩产量
   capacity?: number        // 产能
+  capacityUnit?: string    // 产能单位（AI测算后自动填充）
   utilizationRate?: number // 利用率
   subscriptions?: number   // 订阅数
   directAmount?: number    // 直接金额
+  
+  // 涨价参数
+  priceIncreaseInterval?: number // 涨价间隔（年），0表示不涨价
+  priceIncreaseRate?: number     // 涨价幅度（%），如 5 表示 5%
   
   // 税务字段
   vatRate: number          // 增值税率（如 0.13 表示13%）
@@ -222,22 +229,35 @@ interface RevenueCostState {
 
 /**
  * 生成默认达产率曲线
- * 规则：第1年75%，第2年85%，第3年及以后100%
+ * 规则：只配置前3年，第1年75%，第2年85%，第3年及以后100%
+ * 未配置的年份按最后一年执行
  */
 const generateDefaultProductionRates = (operationYears: number): ProductionRateConfig[] => {
-  const rates: ProductionRateConfig[] = []
-  for (let i = 1; i <= operationYears; i++) {
-    let rate = 1.0
-    if (i === 1) rate = 0.75
-    else if (i === 2) rate = 0.85
-    else rate = 1.0
-    
-    rates.push({
-      yearIndex: i,
-      rate
-    })
-  }
-  return rates
+  // 只配置前3年
+  return [
+    { yearIndex: 1, rate: 0.75 },
+    { yearIndex: 2, rate: 0.85 },
+    { yearIndex: 3, rate: 1.0 },
+  ]
+}
+
+/**
+ * 获取指定年份的达产率，如果未配置则使用最后一年的达产率
+ */
+export const getProductionRateForYear = (
+  rates: ProductionRateConfig[],
+  yearIndex: number
+): number => {
+  if (rates.length === 0) return 1.0
+  
+  // 查找是否有配置
+  const config = rates.find(r => r.yearIndex === yearIndex)
+  if (config) return config.rate
+  
+  // 未配置则使用最后一年的配置
+  const maxYearIndex = Math.max(...rates.map(r => r.yearIndex))
+  const lastConfig = rates.find(r => r.yearIndex === maxYearIndex)
+  return lastConfig?.rate || 1.0
 }
 
 /**
@@ -246,18 +266,27 @@ const generateDefaultProductionRates = (operationYears: number): ProductionRateC
 export const calculateTaxableIncome = (item: RevenueItem): number => {
   let baseAmount = 0
   
+  // 获取单价（统一转为万元）
+  const getPriceInWanYuan = () => {
+    const price = item.unitPrice || 0
+    if (item.priceUnit === 'yuan') {
+      return price / 10000 // 元转万元
+    }
+    return price // 默认已经是万元
+  }
+  
   switch (item.fieldTemplate) {
     case 'quantity-price':
-      baseAmount = (item.quantity || 0) * (item.unitPrice || 0)
+      baseAmount = (item.quantity || 0) * getPriceInWanYuan()
       break
     case 'area-yield-price':
-      baseAmount = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0)
+      baseAmount = (item.area || 0) * (item.yieldPerArea || 0) * getPriceInWanYuan()
       break
     case 'capacity-utilization':
-      baseAmount = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0)
+      baseAmount = (item.capacity || 0) * (item.utilizationRate || 0) * getPriceInWanYuan()
       break
     case 'subscription':
-      baseAmount = (item.subscriptions || 0) * (item.unitPrice || 0)
+      baseAmount = (item.subscriptions || 0) * getPriceInWanYuan()
       break
     case 'direct-amount':
       baseAmount = item.directAmount || 0
@@ -282,6 +311,47 @@ export const calculateVatAmount = (item: RevenueItem): number => {
   const taxableIncome = calculateTaxableIncome(item)
   const nonTaxIncome = calculateNonTaxIncome(item)
   return taxableIncome - nonTaxIncome
+}
+
+/**
+ * 计算指定运营年份的价格乘数（考虑涨价）
+ * @param item 收入项
+ * @param yearIndex 运营第N年（1-based）
+ * @returns 价格乘数，例如第4年涨价5%则返回1.05
+ */
+export const calculatePriceMultiplier = (item: RevenueItem, yearIndex: number): number => {
+  const interval = item.priceIncreaseInterval || 0
+  const rate = item.priceIncreaseRate || 0
+
+  if (interval === 0 || rate === 0) {
+    return 1.0 // 不涨价
+  }
+
+  // 计算已经涨价的次数：yearIndex除以interval，向下取整
+  // 例如：间隔3年，则第1-3年为0次，第4-6年为1次，第7-9年为2次
+  const increaseCount = Math.floor((yearIndex - 1) / interval)
+
+  // 计算价格乘数：(1 + rate/100)^increaseCount
+  const multiplier = Math.pow(1 + rate / 100, increaseCount)
+
+  return multiplier
+}
+
+/**
+ * 计算指定年份的收入（考虑达产率和涨价）
+ * @param item 收入项
+ * @param yearIndex 运营第N年（1-based）
+ * @param productionRate 达产率（0-1之间）
+ */
+export const calculateYearlyRevenue = (
+  item: RevenueItem,
+  yearIndex: number,
+  productionRate: number
+): number => {
+  const baseRevenue = calculateTaxableIncome(item)
+  const priceMultiplier = calculatePriceMultiplier(item, yearIndex)
+
+  return baseRevenue * priceMultiplier * productionRate
 }
 
 /**
@@ -345,6 +415,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           category: item.category || 'other',
           fieldTemplate: item.fieldTemplate || 'quantity-price',
           vatRate: item.vatRate || 0.13,
+          priceUnit: item.priceUnit || 'wan-yuan', // 默认万元
+          priceIncreaseInterval: item.priceIncreaseInterval || 0, // 默认不涨价
+          priceIncreaseRate: item.priceIncreaseRate || 0,
           ...item
         }
         set({ revenueItems: [...state.revenueItems, newItem] })
