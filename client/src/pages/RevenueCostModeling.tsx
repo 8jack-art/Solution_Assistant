@@ -714,15 +714,26 @@ const RevenueCostModeling: React.FC = () => {
                             <Text fw={600} c="#165DFF">{repaymentPeriod} 年</Text>
                           </Table.Td>
                           <Table.Td>
-                            <Tooltip label="点击编辑">
-                              <ActionIcon 
-                                variant="subtle" 
-                                color="blue" 
-                                onClick={() => openSimpleEditModal('repaymentPeriod', '还款期', repaymentPeriod, '年', 1, 50)}
-                              >
-                                <IconEdit size={16} />
-                              </ActionIcon>
-                            </Tooltip>
+                            <Group gap={4}>
+                              <Tooltip label="点击编辑">
+                                <ActionIcon 
+                                  variant="subtle" 
+                                  color="blue" 
+                                  onClick={() => openSimpleEditModal('repaymentPeriod', '还款期', repaymentPeriod, '年', 1, 50)}
+                                >
+                                  <IconEdit size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                              <Tooltip label="恢复默认">
+                                <ActionIcon 
+                                  variant="subtle" 
+                                  color="green" 
+                                  onClick={() => setRepaymentPeriod(project?.operation_years || 0)}
+                                >
+                                  <IconCalendar size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Group>
                           </Table.Td>
                         </Table.Tr>
                       </Table.Tbody>
@@ -1516,9 +1527,9 @@ const RevenueCostModeling: React.FC = () => {
               </div>
               <Group gap="xl">
                 <div>
-                  <Text size="xs" c="#86909C" mb={4}>总投资</Text>
+                  <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {project?.total_investment} 万元
+                    {investmentEstimate?.final_total ? Number(investmentEstimate.final_total).toFixed(2) : (project?.total_investment || 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>

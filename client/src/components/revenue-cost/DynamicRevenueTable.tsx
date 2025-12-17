@@ -800,7 +800,7 @@ const DynamicRevenueTable: React.FC = () => {
                         </Group>
                       </Table.Td>
                     </Table.Tr>
-                  )}
+                  )
                 })}
                 {/* 合计行 */}
                 <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
@@ -894,16 +894,16 @@ const DynamicRevenueTable: React.FC = () => {
           const years = Array.from({ length: operationYears }, (_, i) => i + 1)
 
           return (
-            <Table striped withTableBorder size="xs">
+            <Table striped withTableBorder size="xs" style={{ fontSize: '11px' }}>
               <Table.Thead>
                 <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
-                  <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle' }}>序号</Table.Th>
-                  <Table.Th rowSpan={2} style={{ verticalAlign: 'middle' }}>项目</Table.Th>
-                  <Table.Th colSpan={operationYears} style={{ textAlign: 'center' }}>运营期</Table.Th>
+                  <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>序号</Table.Th>
+                  <Table.Th rowSpan={2} style={{ verticalAlign: 'middle', border: '1px solid #dee2e6' }}>项目</Table.Th>
+                  <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>运营期</Table.Th>
                 </Table.Tr>
                 <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
                   {years.map((year) => (
-                    <Table.Th key={year} style={{ textAlign: 'center' }}>
+                    <Table.Th key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                       {year}
                     </Table.Th>
                   ))}
@@ -919,10 +919,10 @@ const DynamicRevenueTable: React.FC = () => {
 
                   return (
                     <Table.Tr key={`revenue-${item.id}`}>
-                      <Table.Td style={{ textAlign: 'center' }}>{idx + 1}</Table.Td>
-                      <Table.Td>{item.name}</Table.Td>
+                      <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{idx + 1}</Table.Td>
+                      <Table.Td style={{ border: '1px solid #dee2e6' }}>{item.name}</Table.Td>
                       {yearlyRevenues.map((revenue, i) => (
-                        <Table.Td key={i} style={{ textAlign: 'right' }}>
+                        <Table.Td key={i} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                           {revenue.toFixed(2)}
                         </Table.Td>
                       ))}
@@ -931,14 +931,14 @@ const DynamicRevenueTable: React.FC = () => {
                 })}
                 {/* 营业收入合计 */}
                 <Table.Tr style={{ backgroundColor: '#F0F5FF' }}>
-                  <Table.Td colSpan={2}>营业收入合计</Table.Td>
+                  <Table.Td colSpan={2} style={{ border: '1px solid #dee2e6' }}>营业收入合计</Table.Td>
                   {years.map((year) => {
                     const yearTotal = revenueItems.reduce((sum, item) => {
                       const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
                       return sum + calculateYearlyRevenue(item, year, productionRate)
                     }, 0)
                     return (
-                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {yearTotal.toFixed(2)}
                       </Table.Td>
                     )
@@ -955,12 +955,12 @@ const DynamicRevenueTable: React.FC = () => {
 
                   return (
                     <Table.Tr key={`vat-${item.id}`}>
-                      <Table.Td style={{ textAlign: 'center' }}>{idx + 1}</Table.Td>
-                      <Table.Td>
+                      <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{idx + 1}</Table.Td>
+                      <Table.Td style={{ border: '1px solid #dee2e6' }}>
                         {item.name}(增值税{(item.vatRate * 100).toFixed(0)}%)
                       </Table.Td>
                       {yearlyVATs.map((vat, i) => (
-                        <Table.Td key={i} style={{ textAlign: 'right' }}>
+                        <Table.Td key={i} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                           {vat.toFixed(2)}
                         </Table.Td>
                       ))}
@@ -969,7 +969,7 @@ const DynamicRevenueTable: React.FC = () => {
                 })}
                 {/* 增值税合计 */}
                 <Table.Tr style={{ backgroundColor: '#FFF7E6' }}>
-                  <Table.Td colSpan={2}>增值税合计</Table.Td>
+                  <Table.Td colSpan={2} style={{ border: '1px solid #dee2e6' }}>增值税合计</Table.Td>
                   {years.map((year) => {
                     const yearTotal = revenueItems.reduce((sum, item) => {
                       const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
@@ -977,7 +977,7 @@ const DynamicRevenueTable: React.FC = () => {
                       return sum + (revenue - revenue / (1 + item.vatRate))
                     }, 0)
                     return (
-                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {yearTotal.toFixed(2)}
                       </Table.Td>
                     )
@@ -986,7 +986,7 @@ const DynamicRevenueTable: React.FC = () => {
 
                 {/* 3. 营业税金及附加区块 */}
                 <Table.Tr>
-                  <Table.Td colSpan={2}>城市维护建设税（增值税×7%）</Table.Td>
+                  <Table.Td colSpan={2} style={{ border: '1px solid #dee2e6' }}>城市维护建设税（增值税×7%）</Table.Td>
                   {years.map((year) => {
                     const vatTotal = revenueItems.reduce((sum, item) => {
                       const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
@@ -995,7 +995,7 @@ const DynamicRevenueTable: React.FC = () => {
                     }, 0)
                     const urbanTax = vatTotal * 0.07
                     return (
-                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {urbanTax.toFixed(2)}
                       </Table.Td>
                     )
@@ -1003,7 +1003,7 @@ const DynamicRevenueTable: React.FC = () => {
                 </Table.Tr>
                 {/* 营业税金及附加合计 */}
                 <Table.Tr style={{ backgroundColor: '#E6F7F0' }}>
-                  <Table.Td colSpan={2}>营业税金及附加合计</Table.Td>
+                  <Table.Td colSpan={2} style={{ border: '1px solid #dee2e6' }}>营业税金及附加合计</Table.Td>
                   {years.map((year) => {
                     const vatTotal = revenueItems.reduce((sum, item) => {
                       const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
@@ -1012,7 +1012,7 @@ const DynamicRevenueTable: React.FC = () => {
                     }, 0)
                     const urbanTax = vatTotal * 0.07
                     return (
-                      <Table.Td key={year} style={{ textAlign: 'right' }}>
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {urbanTax.toFixed(2)}
                       </Table.Td>
                     )

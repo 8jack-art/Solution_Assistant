@@ -27,6 +27,7 @@ import { notifications } from '@mantine/notifications'
 import { projectApi, InvestmentProject } from '@/lib/api'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { useMediaQuery } from '@mantine/hooks'
+import UserProfile from '@/components/UserProfile'
 
 const Dashboard: React.FC = () => {
   const [projects, setProjects] = useState<InvestmentProject[]>([])
@@ -140,17 +141,7 @@ const Dashboard: React.FC = () => {
                   🤖 LLM配置
                 </Button>
               )}
-              <Group gap="xs">
-                <Text size="sm" c="#86909C" style={{ fontSize: '14px' }}>{user?.username}</Text>
-                {user?.is_admin && <Badge color="#1E6FFF" size="sm">管理员</Badge>}
-              </Group>
-              <Button 
-                variant="subtle"
-                onClick={handleLogout}
-                style={{ height: '32px', color: '#86909C', fontSize: '14px' }}
-              >
-                退出
-              </Button>
+              {user && <UserProfile user={user} />}
             </Group>
           </Group>
         </Container>
