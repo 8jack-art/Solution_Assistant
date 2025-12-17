@@ -357,7 +357,13 @@ const DynamicRevenueTable: React.FC = () => {
         case 'area-yield-price':
           const area = formData.area || 0;
           const yieldPerArea = formData.yieldPerArea || 0;
-          const areaUnitPrice = formData.unitPrice || 0;
+          let areaUnitPrice = formData.unitPrice || 0;
+          
+          // 单位转换
+          if (formData.priceUnit === 'yuan') {
+            areaUnitPrice = areaUnitPrice / 10000; // 元转万元
+          }
+          
           return area * yieldPerArea * areaUnitPrice;
           
         case 'capacity-utilization':
@@ -465,7 +471,7 @@ const DynamicRevenueTable: React.FC = () => {
               <Grid.Col span={3}>
                 <Stack gap={0}>
                   <Text size="sm" fw={500} mb={4}>
-                    单位
+货币单位
                   </Text>
                   <SegmentedControl
                     radius="md"
@@ -495,13 +501,14 @@ const DynamicRevenueTable: React.FC = () => {
                     }}
                     styles={{
                       root: {
-                        backgroundColor: '#f0f9ff',
-                        border: '1px solid #bae6fd',
+                        backgroundColor: '#ffffff', // 白色背景
+                        border: '0px solid #d1d5db', // 灰色边框
                       },
                       indicator: {
-                        backgroundColor: '#165DFF', // 蓝色选中背景
+                        backgroundColor: '#d1d5db', // 灰色选中背景
                       },
                       label: {
+                        color: '#000000', // 黑色文字
                         '&[data-active]': {
                           color: '#ffffff', // 白色选中文字
                         },
@@ -548,7 +555,7 @@ const DynamicRevenueTable: React.FC = () => {
               <Grid.Col span={3}>
                 <Stack gap={0}>
                   <Text size="sm" fw={500} mb={4}>
-                    单位
+货币单位
                   </Text>
                   <SegmentedControl
                     radius="md"
@@ -578,13 +585,14 @@ const DynamicRevenueTable: React.FC = () => {
                     }}
                     styles={{
                       root: {
-                        backgroundColor: '#f0f9ff',
-                        border: '1px solid #bae6fd',
+                        backgroundColor: '#ffffff', // 白色背景
+                        border: '1px solid #d1d5db', // 灰色边框
                       },
                       indicator: {
                         backgroundColor: '#165DFF', // 蓝色选中背景
                       },
                       label: {
+                        color: '#000000', // 黑色文字
                         '&[data-active]': {
                           color: '#ffffff', // 白色选中文字
                         },
@@ -629,7 +637,7 @@ const DynamicRevenueTable: React.FC = () => {
               <Grid.Col span={3}>
                 <Stack gap={0}>
                   <Text size="sm" fw={500} mb={4}>
-                    单位
+货币单位
                   </Text>
                   <SegmentedControl
                     radius="md"
@@ -659,13 +667,14 @@ const DynamicRevenueTable: React.FC = () => {
                     }}
                     styles={{
                       root: {
-                        backgroundColor: '#f0f9ff',
-                        border: '1px solid #bae6fd',
+                        backgroundColor: '#ffffff', // 白色背景
+                        border: '1px solid #d1d5db', // 灰色边框
                       },
                       indicator: {
                         backgroundColor: '#165DFF', // 蓝色选中背景
                       },
                       label: {
+                        color: '#000000', // 黑色文字
                         '&[data-active]': {
                           color: '#ffffff', // 白色选中文字
                         },
@@ -702,7 +711,7 @@ const DynamicRevenueTable: React.FC = () => {
               <Grid.Col span={3}>
                 <Stack gap={0}>
                   <Text size="sm" fw={500} mb={4}>
-                    单位
+货币单位
                   </Text>
                   <SegmentedControl
                     radius="md"
@@ -732,13 +741,14 @@ const DynamicRevenueTable: React.FC = () => {
                     }}
                     styles={{
                       root: {
-                        backgroundColor: '#f0f9ff',
-                        border: '1px solid #bae6fd',
+                        backgroundColor: '#ffffff', // 白色背景
+                        border: '1px solid #d1d5db', // 灰色边框
                       },
                       indicator: {
                         backgroundColor: '#165DFF', // 蓝色选中背景
                       },
                       label: {
+                        color: '#000000', // 黑色文字
                         '&[data-active]': {
                           color: '#ffffff', // 白色选中文字
                         },
@@ -1110,13 +1120,14 @@ const DynamicRevenueTable: React.FC = () => {
                   }}
                   styles={{
                     root: {
-                      backgroundColor: '#f0f9ff',
-                      border: '1px solid #bae6fd',
+                      backgroundColor: '#ffffff', // 白色背景
+                      border: '1px solid #d1d5db', // 灰色边框
                     },
                     indicator: {
                       backgroundColor: '#165DFF', // 蓝色选中背景
                     },
                     label: {
+                      color: '#000000', // 黑色文字
                       '&[data-active]': {
                         color: '#ffffff', // 白色选中文字
                       },

@@ -7,194 +7,136 @@ import {
   Group,
   Table,
   Modal,
-  TextInput,
   NumberInput,
-  Select,
   ActionIcon,
   Tooltip,
-  Badge,
-  Tabs,
+  SegmentedControl,
+  TextInput,
 } from '@mantine/core'
-import { IconPlus, IconEdit, IconTrash, IconPackage } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconPackage, IconTable } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { useRevenueCostStore, CostItem, FieldTemplate } from '@/stores/revenueCostStore'
-
-/**
- * 成本类别标签
- */
-const COST_CATEGORY_LABELS = {
-  'raw-material': '外购原材料',
-  'labor': '人工费用',
-  'manufacturing': '制造费用',
-  'other': '其他成本',
-}
-
-/**
- * 添加方式选项（外购原材料专用）
- */
-const PURCHASE_METHOD_OPTIONS = [
-  { value: 'quantity-price', label: '数量×单价' },
-  { value: 'direct-amount', label: '直接金额' },
-]
+import { useRevenueCostStore, CostItem } from '@/stores/revenueCostStore'
 
 /**
  * 动态成本表格组件
  */
 const DynamicCostTable: React.FC = () => {
-  const { costItems, addCostItem, updateCostItem, deleteCostItem } = useRevenueCostStore()
+  const { context, costItems, addCostItem, updateCostItem, deleteCostItem } = useRevenueCostStore()
   
   const [showModal, setShowModal] = useState(false)
   const [editingItem, setEditingItem] = useState<CostItem | null>(null)
   const [isNewItem, setIsNewItem] = useState(false)
-  const [activeTab, setActiveTab] = useState<string>('raw-material')
-
+  const [showCostDetailModal, setShowCostDetailModal] = useState(false)
+  
   // 表单数据
-  const [formData, setFormData] = useState<Partial<CostItem>>({})
+  const [formData, setFormData] = useState<Partial<CostItem>>({
+    name: '',
+    directAmount: 0,
+    category: 'other',
+    fieldTemplate: 'direct-amount'
+  });
 
   /**
-   * 打开新增弹窗
+   * 打开新增对话框
    */
-  const handleAdd = (category: string) => {
+  const handleAdd = () => {
     setFormData({
       name: '',
-      category: category as any,
-      fieldTemplate: 'quantity-price',
-    })
-    setEditingItem(null)
-    setIsNewItem(true)
-    setShowModal(true)
+      directAmount: 0,
+      category: 'other',
+      fieldTemplate: 'direct-amount'
+    });
+    setEditingItem(null);
+    setIsNewItem(true);
+    setShowModal(true);
   }
 
   /**
-   * 打开编辑弹窗
+   * 打开编辑对话框
    */
   const handleEdit = (item: CostItem) => {
-    setFormData({ ...item })
-    setEditingItem(item)
-    setIsNewItem(false)
-    setShowModal(true)
+    setFormData({ ...item });
+    setEditingItem(item);
+    setIsNewItem(false);
+    setShowModal(true);
   }
 
   /**
    * 删除成本项
    */
   const handleDelete = (item: CostItem) => {
-    if (confirm(`确定要删除"${item.name}"吗？`)) {
-      deleteCostItem(item.id)
-      notifications.show({
-        title: '成功',
-        message: '成本项已删除',
-        color: 'green',
-      })
-    }
+    deleteCostItem(item.id);
+    notifications.show({
+      title: '成功',
+      message: '成本项已删除',
+      color: 'green',
+    });
   }
 
   /**
-   * 保存成本项（含表单验证）
+   * 保存成本项
    */
   const handleSave = () => {
-    // 验证：名称不能为空
+    // 验证表单
     if (!formData.name || formData.name.trim() === '') {
       notifications.show({
         title: '错误',
         message: '请输入成本项名称',
         color: 'red',
-      })
-      return
+      });
+      return;
     }
-
-    // 验证：添加方式不能为空（外购原材料）
-    if (formData.category === 'raw-material' && !formData.fieldTemplate) {
+    
+    if (!formData.directAmount || formData.directAmount <= 0) {
       notifications.show({
         title: '错误',
-        message: '请选择添加方式',
+        message: '请输入有效的金额',
         color: 'red',
-      })
-      return
+      });
+      return;
     }
-
-    // 验证：根据字段模板验证必填项
-    if (formData.fieldTemplate === 'quantity-price') {
-      if (!formData.quantity || formData.quantity <= 0) {
-        notifications.show({
-          title: '错误',
-          message: '请输入有效的数量',
-          color: 'red',
-        })
-        return
-      }
-      if (!formData.unitPrice || formData.unitPrice <= 0) {
-        notifications.show({
-          title: '错误',
-          message: '请输入有效的单价',
-          color: 'red',
-        })
-        return
-      }
-    } else if (formData.fieldTemplate === 'direct-amount') {
-      if (!formData.directAmount || formData.directAmount <= 0) {
-        notifications.show({
-          title: '错误',
-          message: '请输入有效的金额',
-          color: 'red',
-        })
-        return
-      }
-    }
-
-    // 保存
+    
     if (isNewItem) {
-      addCostItem(formData)
+      // 新增成本项
+      addCostItem({
+        name: formData.name,
+        directAmount: formData.directAmount,
+        category: 'other',
+        fieldTemplate: 'direct-amount'
+      });
       notifications.show({
         title: '成功',
         message: '成本项已添加',
         color: 'green',
-      })
+      });
     } else if (editingItem) {
-      updateCostItem(editingItem.id, formData)
+      // 更新成本项
+      updateCostItem(editingItem.id, {
+        name: formData.name,
+        directAmount: formData.directAmount
+      });
       notifications.show({
         title: '成功',
         message: '成本项已更新',
         color: 'green',
-      })
+      });
     }
-
-    setShowModal(false)
-    setFormData({})
-  }
-
-  /**
-   * 计算总金额
-   */
-  const calculateTotal = (item: CostItem): number => {
-    if (item.fieldTemplate === 'quantity-price') {
-      return (item.quantity || 0) * (item.unitPrice || 0) / 10000 // 转为万元
-    } else if (item.fieldTemplate === 'direct-amount') {
-      return item.directAmount || 0
-    }
-    return 0
+    
+    setShowModal(false);
+    setEditingItem(null);
   }
 
   /**
    * 格式化金额
    */
   const formatAmount = (amount: number): string => {
-    return amount.toFixed(2)
-  }
-
-  /**
-   * 获取指定类别的成本项
-   */
-  const getCostItemsByCategory = (category: string) => {
-    return costItems.filter(item => item.category === category)
+    return amount.toFixed(2);
   }
 
   /**
    * 渲染表单字段
    */
   const renderFormFields = () => {
-    const template = formData.fieldTemplate || 'quantity-price'
-
     return (
       <Stack gap="md">
         <TextInput
@@ -203,271 +145,362 @@ const DynamicCostTable: React.FC = () => {
           value={formData.name || ''}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           required
-          withAsterisk
         />
-
-        {/* 外购原材料必须选择添加方式 */}
-        {formData.category === 'raw-material' && (
-          <Select
-            label="添加方式"
-            placeholder="请选择添加方式"
-            data={PURCHASE_METHOD_OPTIONS}
-            value={template}
-            onChange={(value) => setFormData({ ...formData, fieldTemplate: value as FieldTemplate })}
-            required
-            withAsterisk
-            clearable={false}
-          />
-        )}
-
-        {/* 根据模板显示不同字段 */}
-        {template === 'quantity-price' && (
-          <>
-            <NumberInput
-              label="数量"
-              placeholder="请输入数量"
-              value={formData.quantity || ''}
-              onChange={(value) => setFormData({ ...formData, quantity: Number(value) })}
-              min={0}
-              decimalScale={2}
-              required
-              withAsterisk
-            />
-            <NumberInput
-              label="单价（元）"
-              placeholder="请输入单价"
-              value={formData.unitPrice || ''}
-              onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
-              min={0}
-              decimalScale={2}
-              required
-              withAsterisk
-            />
-          </>
-        )}
-
-        {template === 'direct-amount' && (
-          <NumberInput
-            label="直接金额（万元）"
-            placeholder="请输入金额"
-            value={formData.directAmount || ''}
-            onChange={(value) => setFormData({ ...formData, directAmount: Number(value) })}
-            min={0}
-            decimalScale={2}
-            required
-            withAsterisk
-          />
-        )}
-
-        <TextInput
-          label="备注"
-          placeholder="请输入备注（可选）"
-          value={formData.remark || ''}
-          onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+        
+        <NumberInput
+          label="金额（万元）"
+          placeholder="请输入金额"
+          value={formData.directAmount || 0}
+          onChange={(value) => setFormData({ ...formData, directAmount: Number(value) })}
+          min={0}
+          decimalScale={2}
+          required
         />
+        
+        <Stack gap={0}>
+          <Text size="sm" fw={500} mb={4}>
+            货币单位
+          </Text>
+          <SegmentedControl
+            radius="md"
+            size="sm"
+            data={['元', '万元']}
+            value={'万元'}
+            styles={{
+              root: {
+                backgroundColor: '#ffffff', // 白色背景
+                border: '0px solid #d1d5db', // 灰色边框
+              },
+              indicator: {
+                backgroundColor: '#d1d5db', // 灰色选中背景
+              },
+              label: {
+                color: '#000000', // 黑色文字
+                '&[data-active]': {
+                  color: '#ffffff', // 白色选中文字
+                },
+              },
+            }}
+          />
+        </Stack>
       </Stack>
-    )
+    );
   }
-
-  /**
-   * 渲染成本表格
-   */
-  const renderCostTable = (category: string) => {
-    const items = getCostItemsByCategory(category)
-
-    return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack gap="md">
-          <Group justify="space-between">
-            <Text size="md" fw={600} c="#1D2129">
-              {COST_CATEGORY_LABELS[category as keyof typeof COST_CATEGORY_LABELS]}
-            </Text>
-            <Button
-              size="sm"
-              leftSection={<IconPlus size={16} />}
-              onClick={() => handleAdd(category)}
-              style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
-            >
-              新增{COST_CATEGORY_LABELS[category as keyof typeof COST_CATEGORY_LABELS]}
-            </Button>
+  
+  return (
+    <>
+      <Stack gap="md">
+        <Group justify="space-between" align="center">
+          <Text size="md" fw={600} c="#1D2129">
+            营业成本配置
+          </Text>
+          <Group gap="xs">
+            <Tooltip label="新增成本项">
+              <ActionIcon
+                variant="filled"
+                color="blue"
+                size="lg"
+                onClick={handleAdd}
+              >
+                <IconPackage size={20} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
+        </Group>
 
-          {items.length === 0 ? (
-            <div style={{
-              padding: '40px',
-              textAlign: 'center',
-              backgroundColor: '#F7F8FA',
-              borderRadius: '8px',
-              border: '1px dashed #E5E6EB'
-            }}>
-              <Text size="sm" c="#86909C">
-                暂无数据，请点击"新增"按钮添加
-              </Text>
-            </div>
-          ) : (
-            <>
-              <Table striped highlightOnHover withTableBorder>
+        {(() => {
+          if (!context) return <Text c="red">项目上下文未加载</Text>
+
+          const operationYears = context.operationYears
+          const years = Array.from({ length: operationYears }, (_, i) => i + 1)
+
+          return (
+            <div style={{ overflowX: 'auto' }}>
+              <Table striped withTableBorder style={{ fontSize: '11px' }}>
                 <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>序号</Table.Th>
-                    <Table.Th>名称</Table.Th>
-                    <Table.Th>计算方式</Table.Th>
-                    <Table.Th>总金额（万元）</Table.Th>
-                    <Table.Th>备注</Table.Th>
-                    <Table.Th w={100}>操作</Table.Th>
+                  <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                    <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>序号</Table.Th>
+                    <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>成本项目</Table.Th>
+                    <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>合计</Table.Th>
+                    <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>运营期</Table.Th>
+                    <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>操作</Table.Th>
+                  </Table.Tr>
+                  <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                    {years.map((year) => (
+                      <Table.Th key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                        {year}
+                      </Table.Th>
+                    ))}
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {items.map((item) => (
-                    <Table.Tr key={item.id}>
-                      <Table.Td>{item.index}</Table.Td>
-                      <Table.Td>
-                        <Text fw={500}>{item.name}</Text>
+                  {/* 1. 营业成本 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>营业成本</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {costItems.reduce((sum, item) => sum + (item.directAmount || 0), 0).toFixed(2)}
+                    </Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        {costItems.reduce((sum, item) => sum + (item.directAmount || 0), 0).toFixed(2)}
                       </Table.Td>
-                      <Table.Td>
-                        {item.fieldTemplate === 'quantity-price' ? (
-                          <Text size="sm" c="#4E5969">
-                            {item.quantity} × {item.unitPrice}元
-                          </Text>
-                        ) : (
-                          <Badge color="gray" variant="light">直接金额</Badge>
-                        )}
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      <Group gap={4} justify="center">
+                        <Tooltip label="编辑">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            size="sm"
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 1.1 外购原材料费 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>外购原材料费</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
                       </Table.Td>
-                      <Table.Td>
-                        <Text fw={600} c="#165DFF">
-                          {formatAmount(calculateTotal(item))}
-                        </Text>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      <Group gap={4} justify="center">
+                        <Tooltip label="编辑">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            size="sm"
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 1.2 外购燃料及动力费 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.2</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>外购燃料及动力费</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
                       </Table.Td>
-                      <Table.Td>
-                        <Text size="sm" c="#86909C">{item.remark || '-'}</Text>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      <Group gap={4} justify="center">
+                        <Tooltip label="编辑">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            size="sm"
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 1.3 工资及福利费 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.3</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>工资及福利费</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
                       </Table.Td>
-                      <Table.Td>
-                        <Group gap="xs">
-                          <Tooltip label="编辑">
-                            <ActionIcon
-                              variant="subtle"
-                              color="blue"
-                              onClick={() => handleEdit(item)}
-                            >
-                              <IconEdit size={16} />
-                            </ActionIcon>
-                          </Tooltip>
-                          <Tooltip label="删除">
-                            <ActionIcon
-                              variant="subtle"
-                              color="red"
-                              onClick={() => handleDelete(item)}
-                            >
-                              <IconTrash size={16} />
-                            </ActionIcon>
-                          </Tooltip>
-                        </Group>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      <Group gap={4} justify="center">
+                        <Tooltip label="编辑">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            size="sm"
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 1.4 修理费 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.4</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>修理费</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
                       </Table.Td>
-                    </Table.Tr>
-                  ))}
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      <Group gap={4} justify="center">
+                        <Tooltip label="编辑">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            size="sm"
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 1.5 其他费用 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.5</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>其他费用</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      <Group gap={4} justify="center">
+                        <Tooltip label="编辑">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            size="sm"
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 2. 管理费用 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>管理费用</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 3. 财务费用 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>3</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>财务费用</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 3.1 利息支出 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>3.1</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>利息支出</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 4. 折旧费 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>4</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>折旧费</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 5. 摊销费 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>5</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>摊销费</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 6. 开发成本 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>6</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>开发成本</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 7. 总成本费用合计 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>7</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>总成本费用合计</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    {years.map((year) => (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        0.00
+                      </Table.Td>
+                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                  </Table.Tr>
                 </Table.Tbody>
               </Table>
+            </div>
+          )
+        })()}
+      </Stack>
 
-              {/* 汇总行 */}
-              <div style={{
-                padding: '12px 16px',
-                backgroundColor: '#F7F8FA',
-                borderRadius: '8px',
-                border: '1px solid #E5E6EB'
-              }}>
-                <Group justify="space-between">
-                  <Text size="sm" fw={600} c="#1D2129">
-                    {COST_CATEGORY_LABELS[category as keyof typeof COST_CATEGORY_LABELS]}合计
-                  </Text>
-                  <Text size="md" fw={700} c="#165DFF">
-                    {formatAmount(items.reduce((sum, item) => sum + calculateTotal(item), 0))} 万元
-                  </Text>
-                </Group>
-              </div>
-            </>
-          )}
-        </Stack>
-      </Card>
-    )
-  }
-
-  return (
-    <>
-      <Card shadow="sm" padding="xl" radius="md" withBorder>
-        <Stack gap="lg">
-          <div>
-            <Group gap="xs" mb="xs">
-              <IconPackage size={24} color="#F7BA1E" />
-              <Text size="lg" fw={600} c="#1D2129">
-                成本建模
-              </Text>
-            </Group>
-            <Text size="sm" c="#86909C">
-              配置营业成本参数，包括外购原材料、人工费用、制造费用等
-            </Text>
-          </div>
-
-          <Tabs value={activeTab} onChange={(value) => setActiveTab(value!)}>
-            <Tabs.List>
-              <Tabs.Tab value="raw-material">外购原材料</Tabs.Tab>
-              <Tabs.Tab value="labor">人工费用</Tabs.Tab>
-              <Tabs.Tab value="manufacturing">制造费用</Tabs.Tab>
-              <Tabs.Tab value="other">其他成本</Tabs.Tab>
-            </Tabs.List>
-
-            <Tabs.Panel value="raw-material" pt="md">
-              {renderCostTable('raw-material')}
-            </Tabs.Panel>
-
-            <Tabs.Panel value="labor" pt="md">
-              {renderCostTable('labor')}
-            </Tabs.Panel>
-
-            <Tabs.Panel value="manufacturing" pt="md">
-              {renderCostTable('manufacturing')}
-            </Tabs.Panel>
-
-            <Tabs.Panel value="other" pt="md">
-              {renderCostTable('other')}
-            </Tabs.Panel>
-          </Tabs>
-        </Stack>
-      </Card>
-
-      {/* 编辑/新增弹窗 */}
+      {/* 编辑对话框 */}
       <Modal
         opened={showModal}
         onClose={() => setShowModal(false)}
         title={
-          <Group gap="xs">
-            <IconPackage size={20} color="#165DFF" />
-            <Text fw={600} c="#1D2129">
-              {isNewItem ? '新增' : '编辑'}
-              {formData.category && COST_CATEGORY_LABELS[formData.category as keyof typeof COST_CATEGORY_LABELS]}
-            </Text>
-          </Group>
+          <Text size="lg" fw={600}>{isNewItem ? '新增成本项' : '编辑成本项'}</Text>
         }
-        centered
         size="md"
       >
-        <Stack gap="md">
-          {renderFormFields()}
-          
-          <Group justify="flex-end" gap="md" mt="md">
-            <Button
-              variant="default"
-              onClick={() => setShowModal(false)}
-            >
-              取消
-            </Button>
-            <Button
-              onClick={handleSave}
-              style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
-            >
-              确定
-            </Button>
-          </Group>
-        </Stack>
+        {renderFormFields()}
+        <Group justify="flex-end" mt="xl">
+          <Button variant="default" onClick={() => setShowModal(false)}>
+            取消
+          </Button>
+          <Button onClick={handleSave} style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}>
+            保存
+          </Button>
+        </Group>
       </Modal>
     </>
   )
