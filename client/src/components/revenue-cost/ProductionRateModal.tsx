@@ -125,6 +125,10 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
 
   // 只显示达产率有变化的年份（不是100%的年份）
   const displayedRates = editedRates.filter(item => item.rate !== 1)
+  
+  // 计算当前最大的yearIndex
+  const maxYearIndex = editedRates.length > 0 ? Math.max(...editedRates.map(r => r.yearIndex)) : 0
+  const canAddMore = maxYearIndex < 5
 
   return (
     <Modal
@@ -147,7 +151,7 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
             size="xs"
             leftSection={<IconPlus size={14} />}
             onClick={handleAddRate}
-            disabled={editedRates.length >= 5}
+            disabled={!canAddMore}
             variant="light"
             color="blue"
           >

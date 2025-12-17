@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Table,
   Button,
@@ -13,9 +13,10 @@ import {
   Tooltip,
   Badge,
 } from '@mantine/core'
-import { IconEdit, IconTrash, IconPlus, IconChartLine } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconPlus, IconChartLine, IconSparkles } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import ProductionRateModal from './ProductionRateModal'
+import { revenueCostApi } from '@/lib/api'
 import {
   RevenueItem,
   RevenueCategory,
@@ -53,12 +54,20 @@ const TEMPLATE_LABELS: Record<FieldTemplate, string> = {
  * 动态收入表格组件
  */
 const DynamicRevenueTable: React.FC = () => {
-  const { revenueItems, addRevenueItem, updateRevenueItem, deleteRevenueItem } = useRevenueCostStore()
+  const { 
+    context,
+    aiAnalysisResult,
+    revenueItems, 
+    addRevenueItem, 
+    updateRevenueItem, 
+    deleteRevenueItem 
+  } = useRevenueCostStore()
   
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingItem, setEditingItem] = useState<RevenueItem | null>(null)
   const [isNewItem, setIsNewItem] = useState(false)
   const [productionRateModalOpened, setProductionRateModalOpened] = useState(false) // 达产率配置弹窗
+  const [generatingItems, setGeneratingItems] = useState(false) // AI生成中
 
   // 编辑表单状态
   const [formData, setFormData] = useState<Partial<RevenueItem>>({})
@@ -134,6 +143,96 @@ const DynamicRevenueTable: React.FC = () => {
     setShowEditModal(false)
     setFormData({})
   }
+
+  /**
+   * AI自动生成收入项目表
+   */
+  const handleGenerateItems = async () => {
+    if (!context?.projectId) {
+      notifications.show({
+        title: '错误',
+        message: '未找到项目ID',
+        color: 'red',
+      })
+      return
+    }
+
+    if (!aiAnalysisResult || !aiAnalysisResult.selected_categories || aiAnalysisResult.selected_categories.length === 0) {
+      notifications.show({
+        title: '无法生成',
+        message: '请先完成AI营收结构分析',
+        color: 'orange',
+      })
+      return
+    }
+
+    if (!context.investmentEstimate) {
+      notifications.show({
+        title: '无法生成',
+        message: '未找到投资简表数据',
+        color: 'orange',
+      })
+      return
+    }
+
+    setGeneratingItems(true)
+    try {
+      const response = await revenueCostApi.generateItems(context.projectId, {
+        revenueStructure: aiAnalysisResult,
+        investmentData: context.investmentEstimate,
+      })
+
+      if (response.success && response.data?.revenue_items) {
+        // 清空现有收入项
+        // 注意：由于zustand store没有提供clearRevenueItems方法，我们先手动删除
+        const currentItems = [...revenueItems]
+        currentItems.forEach(item => deleteRevenueItem(item.id))
+
+        // 添加AI生成的收入项
+        response.data.revenue_items.forEach((item: any) => {
+          addRevenueItem({
+            name: item.name,
+            category: item.category || 'other',
+            fieldTemplate: item.field_template || 'quantity-price',
+            quantity: item.quantity || 0,
+            unitPrice: item.unit_price || 0,
+            area: item.area || 0,
+            yieldPerArea: item.yield_per_area || 0,
+            capacity: item.capacity || 0,
+            utilizationRate: item.utilization_rate || 0,
+            subscriptions: item.subscriptions || 0,
+            directAmount: item.direct_amount || 0,
+          })
+        })
+
+        notifications.show({
+          title: '生成成功',
+          message: `已自动生成 ${response.data.revenue_items.length} 个收入项`,
+          color: 'green',
+        })
+      } else {
+        throw new Error(response.error || 'AI生成失败')
+      }
+    } catch (error: any) {
+      console.error('AI生成收入项失败:', error)
+      notifications.show({
+        title: '生成失败',
+        message: error.message || '请稍后重试',
+        color: 'red',
+      })
+    } finally {
+      setGeneratingItems(false)
+    }
+  }
+
+  /**
+   * 组件挂载时自动生成（如果收入项为空且有AI分析结果）
+   */
+  useEffect(() => {
+    if (revenueItems.length === 0 && aiAnalysisResult && context?.investmentEstimate) {
+      handleGenerateItems()
+    }
+  }, []) // 只在组件挂载时执行一次
 
   /**
    * 格式化金额显示（万元，2位小数）
@@ -347,6 +446,17 @@ const DynamicRevenueTable: React.FC = () => {
                 onClick={() => setProductionRateModalOpened(true)}
               >
                 <IconChartLine size={20} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="AI自动生成收入项">
+              <ActionIcon
+                variant="light"
+                color="violet"
+                size="lg"
+                onClick={handleGenerateItems}
+                loading={generatingItems}
+              >
+                <IconSparkles size={20} />
               </ActionIcon>
             </Tooltip>
             <Button

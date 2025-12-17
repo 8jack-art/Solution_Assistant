@@ -28,7 +28,6 @@ import {
   IconFileText,
   IconCoin,
   IconCurrencyDollar,
-  IconChartLine,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { projectApi, investmentApi } from '@/lib/api'
@@ -36,7 +35,6 @@ import { useRevenueCostStore } from '@/stores/revenueCostStore'
 import { InvestmentEstimate } from '@/types'
 import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
 import DynamicRevenueTable from '@/components/revenue-cost/DynamicRevenueTable'
-import ProductionRateModel from '@/components/revenue-cost/ProductionRateModel'
 import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
 import ProductionRateModal from '@/components/revenue-cost/ProductionRateModal'
 
@@ -107,7 +105,6 @@ const RevenueCostModeling: React.FC = () => {
   // 弹窗状态控制
   const [editModalOpened, setEditModalOpened] = useState(false)
   const [depreciationTableOpened, setDepreciationTableOpened] = useState(false)
-  const [productionRateModalOpened, setProductionRateModalOpened] = useState(false) // 达产率配置弹窗
   const [editingFieldData, setEditingFieldData] = useState<{
     type: string
     label: string
@@ -1424,7 +1421,6 @@ const RevenueCostModeling: React.FC = () => {
         return (
           <Stack gap="md">
             <DynamicRevenueTable />
-            <ProductionRateModel />
           </Stack>
         )
 
@@ -1605,12 +1601,6 @@ const RevenueCostModeling: React.FC = () => {
           </Group>
         </Stack>
       </div>
-      
-      {/* 达产率配置弹窗 */}
-      <ProductionRateModal 
-        opened={productionRateModalOpened}
-        onClose={() => setProductionRateModalOpened(false)}
-      />
     </Container>
   )
 }
