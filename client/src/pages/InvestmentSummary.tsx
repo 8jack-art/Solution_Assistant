@@ -451,6 +451,8 @@ const InvestmentSummary: React.FC = () => {
       // 表头
       data.push(['序号', '工程或费用名称', '建设工程费（万元）', '设备购置费（万元）', '安装工程费（万元）', '其它费用（万元）', '合计（万元）', '单位', '数量', '单位价值（元）', '占总投资比例', '备注'])
       
+      const totalInvestment = estimate.partG?.合计 || 0
+      
       // A部分
       const aConstructionTotal = estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0
       const aEquipTotal = estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0
@@ -467,7 +469,7 @@ const InvestmentSummary: React.FC = () => {
         '',
         '',
         '',
-        estimate.partA.占总投资比例 ? `${estimate.partA.占总投资比例.toFixed(2)}%` : '',
+        totalInvestment > 0 ? `${(((estimate.partA.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
         estimate.partA.备注 || ''
       ])
       // A部分子项
@@ -483,7 +485,7 @@ const InvestmentSummary: React.FC = () => {
           '—',
           '—',
           '—',
-          item.占总投资比例 ? `${item.占总投资比例.toFixed(2)}%` : '',
+          totalInvestment > 0 ? `${(((item.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
           item.备注 || ''
         ])
         
@@ -508,7 +510,7 @@ const InvestmentSummary: React.FC = () => {
               subItem.unit,
               subItem.quantity,
               subItem.unit_price,
-              '',  // 三级子项不显示占比
+              totalInvestment > 0 ? `${((totalPrice / totalInvestment) * 100).toFixed(2)}%` : '',
               ''
             ])
           })
@@ -528,7 +530,7 @@ const InvestmentSummary: React.FC = () => {
         '—',
         '—',
         '—',
-        estimate.partB.占总投资比例 ? `${estimate.partB.占总投资比例.toFixed(2)}%` : '',
+        totalInvestment > 0 ? `${(((estimate.partB.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
         estimate.partB.备注 || ''
       ])
       // B部分子项
@@ -544,7 +546,7 @@ const InvestmentSummary: React.FC = () => {
           '—',
           '—',
           '—',
-          item.占总投资比例 ? `${item.占总投资比例.toFixed(2)}%` : '',
+          totalInvestment > 0 ? `${(((item.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
           item.备注 || ''
         ])
       })
@@ -561,7 +563,7 @@ const InvestmentSummary: React.FC = () => {
         '—',
         '—',
         '—',
-        estimate.partC.占总投资比例 ? `${estimate.partC.占总投资比例.toFixed(2)}%` : '',
+        totalInvestment > 0 ? `${(((estimate.partC.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
         estimate.partC.备注 || ''
       ])
       
@@ -577,7 +579,7 @@ const InvestmentSummary: React.FC = () => {
         '—',
         '—',
         '—',
-        estimate.partD.占总投资比例 ? `${estimate.partD.占总投资比例.toFixed(2)}%` : '',
+        totalInvestment > 0 ? `${(((estimate.partD.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
         estimate.partD.备注 || ''
       ])
       
@@ -593,7 +595,7 @@ const InvestmentSummary: React.FC = () => {
         '—',
         '—',
         '—',
-        estimate.partE.占总投资比例 ? `${estimate.partE.占总投资比例.toFixed(2)}%` : '',
+        totalInvestment > 0 ? `${(((estimate.partE.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
         estimate.partE.备注 || ''
       ])
       
@@ -622,7 +624,7 @@ const InvestmentSummary: React.FC = () => {
         '—',
         '—',
         '—',
-        estimate.partF.占总投资比例 ? `${estimate.partF.占总投资比例.toFixed(2)}%` : '',
+        totalInvestment > 0 ? `${(((estimate.partF.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
         loanDetails.join('\n')
       ])
       
@@ -745,41 +747,69 @@ const InvestmentSummary: React.FC = () => {
         const isBMain = rowIndex === aChildCount + 1
         const isBChild = rowIndex > aChildCount + 1 && rowIndex <= aChildCount + 1 + bChildCount
         const isMainRow = rowIndex > aChildCount + 1 + bChildCount // C/D/E/F/G都是主项
+        const isMainLikeRow = isAMain || isBMain || isMainRow
         
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
-          if (!ws[cellAddress]) continue
+          const cell = ws[cellAddress]
+          if (!cell) continue
           
           let style
-          if (isAMain || isBMain || isMainRow) {
+          if (isMainLikeRow) {
             // 主项行
-            if (C === 2 || C === 3 || C === 4 || C === 5) { // 建设工程费、设备购置费、安装工程费、其它费用
+            if (C === 2 || C === 3 || C === 4 || C === 5 || C === 6 || C === 8 || C === 9 || C === 10) {
+              // 金额列 + 数量 + 单位价值 + 占总投资比例
               style = numberStyle
-            } else if (C === 6) { // 合计列
-              style = numberStyle
-            } else if (C === 7 || C === 8 || C === 9) { // 单位、数量、单位价值
+            } else if (C === 7) {
+              // 单位
               style = mainRowStyle
-            } else if (C === 10) { // 占总投资比例
-              style = numberStyle
-            } else if (C === 11) { // 备注列
+            } else if (C === 11) {
+              // 备注列
               style = remarkStyle
             } else {
               style = mainRowStyle
             }
           } else {
             // 子项行
-            if (C === 2 || C === 3 || C === 4 || C === 5) { // 建设工程费、设备购置费、安装工程费、其它费用
+            if (C === 2 || C === 3 || C === 4 || C === 5 || C === 6 || C === 8 || C === 9 || C === 10) {
+              // 金额列 + 数量 + 单位价值 + 占总投资比例
               style = subNumberStyle
-            } else if (C === 6) { // 合计列
-              style = subNumberStyle
-            } else if (C === 7 || C === 8 || C === 9) { // 单位、数量、单位价值
+            } else if (C === 7) {
+              // 单位
               style = subRowStyle
-            } else if (C === 10) { // 占总投资比例
-              style = subNumberStyle
-            } else if (C === 11) { // 备注列
+            } else if (C === 11) {
+              // 备注列
               style = subRemarkStyle
             } else {
               style = subRowStyle
+            }
+          }
+          
+          // 序号列级别加粗控制：A / 一 加粗，1 等不加粗
+          if (C === 0) {
+            const value = cell.v
+            const baseStyle = style || (isMainLikeRow ? mainRowStyle : subRowStyle)
+            let bold = false
+            
+            if (typeof value === 'string') {
+              if (/^[A-Z]$/.test(value)) {
+                // A、B、C 等一级标题
+                bold = true
+              } else if (/^[一二三四五六七八九十]+$/.test(value)) {
+                // 一、二、三 等二级标题
+                bold = true
+              } else {
+                // 其他（例如 1、2 或 A.1 等）不加粗
+                bold = false
+              }
+            }
+            
+            style = {
+              ...baseStyle,
+              font: {
+                ...(baseStyle.font || {}),
+                bold,
+              },
             }
           }
           
@@ -2707,8 +2737,10 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partA.占总投资比例 ? `${estimate.partA.占总投资比例.toFixed(2)}%` : ''}
+                                <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
+                        {estimate.partG?.合计 && estimate.partG.合计 > 0
+                          ? `${(((estimate.partA.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                          : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark }}>{estimate.partA.备注}</Table.Td>
                     </Table.Tr>
@@ -2728,7 +2760,9 @@ const InvestmentSummary: React.FC = () => {
                           <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                           <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                           <Table.Td style={{ ...columnStyles.ratio }}>
-                            {item.占总投资比例 ? `${item.占总投资比例.toFixed(2)}%` : ''}
+                            {estimate.partG?.合计 && estimate.partG.合计 > 0
+                              ? `${(((item.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                              : ''}
                           </Table.Td>
                           <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>{item.备注 || ''}</Table.Td>
                         </Table.Tr>
@@ -2753,7 +2787,11 @@ const InvestmentSummary: React.FC = () => {
                               <Table.Td style={{ ...columnStyles.unit, fontSize: '11px' }}>{subItem.unit || ''}</Table.Td>
                               <Table.Td style={{ ...columnStyles.quantity, fontSize: '11px' }}>{formatQuantity(subItem.quantity, subItem.unit)}</Table.Td>
                               <Table.Td style={{ ...columnStyles.unitPrice, fontSize: '11px' }}>{subItem.unit_price > 0 ? subItem.unit_price.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.ratio, fontSize: '11px' }}></Table.Td>
+                              <Table.Td style={{ ...columnStyles.ratio, fontSize: '11px' }}>
+                                {estimate.partG?.合计 && estimate.partG.合计 > 0
+                                  ? `${((totalPrice / estimate.partG.合计) * 100).toFixed(2)}%`
+                                  : ''}
+                              </Table.Td>
                               <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}></Table.Td>
                             </Table.Tr>
                           )
@@ -2776,7 +2814,9 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partB.占总投资比例 ? `${estimate.partB.占总投资比例.toFixed(2)}%` : ''}
+                        {estimate.partG?.合计 && estimate.partG.合计 > 0
+                          ? `${(((estimate.partB.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                          : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark }}>{estimate.partB.备注}</Table.Td>
                     </Table.Tr>
@@ -2796,7 +2836,9 @@ const InvestmentSummary: React.FC = () => {
                         <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                         <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                         <Table.Td style={{ ...columnStyles.ratio }}>
-                          {item.占总投资比例 ? `${item.占总投资比例.toFixed(2)}%` : ''}
+                          {estimate.partG?.合计 && estimate.partG.合计 > 0
+                            ? `${(((item.合计 || item.其它费用 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                            : ''}
                         </Table.Td>
                         <Table.Td style={{ ...columnStyles.remark, fontSize: '13px' }}>{item.备注}</Table.Td>
                       </Table.Tr>
@@ -2817,7 +2859,9 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partC.占总投资比例 ? `${estimate.partC.占总投资比例.toFixed(2)}%` : ''}
+                        {estimate.partG?.合计 && estimate.partG.合计 > 0
+                          ? `${(((estimate.partC.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                          : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark }}>{estimate.partC.备注}</Table.Td>
                     </Table.Tr>
@@ -2837,7 +2881,9 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partD.占总投资比例 ? `${estimate.partD.占总投资比例.toFixed(2)}%` : ''}
+                        {estimate.partG?.合计 && estimate.partG.合计 > 0
+                          ? `${(((estimate.partD.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                          : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark }}>{estimate.partD.备注}</Table.Td>
                     </Table.Tr>
@@ -2857,7 +2903,9 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partE.占总投资比例 ? `${estimate.partE.占总投资比例.toFixed(2)}%` : ''}
+                        {estimate.partG?.合计 && estimate.partG.合计 > 0
+                          ? `${(((estimate.partE.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                          : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>{estimate.partE.备注}</Table.Td>
                     </Table.Tr>
@@ -2877,7 +2925,9 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partF.占总投资比例 ? `${estimate.partF.占总投资比例.toFixed(2)}%` : ''}
+                        {estimate.partG?.合计 && estimate.partG.合计 > 0
+                          ? `${(((estimate.partF.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                          : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>
                         <div>贷款总额: {(Number(estimate.partF.贷款总额) || 0).toFixed(2)}万元 (占总投资{((Number(estimate.partF.贷款总额) || 0) / (estimate.partG.合计 || 1) * 100).toFixed(2)}%)</div>
