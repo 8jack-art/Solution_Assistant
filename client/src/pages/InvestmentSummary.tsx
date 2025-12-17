@@ -474,8 +474,9 @@ const InvestmentSummary: React.FC = () => {
       ])
       // A部分子项
       estimate.partA.children?.forEach((item, parentIndex) => {
+        const itemSerial = item.序号
         data.push([
-          item.序号,
+          itemSerial,
           item.工程或费用名称,
           item.建设工程费 || 0,
           item.设备购置费 || 0,
@@ -498,10 +499,11 @@ const InvestmentSummary: React.FC = () => {
             const equipmentCost = totalPrice * subItem.equipment_ratio
             const installationCost = totalPrice * subItem.installation_ratio
             const otherCost = totalPrice * subItem.other_ratio
+            const childSerial = subIndex + 1
             
             data.push([
-              `${item.序号}.${subIndex + 1}`,
-              `  ${subItem.name}`,  // 缩进显示
+              childSerial,
+              subItem.name,
               constructionCost,
               equipmentCost,
               installationCost,
@@ -747,7 +749,16 @@ const InvestmentSummary: React.FC = () => {
         const isBMain = rowIndex === aChildCount + 1
         const isBChild = rowIndex > aChildCount + 1 && rowIndex <= aChildCount + 1 + bChildCount
         const isMainRow = rowIndex > aChildCount + 1 + bChildCount // C/D/E/F/G都是主项
-        const isMainLikeRow = isAMain || isBMain || isMainRow
+        
+        // 通过序号判断是否为标题行：A-G 及 一/二/三 视为标题
+        const serialCell = ws[XLSX.utils.encode_cell({ r: R, c: 0 })]
+        let isMainLikeRow = false
+        if (serialCell && typeof serialCell.v === 'string') {
+          const serial = String(serialCell.v).replace(/、$/, '')
+          if (/^[A-G]$/.test(serial) || serial === '一' || serial === '二' || serial === '三') {
+            isMainLikeRow = true
+          }
+        }
         
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
@@ -785,22 +796,16 @@ const InvestmentSummary: React.FC = () => {
             }
           }
           
-          // 序号列级别加粗控制：A / 一 加粗，1 等不加粗
+          // 序号列级别加粗控制：仅标题行 A-G 及 一/二/三 加粗，其余不加粗
           if (C === 0) {
             const value = cell.v
             const baseStyle = style || (isMainLikeRow ? mainRowStyle : subRowStyle)
             let bold = false
             
             if (typeof value === 'string') {
-              if (/^[A-Z]$/.test(value)) {
-                // A、B、C 等一级标题
+              const serial = value.replace(/、$/, '')
+              if (/^[A-G]$/.test(serial) || serial === '一' || serial === '二' || serial === '三') {
                 bold = true
-              } else if (/^[一二三四五六七八九十]+$/.test(value)) {
-                // 一、二、三 等二级标题
-                bold = true
-              } else {
-                // 其他（例如 1、2 或 A.1 等）不加粗
-                bold = false
               }
             }
             
