@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { pool } from '../db/config.js';
 import { InvestmentProjectModel } from '../models/InvestmentProject.js';
-import { LLMService, analyzeRevenueStructurePrompt, analyzePricingPrompt, generateRevenueItemsPrompt } from '../lib/llm.js';
+import { LLMService, analyzeRevenueStructurePrompt, analyzePricingPrompt, generateRevenueItemsPrompt, estimateSingleRevenueItemPrompt } from '../lib/llm.js';
 import { LLMConfigModel } from '../models/LLMConfig.js';
 /**
  * 保存请求的验证Schema
@@ -489,6 +489,110 @@ export class RevenueCostController {
         }
         catch (error) {
             console.error('AI生成收入项目失败:', error);
+            res.status(500).json({
+                success: false,
+                error: '服务器内部错误'
+            });
+        }
+    }
+    /**
+     * 估算单个收入项
+     */
+    static async estimateItem(req, res) {
+        try {
+            const userId = req.user?.userId;
+            const isAdmin = req.user?.isAdmin;
+            const { projectId } = req.params;
+            if (!userId) {
+                return res.status(401).json({
+                    success: false,
+                    error: '用户未认证'
+                });
+            }
+            const { itemName } = req.body;
+            if (!itemName) {
+                return res.status(400).json({
+                    success: false,
+                    error: '缺少收入项名称'
+                });
+            }
+            // 验证项目存在且有权限
+            const project = await InvestmentProjectModel.findById(projectId);
+            if (!project) {
+                return res.status(404).json({
+                    success: false,
+                    error: '项目不存在'
+                });
+            }
+            if (!isAdmin && project.user_id !== userId) {
+                return res.status(403).json({
+                    success: false,
+                    error: '无权操作此项目'
+                });
+            }
+            // 获取默认LLM配置
+            const llmConfig = await LLMConfigModel.findDefaultByUserId(userId);
+            if (!llmConfig) {
+                return res.status(400).json({
+                    success: false,
+                    error: '未找到可用的LLM配置，请先配置LLM服务'
+                });
+            }
+            // 构建项目信息
+            const projectInfo = {
+                name: project.project_name,
+                description: project.project_info || '',
+                totalInvestment: project.total_investment,
+                constructionYears: project.construction_years,
+                operationYears: project.operation_years,
+            };
+            // 构建LLM提示
+            const messages = estimateSingleRevenueItemPrompt(projectInfo, itemName);
+            console.log('🤖 调用LLM估算收入项...');
+            console.log('项目:', project.project_name, ', 收入项:', itemName);
+            // 调用LLM服务
+            const llmResponse = await LLMService.generateContent(llmConfig, messages, {
+                maxTokens: 500,
+                temperature: 0.7
+            });
+            if (!llmResponse.success || !llmResponse.content) {
+                console.error('❌ LLM调用失败:', llmResponse.error);
+                return res.status(500).json({
+                    success: false,
+                    error: `AI估算失败: ${llmResponse.error || '未知错误'}`
+                });
+            }
+            // 解析LLM返回的JSON
+            let estimateResult;
+            try {
+                let jsonContent = llmResponse.content.trim();
+                // 移除markdown代码块标记
+                if (jsonContent.startsWith('```json')) {
+                    jsonContent = jsonContent.replace(/^```json\s*/g, '').replace(/\s*```$/g, '');
+                }
+                else if (jsonContent.startsWith('```')) {
+                    jsonContent = jsonContent.replace(/^```\s*/g, '').replace(/\s*```$/g, '');
+                }
+                jsonContent = jsonContent.trim();
+                estimateResult = JSON.parse(jsonContent);
+                console.log('✅ LLM估算成功');
+            }
+            catch (parseError) {
+                console.error('❌ 解析LLM响应失败:', parseError.message);
+                console.error('原LLM输出:', llmResponse.content);
+                return res.status(500).json({
+                    success: false,
+                    error: `AI返回格式错误: ${parseError.message}`
+                });
+            }
+            // 返回估算结果
+            res.json({
+                success: true,
+                data: estimateResult
+            });
+        }
+        catch (error) {
+            console.error('AI估算收入项失败:', error);
             res.status(500).json({
                 success: false,
                 error: '服务器内部错误'

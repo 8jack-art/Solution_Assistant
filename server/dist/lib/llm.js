@@ -556,10 +556,73 @@ ${investmentSummary}
 ## 营收结构表
 ${revenueSummary}
 
-请根据上述信息，生成合理的营业收入项目表。确保：
+��根据上述信息，生成合理的营业收入项目表。确保：
 1. 收入项与营收结构表对应
 2. 规模与投资额匹配
 3. 数据符合行业常识`;
+    return [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+    ];
+}
+/**
+ * 单个收入项估算Prompt
+ */
+export function estimateSingleRevenueItemPrompt(projectInfo, revenueItemName) {
+    const systemPrompt = `作为一个专业的财务分析师，根据项目信息和收入项名称，估算该收入项的关键指标。
+
+请严格按照以下JSON格式返回：
+{
+  "category": "agriculture-crop | digital-platform | manufacturing | service | real-estate | other",
+  "fieldTemplate": "quantity-price | area-yield-price | capacity-utilization | subscription | direct-amount",
+  "quantity": 数量或面积或产能或订阅数,
+  "unitPrice": 单价(万元),
+  "vatRate": 增值税率(0-1之间的小数),
+  "area": 面积(亩)，仅area-yield-price模板,
+  "yieldPerArea": 亩产量，仅area-yield-price模板,
+  "capacity": 产能，仅capacity-utilization模板,
+  "utilizationRate": 利用率(0-1之间的小数)，仅capacity-utilization模板,
+  "subscriptions": 订阅数，仅subscription模板,
+  "directAmount": 直接金额(万元)，仅direct-amount模板
+}
+
+类别说明：
+- agriculture-crop: 农业种植
+- digital-platform: 数字平台
+- manufacturing: 制造业
+- service: 服务业
+- real-estate: 房地产
+- other: 其他
+
+字段模板说明：
+- quantity-price: 数量 × 单价（通用）
+- area-yield-price: 面积 × 亩产量 × 单价（农业种植）
+- capacity-utilization: 产能 × 利用率 × 单件(制造业)
+- subscription: 订阅数 × 单价（平台类）
+- direct-amount: 直接金额（服务费等）
+
+要求：
+1. 根据收入项名称推断最合适的category和fieldTemplate
+2. 数据要符合行业常识和项目规模
+3. 增值税率参考：农产品 0.09、服务业 0.06、工业产品 0.13
+4. 单价以"万元"为单位
+5. 只返回JSON格式，不要包含其他文字说明`;
+    const userPrompt = `请为以下项目的收入项进行估算：
+
+## 项目基本信息
+项目名称：${projectInfo.name}
+项目描述：${projectInfo.description || '无'}
+总投资：${projectInfo.totalInvestment}万元
+建设期：${projectInfo.constructionYears}年
+运营期：${projectInfo.operationYears}年
+
+## 收入项名称
+${revenueItemName}
+
+请根据上述信息，估算该收入项的关键指标。确保：
+1. 选择最合适的类别和模板
+2. 数据与项目规模匹配
+3. 符合行业常识`;
     return [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }

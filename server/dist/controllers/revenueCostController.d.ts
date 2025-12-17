@@ -25,6 +25,10 @@ export declare class RevenueCostController {
      */
     static generateItems(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
     /**
+     * 估算单个收入项
+     */
+    static estimateItem(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;
+    /**
      * 更新工作流步骤
      */
     static updateWorkflowStep(req: AuthRequest, res: Response<ApiResponse>): Promise<Response<ApiResponse<any>, Record<string, any>> | undefined>;

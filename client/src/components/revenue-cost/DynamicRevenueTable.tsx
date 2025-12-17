@@ -12,6 +12,7 @@ import {
   ActionIcon,
   Tooltip,
   Badge,
+  Grid,
 } from '@mantine/core'
 import { IconEdit, IconTrash, IconPlus, IconChartLine, IconSparkles } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
@@ -67,7 +68,7 @@ const DynamicRevenueTable: React.FC = () => {
   const [editingItem, setEditingItem] = useState<RevenueItem | null>(null)
   const [isNewItem, setIsNewItem] = useState(false)
   const [productionRateModalOpened, setProductionRateModalOpened] = useState(false) // 达产率配置弹窗
-  const [generatingItems, setGeneratingItems] = useState(false) // AI生成中
+  const [aiEstimating, setAiEstimating] = useState(false) // AI测算中
 
   // 编辑表单状态
   const [formData, setFormData] = useState<Partial<RevenueItem>>({})
@@ -112,6 +113,69 @@ const DynamicRevenueTable: React.FC = () => {
   }
 
   /**
+   * AI测算收入项
+   */
+  const handleAiEstimate = async () => {
+    if (!formData.name || formData.name.trim() === '') {
+      notifications.show({
+        title: '错误',
+        message: '请先输入收入项名称',
+        color: 'red',
+      })
+      return
+    }
+
+    if (!context?.projectId) {
+      notifications.show({
+        title: '错误',
+        message: '未找到项目ID',
+        color: 'red',
+      })
+      return
+    }
+
+    setAiEstimating(true)
+    try {
+      const response = await revenueCostApi.estimateItem(context.projectId, formData.name)
+
+      if (response.success && response.data) {
+        // 应用AI估算结果
+        setFormData({
+          ...formData,
+          category: response.data.category as RevenueCategory,
+          fieldTemplate: response.data.fieldTemplate as FieldTemplate,
+          quantity: response.data.quantity,
+          unitPrice: response.data.unitPrice,
+          vatRate: response.data.vatRate,
+          area: response.data.area,
+          yieldPerArea: response.data.yieldPerArea,
+          capacity: response.data.capacity,
+          utilizationRate: response.data.utilizationRate,
+          subscriptions: response.data.subscriptions,
+          directAmount: response.data.directAmount,
+        })
+
+        notifications.show({
+          title: 'AI测算成功',
+          message: '已自动填充关键信息，请检查并调整',
+          color: 'green',
+        })
+      } else {
+        throw new Error(response.error || 'AI测算失败')
+      }
+    } catch (error: any) {
+      console.error('AI测算失败:', error)
+      notifications.show({
+        title: '测算失败',
+        message: error.message || '请稍后重试',
+        color: 'red',
+      })
+    } finally {
+      setAiEstimating(false)
+    }
+  }
+
+  /**
    * 保存收入项
    */
   const handleSave = () => {
@@ -149,42 +213,33 @@ const DynamicRevenueTable: React.FC = () => {
    */
   const handleGenerateItems = async () => {
     if (!context?.projectId) {
-      notifications.show({
-        title: '错误',
-        message: '未找到项目ID',
-        color: 'red',
-      })
+      console.warn('AI生成跳过：未找到项目ID')
       return
     }
 
     if (!aiAnalysisResult || !aiAnalysisResult.selected_categories || aiAnalysisResult.selected_categories.length === 0) {
-      notifications.show({
-        title: '无法生成',
-        message: '请先完成AI营收结构分析',
-        color: 'orange',
-      })
+      console.warn('AI生成跳过：未完成AI营收结构分析')
       return
     }
 
-    if (!context.investmentEstimate) {
-      notifications.show({
-        title: '无法生成',
-        message: '未找到投资简表数据',
-        color: 'orange',
-      })
-      return
+    // 从 context 中构建投资数据（使用基础信息）
+    const investmentData = {
+      total_investment: context.totalInvestment,
+      construction_years: context.constructionYears,
+      operation_years: context.operationYears,
+      construction_cost: 0, // 默认值
+      equipment_cost: 0, // 默认值
     }
 
-    setGeneratingItems(true)
+    console.log('🤖 开始自动生成收入项...')
     try {
       const response = await revenueCostApi.generateItems(context.projectId, {
         revenueStructure: aiAnalysisResult,
-        investmentData: context.investmentEstimate,
+        investmentData,
       })
 
       if (response.success && response.data?.revenue_items) {
         // 清空现有收入项
-        // 注意：由于zustand store没有提供clearRevenueItems方法，我们先手动删除
         const currentItems = [...revenueItems]
         currentItems.forEach(item => deleteRevenueItem(item.id))
 
@@ -205,23 +260,18 @@ const DynamicRevenueTable: React.FC = () => {
           })
         })
 
+        console.log(`✅ AI生成成功：${response.data.revenue_items.length} 个收入项`)
         notifications.show({
-          title: '生成成功',
-          message: `已自动生成 ${response.data.revenue_items.length} 个收入项`,
+          title: '自动生成成功',
+          message: `已自动生成 ${response.data.revenue_items.length} 个收入项，可继续编辑调整`,
           color: 'green',
         })
       } else {
         throw new Error(response.error || 'AI生成失败')
       }
     } catch (error: any) {
-      console.error('AI生成收入项失败:', error)
-      notifications.show({
-        title: '生成失败',
-        message: error.message || '请稍后重试',
-        color: 'red',
-      })
-    } finally {
-      setGeneratingItems(false)
+      console.error('❌ AI生成收入项失败:', error)
+      // 不显示错误通知，只记录日志
     }
   }
 
@@ -229,10 +279,10 @@ const DynamicRevenueTable: React.FC = () => {
    * 组件挂载时自动生成（如果收入项为空且有AI分析结果）
    */
   useEffect(() => {
-    if (revenueItems.length === 0 && aiAnalysisResult && context?.investmentEstimate) {
+    if (revenueItems.length === 0 && aiAnalysisResult && context) {
       handleGenerateItems()
     }
-  }, []) // 只在组件挂载时执行一次
+  }, [aiAnalysisResult]) // 当AI分析结果变化时触发
 
   /**
    * 格式化金额显示（万元，2位小数）
@@ -269,6 +319,7 @@ const DynamicRevenueTable: React.FC = () => {
 
     return (
       <Stack gap="md">
+        {/* 基础信息 - 全宽 */}
         <TextInput
           label="收入项名称"
           placeholder="请输入收入项名称"
@@ -277,126 +328,153 @@ const DynamicRevenueTable: React.FC = () => {
           required
         />
 
-        <Select
-          label="收入类别"
-          data={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({
-            value,
-            label,
-          }))}
-          value={formData.category || 'other'}
-          onChange={(value) => setFormData({ ...formData, category: value as RevenueCategory })}
-        />
+        {/* 2栏布局 */}
+        <Grid gutter="md">
+          <Grid.Col span={6}>
+            <Select
+              label="收入类别"
+              data={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              value={formData.category || 'other'}
+              onChange={(value) => setFormData({ ...formData, category: value as RevenueCategory })}
+            />
+          </Grid.Col>
 
-        <Select
-          label="字段模板"
-          data={Object.entries(TEMPLATE_LABELS).map(([value, label]) => ({
-            value,
-            label,
-          }))}
-          value={template}
-          onChange={(value) => setFormData({ ...formData, fieldTemplate: value as FieldTemplate })}
-        />
+          <Grid.Col span={6}>
+            <Select
+              label="字段模板"
+              data={Object.entries(TEMPLATE_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              value={template}
+              onChange={(value) => setFormData({ ...formData, fieldTemplate: value as FieldTemplate })}
+            />
+          </Grid.Col>
+        </Grid>
 
         {/* 根据模板显示不同字段 */}
         {template === 'quantity-price' && (
-          <>
-            <NumberInput
-              label="数量"
-              placeholder="请输入数量"
-              value={formData.quantity || 0}
-              onChange={(value) => setFormData({ ...formData, quantity: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-            <NumberInput
-              label="单价（万元）"
-              placeholder="请输入单价"
-              value={formData.unitPrice || 0}
-              onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-          </>
+          <Grid gutter="md">
+            <Grid.Col span={6}>
+              <NumberInput
+                label="数量"
+                placeholder="请输入数量"
+                value={formData.quantity || 0}
+                onChange={(value) => setFormData({ ...formData, quantity: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+            <Grid.Col span={6}>
+              <NumberInput
+                label="单价（万元）"
+                placeholder="请输入单价"
+                value={formData.unitPrice || 0}
+                onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+          </Grid>
         )}
 
         {template === 'area-yield-price' && (
-          <>
-            <NumberInput
-              label="面积（亩）"
-              placeholder="请输入面积"
-              value={formData.area || 0}
-              onChange={(value) => setFormData({ ...formData, area: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-            <NumberInput
-              label="亩产量"
-              placeholder="请输入亩产量"
-              value={formData.yieldPerArea || 0}
-              onChange={(value) => setFormData({ ...formData, yieldPerArea: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-            <NumberInput
-              label="单价（万元）"
-              placeholder="请输入单价"
-              value={formData.unitPrice || 0}
-              onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-          </>
+          <Grid gutter="md">
+            <Grid.Col span={4}>
+              <NumberInput
+                label="面积（亩）"
+                placeholder="请输入面积"
+                value={formData.area || 0}
+                onChange={(value) => setFormData({ ...formData, area: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <NumberInput
+                label="亩产量"
+                placeholder="请输入亩产量"
+                value={formData.yieldPerArea || 0}
+                onChange={(value) => setFormData({ ...formData, yieldPerArea: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <NumberInput
+                label="单价（万元）"
+                placeholder="请输入单价"
+                value={formData.unitPrice || 0}
+                onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+          </Grid>
         )}
 
         {template === 'capacity-utilization' && (
-          <>
-            <NumberInput
-              label="产能"
-              placeholder="请输入产能"
-              value={formData.capacity || 0}
-              onChange={(value) => setFormData({ ...formData, capacity: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-            <NumberInput
-              label="利用率（%）"
-              placeholder="请输入利用率"
-              value={(formData.utilizationRate || 0) * 100}
-              onChange={(value) => setFormData({ ...formData, utilizationRate: Number(value) / 100 })}
-              min={0}
-              max={100}
-              decimalScale={2}
-            />
-            <NumberInput
-              label="单价（万元）"
-              placeholder="请输入单价"
-              value={formData.unitPrice || 0}
-              onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-          </>
+          <Grid gutter="md">
+            <Grid.Col span={4}>
+              <NumberInput
+                label="产能"
+                placeholder="请输入产能"
+                value={formData.capacity || 0}
+                onChange={(value) => setFormData({ ...formData, capacity: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <NumberInput
+                label="利用率（%）"
+                placeholder="请输入利用率"
+                value={(formData.utilizationRate || 0) * 100}
+                onChange={(value) => setFormData({ ...formData, utilizationRate: Number(value) / 100 })}
+                min={0}
+                max={100}
+                decimalScale={2}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <NumberInput
+                label="单价（万元）"
+                placeholder="请输入单价"
+                value={formData.unitPrice || 0}
+                onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+          </Grid>
         )}
 
         {template === 'subscription' && (
-          <>
-            <NumberInput
-              label="订阅数"
-              placeholder="请输入订阅数"
-              value={formData.subscriptions || 0}
-              onChange={(value) => setFormData({ ...formData, subscriptions: Number(value) })}
-              min={0}
-              decimalScale={0}
-            />
-            <NumberInput
-              label="单价（万元）"
-              placeholder="请输入单价"
-              value={formData.unitPrice || 0}
-              onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
-              min={0}
-              decimalScale={4}
-            />
-          </>
+          <Grid gutter="md">
+            <Grid.Col span={6}>
+              <NumberInput
+                label="订阅数"
+                placeholder="请输入订阅数"
+                value={formData.subscriptions || 0}
+                onChange={(value) => setFormData({ ...formData, subscriptions: Number(value) })}
+                min={0}
+                decimalScale={0}
+              />
+            </Grid.Col>
+            <Grid.Col span={6}>
+              <NumberInput
+                label="单价（万元）"
+                placeholder="请输入单价"
+                value={formData.unitPrice || 0}
+                onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
+                min={0}
+                decimalScale={4}
+              />
+            </Grid.Col>
+          </Grid>
         )}
 
         {template === 'direct-amount' && (
@@ -410,22 +488,29 @@ const DynamicRevenueTable: React.FC = () => {
           />
         )}
 
-        <NumberInput
-          label="增值税率（%）"
-          placeholder="请输入增值税率"
-          value={(formData.vatRate || 0.13) * 100}
-          onChange={(value) => setFormData({ ...formData, vatRate: Number(value) / 100 })}
-          min={0}
-          max={100}
-          decimalScale={2}
-        />
+        {/* 增值税率和备注 - 2栏 */}
+        <Grid gutter="md">
+          <Grid.Col span={6}>
+            <NumberInput
+              label="增值税率（%）"
+              placeholder="请输入增值税率"
+              value={(formData.vatRate || 0.13) * 100}
+              onChange={(value) => setFormData({ ...formData, vatRate: Number(value) / 100 })}
+              min={0}
+              max={100}
+              decimalScale={2}
+            />
+          </Grid.Col>
 
-        <TextInput
-          label="备注"
-          placeholder="请输入备注（可选）"
-          value={formData.remark || ''}
-          onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-        />
+          <Grid.Col span={6}>
+            <TextInput
+              label="备注"
+              placeholder="请输入备注（可选）"
+              value={formData.remark || ''}
+              onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+            />
+          </Grid.Col>
+        </Grid>
       </Stack>
     )
   }
@@ -446,17 +531,6 @@ const DynamicRevenueTable: React.FC = () => {
                 onClick={() => setProductionRateModalOpened(true)}
               >
                 <IconChartLine size={20} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="AI自动生成收入项">
-              <ActionIcon
-                variant="light"
-                color="violet"
-                size="lg"
-                onClick={handleGenerateItems}
-                loading={generatingItems}
-              >
-                <IconSparkles size={20} />
               </ActionIcon>
             </Tooltip>
             <Button
@@ -605,8 +679,22 @@ const DynamicRevenueTable: React.FC = () => {
       <Modal
         opened={showEditModal}
         onClose={() => setShowEditModal(false)}
-        title={isNewItem ? '新增收入项' : '编辑收入项'}
-        size="lg"
+        title={
+          <Group justify="space-between" style={{ width: '100%', paddingRight: '40px' }}>
+            <Text size="lg" fw={600}>{isNewItem ? '新增收入项' : '编辑收入项'}</Text>
+            <Button
+              size="xs"
+              leftSection={<IconSparkles size={14} />}
+              onClick={handleAiEstimate}
+              loading={aiEstimating}
+              variant="light"
+              color="violet"
+            >
+              AI测算
+            </Button>
+          </Group>
+        }
+        size="xl"
       >
         {renderFormFields()}
         <Group justify="flex-end" mt="xl">

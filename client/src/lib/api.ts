@@ -245,6 +245,23 @@ export const revenueCostApi = {
       timeout: 120000 // AI生成需要更长的超时时间（2分钟）
     }),
 
+  estimateItem: (projectId: string, itemName: string) =>
+    api.post<any, ApiResponse<{
+      category: string
+      fieldTemplate: string
+      quantity?: number
+      unitPrice?: number
+      vatRate?: number
+      area?: number
+      yieldPerArea?: number
+      capacity?: number
+      utilizationRate?: number
+      subscriptions?: number
+      directAmount?: number
+    }>>(`/revenue-cost/estimate-item/${projectId}`, { itemName }, {
+      timeout: 60000 // 1分钟超时
+    }),
+
   updateWorkflowStep: (projectId: string, step: string) =>
     api.patch<any, ApiResponse<{ step: string }>>(`/revenue-cost/workflow/${projectId}`, { step }),
 

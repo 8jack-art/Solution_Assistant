@@ -50,4 +50,14 @@ export declare function generateRevenueItemsPrompt(projectInfo: {
     constructionCost?: number;
     equipmentCost?: number;
 }, revenueSummary: string): LLMMessage[];
+/**
+ * 单个收入项估算Prompt
+ */
+export declare function estimateSingleRevenueItemPrompt(projectInfo: {
+    name: string;
+    description: string;
+    totalInvestment: number;
+    constructionYears: number;
+    operationYears: number;
+}, revenueItemName: string): LLMMessage[];
 //# sourceMappingURL=llm.d.ts.map

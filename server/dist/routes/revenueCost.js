@@ -14,6 +14,8 @@ router.post('/ai-recommend/:projectId', RevenueCostController.aiRecommend);
 router.post('/analyze-pricing', RevenueCostController.analyzePricing);
 // AI生成收入项目表
 router.post('/generate-items/:projectId', RevenueCostController.generateItems);
+// AI估算单个收入项
+router.post('/estimate-item/:projectId', RevenueCostController.estimateItem);
 // 更新工作流步骤
 router.patch('/workflow/:projectId', RevenueCostController.updateWorkflowStep);
 // 删除收入成本建模数据
