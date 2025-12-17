@@ -41,11 +41,10 @@ import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
 // 步骤定义
 const STEPS = [
   { label: '基础数据', value: 0 },
-  { label: '折旧摊销估算', value: 1 },
-  { label: 'AI推荐结构', value: 2 },
-  { label: '收入建模', value: 3 },
-  { label: '成本建模', value: 4 },
-  { label: '利润税金', value: 5 },
+  { label: 'AI推荐结构', value: 1 },
+  { label: '收入建模', value: 2 },
+  { label: '成本建模', value: 3 },
+  { label: '利润税金', value: 4 },
 ]
 
 /**
@@ -56,7 +55,12 @@ const RevenueCostModeling: React.FC = () => {
   const navigate = useNavigate()
 
   // Zustand Store
-  const { setContext, currentStep, setCurrentStep } = useRevenueCostStore()
+  const { 
+    setContext, 
+    currentStep, 
+    setCurrentStep,
+    revenueStructureLocked 
+  } = useRevenueCostStore()
 
   // 状态管理
   const [loading, setLoading] = useState(true)
@@ -87,6 +91,15 @@ const RevenueCostModeling: React.FC = () => {
     合计: number | null
     分年数据: number[]
     isMainRow?: boolean
+  }>>([])
+  
+  // 折旧摊销表状态
+  const [depreciationData, setDepreciationData] = useState<Array<{
+    序号: string
+    资产类别: string
+    原值: number
+    年折旧摊销额: number
+    分年数据: number[]
   }>>([])
   
   // 弹窗状态控制
@@ -390,6 +403,95 @@ const RevenueCostModeling: React.FC = () => {
     setRepaymentTableData(data)
   }, [project, investmentEstimate, repaymentPeriod])
 
+  /**
+   * 计算折旧摊销表（直线法）
+   */
+  useEffect(() => {
+    if (!project || !investmentEstimate) return
+
+    const operationYears = project.operation_years || 0
+    if (operationYears === 0) {
+      setDepreciationData([])
+      return
+    }
+
+    // 提取土地费用（从 partB 获取）
+    let landCost = 0
+    if (investmentEstimate.estimate_data?.partB?.children) {
+      const landItem = investmentEstimate.estimate_data.partB.children.find(
+        (item: any) => item.工程或费用名称 === '土地费用'
+      )
+      landCost = Number(landItem?.合计) || 0
+    }
+
+    const data: Array<{
+      序号: string
+      资产类别: string
+      原值: number
+      年折旧摊销额: number
+      分年数据: number[]
+    }> = []
+
+    // A. 房屋（建筑物）
+    const constructionAnnualDepreciation = constructionOriginalValue * (1 - constructionResidualRate / 100) / constructionDepreciationYears
+    data.push({
+      序号: 'A',
+      资产类别: '🏢 房屋（建筑物）',
+      原值: constructionOriginalValue,
+      年折旧摊销额: constructionAnnualDepreciation,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        // 折旧年限内，每年按固定额度折旧
+        return i < constructionDepreciationYears ? constructionAnnualDepreciation : 0
+      })
+    })
+
+    // D. 设备购置
+    const equipmentAnnualDepreciation = equipmentOriginalValue * (1 - equipmentResidualRate / 100) / equipmentDepreciationYears
+    data.push({
+      序号: 'D',
+      资产类别: '⚙️ 设备购置',
+      原值: equipmentOriginalValue,
+      年折旧摊销额: equipmentAnnualDepreciation,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        return i < equipmentDepreciationYears ? equipmentAnnualDepreciation : 0
+      })
+    })
+
+    // E. 无形资产（土地） - 从投资估算 partB 土地费用获取
+    const intangibleOriginalValue = landCost // 土地费用即为无形资产原值
+    const intangibleAnnualAmortization = intangibleOriginalValue > 0
+      ? intangibleOriginalValue * (1 - intangibleResidualRate / 100) / intangibleAmortizationYears
+      : 0
+    data.push({
+      序号: 'E',
+      资产类别: '🌍 无形资产（土地）',
+      原值: intangibleOriginalValue,
+      年折旧摊销额: intangibleAnnualAmortization,
+      分年数据: Array.from({ length: operationYears }, (_, i) => {
+        return i < intangibleAmortizationYears ? intangibleAnnualAmortization : 0
+      })
+    })
+
+    console.log('📉 折旧摊销表数据:', {
+      '土地费用': landCost,
+      '无形资产原值': intangibleOriginalValue,
+      '年摊销额': intangibleAnnualAmortization,
+      '表格数据': data
+    })
+    setDepreciationData(data)
+  }, [
+    project,
+    investmentEstimate,
+    constructionOriginalValue,
+    equipmentOriginalValue,
+    constructionDepreciationYears,
+    constructionResidualRate,
+    equipmentDepreciationYears,
+    equipmentResidualRate,
+    intangibleAmortizationYears,
+    intangibleResidualRate
+  ])
+
   // 打开编辑弹窗（年限和残值率同时编辑）
   const openEditModal = (
     type: string, 
@@ -463,11 +565,10 @@ const RevenueCostModeling: React.FC = () => {
   // 步骤映射
   const stepMap: Record<number, string> = {
     0: 'period',
-    1: 'depreciation',
-    2: 'suggest',
-    3: 'revenue',
-    4: 'cost',
-    5: 'profit',
+    1: 'suggest',
+    2: 'revenue',
+    3: 'cost',
+    4: 'profit',
   }
 
   const activeStep = Object.keys(stepMap).find(
@@ -476,6 +577,16 @@ const RevenueCostModeling: React.FC = () => {
 
   // 步骤导航处理
   const handleNext = () => {
+    // 步骤1：AI推荐营收结构 - 检查是否锁定
+    if (activeStep === 1 && !revenueStructureLocked) {
+      notifications.show({
+        title: '请锁定营收结构表',
+        message: '必须先锁定营收结构表后才能进行下一步',
+        color: 'orange',
+      })
+      return
+    }
+
     if (activeStep < STEPS.length - 1) {
       setCurrentStep(stepMap[activeStep + 1] as any)
     }
@@ -985,159 +1096,167 @@ const RevenueCostModeling: React.FC = () => {
               </Stack>
             </Modal>
 
-            {/* 折旧与摊销简表弹窗 */}
+            {/* 折旧与摊销表弹窗 */}
             <Modal
               opened={depreciationTableOpened}
               onClose={() => setDepreciationTableOpened(false)}
               title={
                 <Group gap="xs">
                   <IconFileText size={20} color="#165DFF" />
-                  <Text fw={600} c="#1D2129">折旧与摊销简表</Text>
+                  <Text fw={600} c="#1D2129">折旧与摊销估算表</Text>
                 </Group>
               }
               size="1400px"
               centered
             >
-              <Table
-                striped
-                withTableBorder
-                styles={{
-                  th: {
-                    backgroundColor: '#F7F8FA',
-                    color: '#1D2129',
-                    fontWeight: 600,
-                    fontSize: '13px'
-                  },
-                  td: {
-                    fontSize: '13px'
-                  }
-                }}
-              >
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>序号</Table.Th>
-                    <Table.Th>资产类别</Table.Th>
-                    <Table.Th>构成说明</Table.Th>
-                    <Table.Th>原值（万元）</Table.Th>
-                    <Table.Th>折旧/摊销年限（年）</Table.Th>
-                    <Table.Th>残值率</Table.Th>
-                    <Table.Th>年折旧/摊销额（万元）</Table.Th>
-                    <Table.Th>备注</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  <Table.Tr>
-                    <Table.Td>A</Table.Td>
-                    <Table.Td>
-                      <Group gap={4}>
-                        <Text>🏢</Text>
-                        <Text>房屋（建筑物）</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>不含税建筑工程费 + 分摊建息与预备费</Table.Td>
-                    <Table.Td>
-                      <Text fw={600}>{constructionOriginalValue.toFixed(2)}</Text>
-                    </Table.Td>
-                    <Table.Td>{constructionDepreciationYears}</Table.Td>
-                    <Table.Td>{constructionResidualRate}%</Table.Td>
-                    <Table.Td>
-                      <Text fw={600} c="#165DFF">
-                        {(constructionOriginalValue * (1 - constructionResidualRate / 100) / constructionDepreciationYears).toFixed(2)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>进项税{constructionInputTaxRate}%已扣除</Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td>B</Table.Td>
-                    <Table.Td>
-                      <Group gap={4}>
-                        <Text>🔧</Text>
-                        <Text>建安工程（安装、装饰等）</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>不含税安装及配套工程费 + 分摊建息与预备费</Table.Td>
-                    <Table.Td>
-                      <Text fw={600}>0.00</Text>
-                    </Table.Td>
-                    <Table.Td>30</Table.Td>
-                    <Table.Td>5%</Table.Td>
-                    <Table.Td>
-                      <Text fw={600} c="#165DFF">0.00</Text>
-                    </Table.Td>
-                    <Table.Td>包括装修、机电、道路等</Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td>C</Table.Td>
-                    <Table.Td>
-                      <Group gap={4}>
-                        <Text>📦</Text>
-                        <Text>其他工程费用分摊项</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>建设管理费、工程监理费等按比例资本化部分</Table.Td>
-                    <Table.Td>
-                      <Text fw={600}>0.00</Text>
-                    </Table.Td>
-                    <Table.Td>{constructionDepreciationYears}</Table.Td>
-                    <Table.Td>-</Table.Td>
-                    <Table.Td>
-                      <Text fw={600} c="#165DFF">0.00</Text>
-                    </Table.Td>
-                    <Table.Td>按(A+B+D)总额比例分摊</Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td>D</Table.Td>
-                    <Table.Td>
-                      <Group gap={4}>
-                        <Text>⚙️</Text>
-                        <Text>设备购置</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>不含税设备购置费 + 分摊建息与预备费</Table.Td>
-                    <Table.Td>
-                      <Text fw={600}>{equipmentOriginalValue.toFixed(2)}</Text>
-                    </Table.Td>
-                    <Table.Td>{equipmentDepreciationYears}</Table.Td>
-                    <Table.Td>{equipmentResidualRate}%</Table.Td>
-                    <Table.Td>
-                      <Text fw={600} c="#165DFF">
-                        {(equipmentOriginalValue * (1 - equipmentResidualRate / 100) / equipmentDepreciationYears).toFixed(2)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>进项税{equipmentInputTaxRate}%已扣除</Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td>E</Table.Td>
-                    <Table.Td>
-                      <Group gap={4}>
-                        <Text>🌍</Text>
-                        <Text>无形资产（土地）</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>B部分"项目土地费用"</Table.Td>
-                    <Table.Td>
-                      <Text fw={600}>0.00</Text>
-                    </Table.Td>
-                    <Table.Td>{intangibleAmortizationYears}</Table.Td>
-                    <Table.Td>{intangibleResidualRate}%</Table.Td>
-                    <Table.Td>
-                      <Text fw={600} c="#165DFF">0.00</Text>
-                    </Table.Td>
-                    <Table.Td>按{intangibleAmortizationYears}年直线摊销</Table.Td>
-                  </Table.Tr>
-                </Table.Tbody>
-              </Table>
-              <Group justify="flex-end" mt="md">
-                <Button 
-                  onClick={() => setDepreciationTableOpened(false)}
-                  style={{ 
-                    height: '36px',
-                    backgroundColor: '#165DFF'
-                  }}
-                >
-                  关闭
-                </Button>
-              </Group>
+              <Stack gap="md">
+                {/* 计算说明 */}
+                <div style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#F0F5FF',
+                  borderRadius: '8px',
+                  border: '1px solid #ADC6FF'
+                }}>
+                  <Text size="sm" c="#165DFF" fw={500} mb={4}>
+                    📉 折旧摊销方法
+                  </Text>
+                  <Text size="xs" c="#4E5969">
+                    • 折旧方法：直线法（平均年限法）<br />
+                    • <strong>年折旧额 = （固定资产原值 - 预计残值）÷ 预计使用年限</strong><br />
+                    • 摊销方法：直线法（平均分摊）
+                  </Text>
+                </div>
+            
+                {/* 折旧摊销表格 */}
+                {depreciationData.length > 0 ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <Table
+                      striped
+                      withTableBorder
+                      styles={{
+                        th: {
+                          backgroundColor: '#F7F8FA',
+                          color: '#1D2129',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          textAlign: 'center',
+                          border: '1px solid #E5E6EB'
+                        },
+                        td: {
+                          fontSize: '13px',
+                          textAlign: 'center',
+                          border: '1px solid #E5E6EB'
+                        }
+                      }}
+                    >
+                      <Table.Thead>
+                        {/* 第一行表头：运营期 */}
+                        <Table.Tr>
+                          <Table.Th rowSpan={2} style={{ width: '60px', verticalAlign: 'middle' }}>序号</Table.Th>
+                          <Table.Th rowSpan={2} style={{ width: '200px', textAlign: 'left', verticalAlign: 'middle' }}>资产类别</Table.Th>
+                          <Table.Th rowSpan={2} style={{ width: '120px', verticalAlign: 'middle' }}>原值（万元）</Table.Th>
+                          <Table.Th rowSpan={2} style={{ width: '140px', verticalAlign: 'middle' }}>年折旧/摊销额（万元）</Table.Th>
+                          <Table.Th colSpan={project?.operation_years || 0} style={{ borderBottom: '1px solid #E5E6EB' }}>
+                            运营期
+                          </Table.Th>
+                        </Table.Tr>
+                        {/* 第二行表头：年份 */}
+                        <Table.Tr>
+                          {Array.from({ length: project?.operation_years || 0 }, (_, i) => (
+                            <Table.Th key={i} style={{ width: '80px' }}>
+                              {i + 1}
+                            </Table.Th>
+                          ))}
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {depreciationData.map((row, idx) => (
+                          <Table.Tr key={idx}>
+                            <Table.Td>
+                              <Text fw={600}>{row.序号}</Text>
+                            </Table.Td>
+                            <Table.Td style={{ textAlign: 'left' }}>
+                              <Text size="sm">{row.资产类别}</Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text fw={600} c="#165DFF">
+                                {row.原值.toFixed(2)}
+                              </Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text fw={600} c="#00C48C">
+                                {row.年折旧摊销额.toFixed(2)}
+                              </Text>
+                            </Table.Td>
+                            {row.分年数据.map((value, yearIdx) => (
+                              <Table.Td key={yearIdx}>
+                                {value > 0 ? (
+                                  <Text size="xs" c="#4E5969">
+                                    {value.toFixed(2)}
+                                  </Text>
+                                ) : (
+                                  <Text size="xs" c="#C9CDD4">-</Text>
+                                )}
+                              </Table.Td>
+                            ))}
+                          </Table.Tr>
+                        ))}
+                        {/* 合计行 */}
+                        <Table.Tr style={{ backgroundColor: '#E6F7FF' }}>
+                          <Table.Td>
+                            <Text fw={700}>∑</Text>
+                          </Table.Td>
+                          <Table.Td style={{ textAlign: 'left' }}>
+                            <Text fw={600}>合计</Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text fw={700} c="#165DFF">
+                              {depreciationData.reduce((sum, row) => sum + row.原值, 0).toFixed(2)}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text fw={700} c="#00C48C">
+                              {depreciationData.reduce((sum, row) => sum + row.年折旧摊销额, 0).toFixed(2)}
+                            </Text>
+                          </Table.Td>
+                          {Array.from({ length: project?.operation_years || 0 }, (_, yearIdx) => (
+                            <Table.Td key={yearIdx}>
+                              <Text size="xs" fw={600} c="#165DFF">
+                                {depreciationData.reduce((sum, row) => sum + row.分年数据[yearIdx], 0).toFixed(2)}
+                              </Text>
+                            </Table.Td>
+                          ))}
+                        </Table.Tr>
+                      </Table.Tbody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '40px',
+                    textAlign: 'center',
+                    backgroundColor: '#FFF7E6',
+                    borderRadius: '8px',
+                    border: '1px dashed #FFD591'
+                  }}>
+                    <Text size="sm" c="#FF7D00">
+                      ⚠️ 请先完成投资估算，系统将自动计算折旧摊销表
+                    </Text>
+                  </div>
+                )}
+            
+                {/* 关闭按钮 */}
+                <Group justify="flex-end">
+                  <Button 
+                    onClick={() => setDepreciationTableOpened(false)}
+                    style={{ 
+                      height: '36px',
+                      backgroundColor: '#165DFF'
+                    }}
+                  >
+                    关闭
+                  </Button>
+                </Group>
+              </Stack>
             </Modal>
 
             {/* 还本付息计划表弹窗 */}
@@ -1183,22 +1302,31 @@ const RevenueCostModeling: React.FC = () => {
                           color: '#1D2129',
                           fontWeight: 600,
                           fontSize: '13px',
-                          textAlign: 'center'
+                          textAlign: 'center',
+                          border: '1px solid #E5E6EB'
                         },
                         td: {
                           fontSize: '13px',
-                          textAlign: 'center'
+                          textAlign: 'center',
+                          border: '1px solid #E5E6EB'
                         }
                       }}
                     >
                       <Table.Thead>
+                        {/* 第一行表头：运营期 */}
                         <Table.Tr>
-                          <Table.Th style={{ width: '60px' }}>序号</Table.Th>
-                          <Table.Th style={{ width: '180px', textAlign: 'left' }}>项目</Table.Th>
-                          <Table.Th style={{ width: '120px' }}>合计</Table.Th>
-                          {Array.from({ length: project?.operation_years || 0 }, (_, i) => (
-                            <Table.Th key={i} style={{ width: '100px' }}>
-                              第{i + 1}年
+                          <Table.Th rowSpan={2} style={{ width: '60px', verticalAlign: 'middle' }}>序号</Table.Th>
+                          <Table.Th rowSpan={2} style={{ width: '180px', textAlign: 'left', verticalAlign: 'middle' }}>项目</Table.Th>
+                          <Table.Th rowSpan={2} style={{ width: '120px', verticalAlign: 'middle' }}>合计</Table.Th>
+                          <Table.Th colSpan={repaymentPeriod} style={{ borderBottom: '1px solid #E5E6EB' }}>
+                            运营期
+                          </Table.Th>
+                        </Table.Tr>
+                        {/* 第二行表头：年份 */}
+                        <Table.Tr>
+                          {Array.from({ length: repaymentPeriod }, (_, i) => (
+                            <Table.Th key={i} style={{ width: '80px' }}>
+                              {i + 1}
                             </Table.Th>
                           ))}
                         </Table.Tr>
@@ -1238,7 +1366,8 @@ const RevenueCostModeling: React.FC = () => {
                                 <Text size="xs" c="#86909C">-</Text>
                               )}
                             </Table.Td>
-                            {row.分年数据.map((value, yearIdx) => (
+                            {/* 只显示还款期的列 */}
+                            {row.分年数据.slice(0, repaymentPeriod).map((value, yearIdx) => (
                               <Table.Td key={yearIdx}>
                                 {value > 0 ? (
                                   <Text size="xs" c={row.isMainRow ? '#00C48C' : '#4E5969'}>
@@ -1286,63 +1415,9 @@ const RevenueCostModeling: React.FC = () => {
         )
 
       case 1:
-        return (
-          <Card shadow="sm" padding="xl" radius="md" withBorder>
-            <Stack gap="lg">
-              <div>
-                <Text size="lg" fw={600} c="#1D2129" mb="md">
-                  折旧摊销估算
-                </Text>
-                <Text size="sm" c="#86909C">
-                  固定资产折旧费估算表与无形资产和其他资产摊销估算表
-                </Text>
-              </div>
-
-              {/* 固定资产折旧费估算表 */}
-              <div>
-                <Text size="md" fw={500} c="#1D2129" mb="md">固定资产折旧费估算表</Text>
-                <div style={{
-                  padding: '40px',
-                  textAlign: 'center',
-                  backgroundColor: '#F7F8FA',
-                  borderRadius: '8px',
-                  border: '1px dashed #E5E6EB'
-                }}>
-                  <Text size="sm" c="#86909C">
-                    🚧 表格展示开发中...
-                  </Text>
-                  <Text size="xs" c="#86909C" mt="md">
-                    将根据基础数据自动计算各年度折旧费用
-                  </Text>
-                </div>
-              </div>
-
-              {/* 无形资产和其他资产摊销估算表 */}
-              <div>
-                <Text size="md" fw={500} c="#1D2129" mb="md">无形资产和其他资产摊销估算表</Text>
-                <div style={{
-                  padding: '40px',
-                  textAlign: 'center',
-                  backgroundColor: '#F7F8FA',
-                  borderRadius: '8px',
-                  border: '1px dashed #E5E6EB'
-                }}>
-                  <Text size="sm" c="#86909C">
-                    🚧 表格展示开发中...
-                  </Text>
-                  <Text size="xs" c="#86909C" mt="md">
-                    将根据基础数据自动计算各年度摊销费用
-                  </Text>
-                </div>
-              </div>
-            </Stack>
-          </Card>
-        )
-
-      case 2:
         return <AIRevenueStructure />
 
-      case 3:
+      case 2:
         return (
           <Stack gap="md">
             <DynamicRevenueTable />
@@ -1350,10 +1425,10 @@ const RevenueCostModeling: React.FC = () => {
           </Stack>
         )
 
-      case 4:
+      case 3:
         return <DynamicCostTable />
 
-      case 5:
+      case 4:
         return (
           <Card shadow="sm" padding="xl" radius="md" withBorder>
             <Stack gap="lg">

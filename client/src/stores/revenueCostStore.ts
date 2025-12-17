@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
+import { devtools, persist } from 'zustand/middleware'
 
 /**
  * 达产率配置
@@ -17,6 +17,38 @@ export interface ValidationError {
   field?: string
   rowId?: string
   message: string
+}
+
+/**
+ * 营业收入类型（AI推荐）
+ */
+export interface AIRevenueType {
+  type_name: string
+  priority: 'high' | 'medium' | 'low'
+  suggested_vat_rate: number
+  typical_pricing_model: string
+  estimated_proportion: string
+}
+
+/**
+ * 营收类别（AI推荐）
+ */
+export interface AIRevenueCategory {
+  category_code: string
+  category_name: string
+  category_icon: string
+  relevance_score: number
+  reasoning: string
+  recommended_revenue_types: AIRevenueType[]
+}
+
+/**
+ * AI分析结果
+ */
+export interface AIAnalysisResult {
+  selected_categories: AIRevenueCategory[]
+  total_categories: number
+  analysis_summary: string
 }
 
 /**
@@ -130,6 +162,10 @@ interface RevenueCostState {
   calculationPeriod: number // 总计算期（建设期+运营期）
   baseYear: number          // 生产启动年（默认 constructionYears + 1）
   
+  // ========== AI推荐数据 ==========
+  aiAnalysisResult: AIAnalysisResult | null
+  revenueStructureLocked: boolean
+  
   // ========== 主体数据 ==========
   revenueItems: RevenueItem[]
   costItems: CostItem[]
@@ -148,6 +184,10 @@ interface RevenueCostState {
   
   // 计算期管理
   updateCalculationPeriod: (calculationPeriod: number, baseYear?: number) => void
+  
+  // AI推荐管理
+  setAIAnalysisResult: (result: AIAnalysisResult | null) => void
+  setRevenueStructureLocked: (locked: boolean) => void
   
   // 收入项管理
   addRevenueItem: (item: Partial<RevenueItem>) => void
@@ -249,18 +289,21 @@ export const calculateVatAmount = (item: RevenueItem): number => {
  */
 export const useRevenueCostStore = create<RevenueCostState>()(
   devtools(
-    (set, get) => ({
-      // ========== 初始状态 ==========
-      context: null,
-      calculationPeriod: 0,
-      baseYear: 0,
-      revenueItems: [],
-      costItems: [],
-      productionRates: [],
-      currentStep: 'period',
-      isSubmitting: false,
-      isSaving: false,
-      errors: [],
+    persist(
+      (set, get) => ({
+        // ========== 初始状态 ==========
+        context: null,
+        calculationPeriod: 0,
+        baseYear: 0,
+        aiAnalysisResult: null,
+        revenueStructureLocked: false,
+        revenueItems: [],
+        costItems: [],
+        productionRates: [],
+        currentStep: 'period',
+        isSubmitting: false,
+        isSaving: false,
+        errors: [],
       
       // ========== 操作方法实现 ==========
       
@@ -283,6 +326,14 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           baseYear: newBaseYear,
           productionRates: generateDefaultProductionRates(operationYears)
         })
+      },
+      
+      setAIAnalysisResult: (result) => {
+        set({ aiAnalysisResult: result })
+      },
+      
+      setRevenueStructureLocked: (locked) => {
+        set({ revenueStructureLocked: locked })
       },
       
       addRevenueItem: (item) => {
@@ -473,6 +524,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           context: null,
           calculationPeriod: 0,
           baseYear: 0,
+          aiAnalysisResult: null,
+          revenueStructureLocked: false,
           revenueItems: [],
           costItems: [],
           productionRates: [],
@@ -483,6 +536,22 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         })
       }
     }),
+      {
+        name: 'revenue-cost-storage', // localStorage key
+        partialize: (state) => ({
+          // 只持久化需要的字段
+          context: state.context,
+          calculationPeriod: state.calculationPeriod,
+          baseYear: state.baseYear,
+          aiAnalysisResult: state.aiAnalysisResult,
+          revenueStructureLocked: state.revenueStructureLocked,
+          revenueItems: state.revenueItems,
+          costItems: state.costItems,
+          productionRates: state.productionRates,
+          currentStep: state.currentStep,
+        })
+      }
+    ),
     { name: 'RevenueCostStore' }
   )
 )

@@ -28,60 +28,32 @@ import {
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
 import { revenueCostApi } from '@/lib/api'
-import { useRevenueCostStore } from '@/stores/revenueCostStore'
-
-/**
- * 营业收入类型
- */
-interface RevenueType {
-  type_name: string
-  priority: 'high' | 'medium' | 'low'
-  suggested_vat_rate: number
-  typical_pricing_model: string
-  estimated_proportion: string
-}
-
-/**
- * 营收类别
- */
-interface RevenueCategory {
-  category_code: string
-  category_name: string
-  category_icon: string
-  relevance_score: number
-  reasoning: string
-  recommended_revenue_types: RevenueType[]
-}
-
-/**
- * AI分析结果
- */
-interface AIAnalysisResult {
-  selected_categories: RevenueCategory[]
-  total_categories: number
-  analysis_summary: string
-}
+import { useRevenueCostStore, AIAnalysisResult, AIRevenueCategory, AIRevenueType } from '@/stores/revenueCostStore'
 
 /**
  * AI推荐营收结构组件（步骤2）
  */
 const AIRevenueStructure: React.FC = () => {
-  const { context } = useRevenueCostStore()
+  const { 
+    context, 
+    aiAnalysisResult, 
+    revenueStructureLocked,
+    setAIAnalysisResult,
+    setRevenueStructureLocked 
+  } = useRevenueCostStore()
   
   // 状态管理
-  const [aiAnalysisResult, setAiAnalysisResult] = useState<AIAnalysisResult | null>(null)
   const [generatingSuggestions, setGeneratingSuggestions] = useState(false)
-  const [revenueStructureLocked, setRevenueStructureLocked] = useState(false)
   
   // 编辑类别弹窗
   const [editCategoryModalOpened, setEditCategoryModalOpened] = useState(false)
-  const [editingCategory, setEditingCategory] = useState<RevenueCategory | null>(null)
-  const [originalEditingCategory, setOriginalEditingCategory] = useState<RevenueCategory | null>(null)
+  const [editingCategory, setEditingCategory] = useState<AIRevenueCategory | null>(null)
+  const [originalEditingCategory, setOriginalEditingCategory] = useState<AIRevenueCategory | null>(null)
   const [categoryModified, setCategoryModified] = useState(false)
   
   // 编辑收入类型弹窗
   const [editRevenueTypeModalOpened, setEditRevenueTypeModalOpened] = useState(false)
-  const [editingRevenueType, setEditingRevenueType] = useState<RevenueType | null>(null)
+  const [editingRevenueType, setEditingRevenueType] = useState<AIRevenueType | null>(null)
   const [analyzingPricingModel, setAnalyzingPricingModel] = useState(false)
 
   /**
@@ -112,7 +84,7 @@ const AIRevenueStructure: React.FC = () => {
         return
       }
 
-      setAiAnalysisResult(response.data.analysis)
+      setAIAnalysisResult(response.data.analysis)
       notifications.show({
         title: 'AI分析成功',
         message: `已推荐 ${response.data.analysis.total_categories} 个营收类别`,
@@ -157,7 +129,7 @@ const AIRevenueStructure: React.FC = () => {
   /**
    * 打开编辑类别弹窗
    */
-  const openEditCategoryModal = (category: RevenueCategory) => {
+  const openEditCategoryModal = (category: AIRevenueCategory) => {
     // 深拷贝原始数据，用于取消时恢复
     setOriginalEditingCategory(JSON.parse(JSON.stringify(category)))
     setEditingCategory(JSON.parse(JSON.stringify(category)))
@@ -172,14 +144,11 @@ const AIRevenueStructure: React.FC = () => {
     if (!editingCategory) return
 
     // 更新 aiAnalysisResult
-    setAiAnalysisResult((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        selected_categories: prev.selected_categories.map((cat) =>
-          cat.category_code === editingCategory.category_code ? editingCategory : cat
-        ),
-      }
+    setAIAnalysisResult({
+      ...aiAnalysisResult!,
+      selected_categories: aiAnalysisResult!.selected_categories.map((cat) =>
+        cat.category_code === editingCategory.category_code ? editingCategory : cat
+      ),
     })
 
     notifications.show({
@@ -210,6 +179,16 @@ const AIRevenueStructure: React.FC = () => {
   const deleteRevenueType = (typeName: string) => {
     if (!editingCategory) return
 
+    // 检查是否只剩一个收入类型
+    if (editingCategory.recommended_revenue_types.length <= 1) {
+      notifications.show({
+        title: '无法删除',
+        message: '至少需要保留一个收入类型',
+        color: 'orange',
+      })
+      return
+    }
+
     setEditingCategory({
       ...editingCategory,
       recommended_revenue_types: editingCategory.recommended_revenue_types.filter(
@@ -222,7 +201,7 @@ const AIRevenueStructure: React.FC = () => {
   /**
    * 打开编辑收入类型弹窗
    */
-  const openEditRevenueTypeModal = (revenueType: RevenueType) => {
+  const openEditRevenueTypeModal = (revenueType: AIRevenueType) => {
     setEditingRevenueType(JSON.parse(JSON.stringify(revenueType)))
     setEditRevenueTypeModalOpened(true)
   }
@@ -364,6 +343,16 @@ const AIRevenueStructure: React.FC = () => {
    * 删除营收类别
    */
   const deleteCategory = (categoryCode: string) => {
+    // 检查是否只剩一个类别
+    if (aiAnalysisResult && aiAnalysisResult.selected_categories.length <= 1) {
+      notifications.show({
+        title: '无法删除',
+        message: '至少需要保留一个营收类别',
+        color: 'orange',
+      })
+      return
+    }
+
     modals.openConfirmModal({
       title: '确认删除',
       centered: true,
@@ -375,15 +364,13 @@ const AIRevenueStructure: React.FC = () => {
       labels: { confirm: '删除', cancel: '取消' },
       confirmProps: { color: 'red' },
       onConfirm: () => {
-        setAiAnalysisResult((prev) => {
-          if (!prev) return prev
-          return {
-            ...prev,
-            selected_categories: prev.selected_categories.filter(
-              (cat) => cat.category_code !== categoryCode
-            ),
-            total_categories: prev.total_categories - 1,
-          }
+        const newCategories = aiAnalysisResult!.selected_categories.filter(
+          (cat) => cat.category_code !== categoryCode
+        )
+        setAIAnalysisResult({
+          ...aiAnalysisResult!,
+          selected_categories: newCategories,
+          total_categories: newCategories.length,
         })
         notifications.show({
           title: '删除成功',
@@ -400,9 +387,9 @@ const AIRevenueStructure: React.FC = () => {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high':
-        return 'red'
-      case 'medium':
         return 'orange'
+      case 'medium':
+        return 'green'
       case 'low':
         return 'gray'
       default:
@@ -520,18 +507,22 @@ const AIRevenueStructure: React.FC = () => {
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Group gap="xs">
-                        {category.recommended_revenue_types.map((type) => (
-                          <Badge
-                            key={type.type_name}
-                            color={getPriorityColor(type.priority)}
-                            variant="light"
-                            size="sm"
-                          >
-                            {type.type_name}
-                          </Badge>
+                      <Stack gap="xs">
+                        {category.recommended_revenue_types.map((type, idx) => (
+                          <Group key={type.type_name} gap="xs">
+                            <Text size="xs" c="#86909C" style={{ minWidth: '20px' }}>
+                              {idx + 1}.
+                            </Text>
+                            <Badge
+                              color={getPriorityColor(type.priority)}
+                              variant="light"
+                              size="sm"
+                            >
+                              {type.type_name}
+                            </Badge>
+                          </Group>
                         ))}
-                      </Group>
+                      </Stack>
                     </Table.Td>
                     <Table.Td>
                       <Text size="sm" c="#165DFF" fw={600}>

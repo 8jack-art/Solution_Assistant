@@ -515,19 +515,33 @@ static async generateItems(req: AuthRequest, res: Response<ApiResponse>) {
     let itemsResult
     try {
       let jsonContent = llmResponse.content.trim()
+      
+      // 移除markdown代码块标记
       if (jsonContent.startsWith('```json')) {
-        jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?$/g, '')
+        jsonContent = jsonContent.replace(/^```json\s*/g, '').replace(/\s*```$/g, '')
       } else if (jsonContent.startsWith('```')) {
-        jsonContent = jsonContent.replace(/```\n?/g, '')
+        jsonContent = jsonContent.replace(/^```\s*/g, '').replace(/\s*```$/g, '')
       }
       
+      // 移除可能的前后空白和注释
+      jsonContent = jsonContent.trim()
+      
+      // 尝试解析JSON
       itemsResult = JSON.parse(jsonContent)
-      console.log('✅ LLM生成成功，返回', itemsResult.revenue_items?.length || 0, '个收入项')
+      
+      // 验证返回格式
+      if (!itemsResult.revenue_items || !Array.isArray(itemsResult.revenue_items)) {
+        throw new Error('返回格式错误：缺少 revenue_items 数组')
+      }
+      
+      console.log('✅ LLM生成成功，返回', itemsResult.revenue_items.length, '个收入项')
     } catch (parseError: any) {
       console.error('❌ 解析LLM响应失败:', parseError.message)
+      console.error('原LLM输出:', llmResponse.content)
       return res.status(500).json({
         success: false,
-        error: `AI返回格式错误: ${parseError.message}`
+        error: `AI返回格式错误: ${parseError.message}`,
+        details: llmResponse.content.substring(0, 500) // 返回前500字符供调试
       })
     }
 
