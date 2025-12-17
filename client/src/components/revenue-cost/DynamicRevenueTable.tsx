@@ -499,11 +499,11 @@ const DynamicRevenueTable: React.FC = () => {
                         border: '1px solid #bae6fd',
                       },
                       indicator: {
-                        backgroundColor: '#dcfce7', // 淡绿色选中背景
+                        backgroundColor: '#165DFF', // 蓝色选中背景
                       },
                       label: {
                         '&[data-active]': {
-                          color: '#166534', // 深绿色选中文字
+                          color: '#ffffff', // 白色选中文字
                         },
                       },
                     }}
@@ -537,7 +537,7 @@ const DynamicRevenueTable: React.FC = () => {
               </Grid.Col>
               <Grid.Col span={3}>
                 <NumberInput
-                  label="单价（万元）"
+                  label="单价"
                   placeholder="请输入单价"
                   value={formData.unitPrice || 0}
                   onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
@@ -546,8 +546,52 @@ const DynamicRevenueTable: React.FC = () => {
                 />
               </Grid.Col>
               <Grid.Col span={3}>
-                {/* 占位符 */}
-                <div style={{ height: '36px' }}></div>
+                <Stack gap={0}>
+                  <Text size="sm" fw={500} mb={4}>
+                    单位
+                  </Text>
+                  <SegmentedControl
+                    radius="md"
+                    size="sm"
+                    data={['元', '万元']}
+                    value={formData.priceUnit === 'yuan' ? '元' : '万元'}
+                    onChange={(value: string) => {
+                      const isYuan = value === '元';
+                      const newUnit = isYuan ? 'yuan' : 'wan-yuan';
+                      const currentPrice = formData.unitPrice || 0;
+                      let newPrice = currentPrice;
+
+                      // 单位切换时转换数值
+                      if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
+                        // 万元 -> 元
+                        newPrice = currentPrice * 10000;
+                      } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
+                        // 元 -> 万元
+                        newPrice = currentPrice / 10000;
+                      }
+
+                      setFormData({ 
+                        ...formData, 
+                        priceUnit: newUnit,
+                        unitPrice: newPrice
+                      });
+                    }}
+                    styles={{
+                      root: {
+                        backgroundColor: '#f0f9ff',
+                        border: '1px solid #bae6fd',
+                      },
+                      indicator: {
+                        backgroundColor: '#165DFF', // 蓝色选中背景
+                      },
+                      label: {
+                        '&[data-active]': {
+                          color: '#ffffff', // 白色选中文字
+                        },
+                      },
+                    }}
+                  />
+                </Stack>
               </Grid.Col>
             </>
           )}
@@ -619,11 +663,11 @@ const DynamicRevenueTable: React.FC = () => {
                         border: '1px solid #bae6fd',
                       },
                       indicator: {
-                        backgroundColor: '#dcfce7', // 淡绿色选中背景
+                        backgroundColor: '#165DFF', // 蓝色选中背景
                       },
                       label: {
                         '&[data-active]': {
-                          color: '#166534', // 深绿色选中文字
+                          color: '#ffffff', // 白色选中文字
                         },
                       },
                     }}
@@ -647,7 +691,7 @@ const DynamicRevenueTable: React.FC = () => {
               </Grid.Col>
               <Grid.Col span={3}>
                 <NumberInput
-                  label="单价（万元）"
+                  label="单价"
                   placeholder="请输入单价"
                   value={formData.unitPrice || 0}
                   onChange={(value) => setFormData({ ...formData, unitPrice: Number(value) })}
@@ -656,8 +700,52 @@ const DynamicRevenueTable: React.FC = () => {
                 />
               </Grid.Col>
               <Grid.Col span={3}>
-                {/* 占位符 */}
-                <div style={{ height: '36px' }}></div>
+                <Stack gap={0}>
+                  <Text size="sm" fw={500} mb={4}>
+                    单位
+                  </Text>
+                  <SegmentedControl
+                    radius="md"
+                    size="sm"
+                    data={['元', '万元']}
+                    value={formData.priceUnit === 'yuan' ? '元' : '万元'}
+                    onChange={(value: string) => {
+                      const isYuan = value === '元';
+                      const newUnit = isYuan ? 'yuan' : 'wan-yuan';
+                      const currentPrice = formData.unitPrice || 0;
+                      let newPrice = currentPrice;
+
+                      // 单位切换时转换数值
+                      if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
+                        // 万元 -> 元
+                        newPrice = currentPrice * 10000;
+                      } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
+                        // 元 -> 万元
+                        newPrice = currentPrice / 10000;
+                      }
+
+                      setFormData({ 
+                        ...formData, 
+                        priceUnit: newUnit,
+                        unitPrice: newPrice
+                      });
+                    }}
+                    styles={{
+                      root: {
+                        backgroundColor: '#f0f9ff',
+                        border: '1px solid #bae6fd',
+                      },
+                      indicator: {
+                        backgroundColor: '#165DFF', // 蓝色选中背景
+                      },
+                      label: {
+                        '&[data-active]': {
+                          color: '#ffffff', // 白色选中文字
+                        },
+                      },
+                    }}
+                  />
+                </Stack>
               </Grid.Col>
               <Grid.Col span={3}>
                 {/* 占位符 */}
@@ -1026,11 +1114,11 @@ const DynamicRevenueTable: React.FC = () => {
                       border: '1px solid #bae6fd',
                     },
                     indicator: {
-                      backgroundColor: '#dcfce7', // 淡绿色选中背景
+                      backgroundColor: '#165DFF', // 蓝色选中背景
                     },
                     label: {
                       '&[data-active]': {
-                        color: '#166534', // 深绿色选中文字
+                        color: '#ffffff', // 白色选中文字
                       },
                     },
                   }}
