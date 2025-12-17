@@ -418,7 +418,7 @@ export function analyzeRevenueStructurePrompt(
 export function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[] {
   const systemPrompt = `你是一个专业的项目分析助手。请仔细分析用户提供的项目信息描述,提取关键信息并以JSON格式返回。
 
-请严格按照以下JSON格式输出,所有字段都必须填写:
+Please严格按照 following JSON format output,all fields must be filled:
 {
   "project_name": "项目名称",
   "total_investment": 数值(单位:万元),
@@ -458,64 +458,64 @@ export function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[] {
    - 备注: "混合用地模式。租赁部分:[...]; 征地部分:[...]; 青苗补偿:[...]万元"
 
 注意事项:
-1. 如果信息中没有明确说明某个字段,请根据行业惯例给出合理估算
-2. 贷款比例一般为60-80%
-3. 贷款利率一般为3-6%
-4. 建设年限一般为2-5年
-5. 运营年限一般为17-30年
-6. 土地征收、租赁单价根据项目所在地区及《广西各地区土地征收、租赁单价区间》来确定
-7. 只返回JSON格式,不要包含其他文字说明
+1. If information does not specify a field, please give a reasonable estimate based on industry conventions
+2. Loan ratio is generally 60-80%
+3. Loan interest rate is generally 3-6%
+4. Construction period is generally 2-5 years
+5. Operation period is generally 17-30 years
+6. Land acquisition and leasing prices are determined based on the project's location and the "Guangxi Land Acquisition and Leasing Price Range" table
+7. Only return JSON format, do not include any other text
 
-广西各地区土地征收、租赁单价区间（2024-2025年，单位：元/亩）
+Guangxi Land Acquisition and Leasing Price Range (2024-2025, unit: yuan/acre)
 
-一、土地征收单价区间（区片综合地价，含土地补偿费+安置补助费）
+一、Land acquisition price range (district comprehensive land price, including land compensation fee + resettlement allowance)
 
-| 地区    | 基本农田      | 建设用地      | 未利用地      | 典型区域           |
+| Region    | Basic farmland      | Construction land      | Unutilized land      | Typical area           |
 |---------|---------------|---------------|---------------|--------------------|
-| 南宁    | 3.5~4.8万     | 1.4~1.8万     | 0.4~1.8万     | 良庆区、武鸣县     |
-| 柳州    | 3.8~4.4万     | 1.4~1.6万     | 0.35~1.6万    | 市辖区、柳江区     |
-| 桂林    | 3.6~6.5万     | 1.3~2.4万     | 0.3~2.4万     | 临桂区、龙胜县     |
-| 梧州    | 3.6~4.4万     | 1.3~1.6万     | 0.3~1.6万     | 藤县、蒙山县       |
-| 北海    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | 市辖区             |
-| 防城港  | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | 港口区、东兴市     |
-| 钦州    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | 市辖区             |
-| 贵港    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | 港北区、平南县     |
-| 玉林    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | 玉州区             |
-| 百色    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | 田阳区、右江区     |
-| 贺州    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | 八步区             |
-| 河池    | 3.5~8.3万     | 1.3~3.0万     | 0.3~3.0万     | 金城江区、宜州区   |
-| 来宾    | 3.5~4.3万     | 1.3~1.6万     | 0.3~1.6万     | 兴宾区、象州县     |
-| 崇左    | 3.5~3.6万     | 1.3~1.4万     | 0.3~1.4万     | 江州区、凭祥市     |
+| Nanning    | 3.5~4.8万     | 1.4~1.8万     | 0.4~1.8万     | Liangqing District, Wuming County     |
+| Liuzhou    | 3.8~4.4万     | 1.4~1.6万     | 0.35~1.6万    | City area, Liuzhou District     |
+| Guilin    | 3.6~6.5万     | 1.3~2.4万     | 0.3~2.4万     | Lingui District, Longsheng County     |
+| Wuzhou    | 3.6~4.4万     | 1.3~1.6万     | 0.3~1.6万     | Teng County, Mengshan County       |
+| Beihai    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | City area             |
+| Fangchenggang  | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Port Area, Dongxing City     |
+| Qinzhou    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | City area             |
+| Guigang    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Guobei District, Pingnan County     |
+| Yulin    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Yuzhou District             |
+| Baise    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | Tianyang District, Youjiang District     |
+| Hezhou    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Babu District             |
+| Hechi    | 3.5~8.3万     | 1.3~3.0万     | 0.3~3.0万     | Jinchengjiang District, Yizhou County   |
+| Laibin    | 3.5~4.3万     | 1.3~1.6万     | 0.3~1.6万     | Xingbin District, Xingzhou County     |
+| Chongzuo    | 3.5~3.6万     | 1.3~1.4万     | 0.3~1.4万     | Jiangzhou District, Pingxiang City     |
 
-二、土地租赁单价区间（实际成交与市场行情）
+二、Land leasing price range (actual transactions and market conditions)
 
-| 地区    | 农业用地（元/亩/年） | 工业用地（元/亩/年） | 建设用地（元/亩/年） | 市场案例说明                  |
+| Region    | Agricultural land (yuan/acre/year) | Industrial land (yuan/acre/year) | Construction land (yuan/acre/year) | Market case description                  |
 |---------|----------------------|----------------------|----------------------|-------------------------------|
-| 南宁    | 500~2000             | 1.5万~5万            | 0.8万~2万            | 宾阳县工业用地挂牌5万/亩/年   |
-| 柳州    | 500~2000             | 1.5万~4万            | 0.8万~2万            | 柳州工业用地成交约15.7万/亩（折年租约1.6万） |
-| 桂林    | 500~2000             | 1.5万~4万            | 0.8万~2万            | 农业地普遍1000-1500元/亩/年  |
-| 梧州    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 北海    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 防城港  | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 钦州    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 贵港    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 玉林    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 百色    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 贺州    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 河池    | 500~2000             | 1.5万~4万            | 0.8万~2万            | 天峨县工业用地挂牌1300元/亩/年|
-| 来宾    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
-| 崇左    | 500~2000             | 1.5万~4万            | 0.8万~2万            | 凭祥市工业用地1.5万/亩/年     |
+| Nanning    | 500~2000             | 1.5万~5万            | 0.8万~2万            | Binyang Industrial Land Auction 5万/acre/year   |
+| Liuzhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Liuzhou Industrial Land Transaction ~15.7万/acre (annual rental ~1.6万) |
+| Guilin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Agricultural land generally 1000-1500 yuan/acre/year  |
+| Wuzhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Beihai    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Fangchenggang  | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Qinzhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Guigang    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Yulin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Baise    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Hezhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Hechi    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Tian'e County Industrial Land Auction 1300 yuan/acre/year|
+| Laibin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Chongzuo    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Pingxiang City Industrial Land 1.5万/acre/year     |
 
 
 
 
 `
 
-  const userPrompt = `请分析以下项目信息并提取关键数据:
+  const userPrompt = `Please analyze the following project information and extract key data:
 
 ${projectInfo}
 
-请返回JSON格式的结构化数据。`
+Please return JSON format structured data.`
 
   return [
     { role: 'system', content: systemPrompt },
@@ -546,17 +546,17 @@ export function analyzePricingPrompt(typeName: string): LLMMessage[] {
 - 加工类：按重量加工、按件加工
 - 技术类：按项目报价、按工作量
 
-请严格按照以下JSON格式返回：
+Please严格按照 following JSON format return：
 {
-  "vat_rate": 增值税率（单位：%，如：9、13、6）,
+  "vat_rate": 增值税率（unit：%，如：9、13、6）,
   "pricing_model": "计费模式（不超过15字）"
 }
 
-只返回JSON格式，不要包含其他文字说明`
+Only return JSON format, do not include any other text`
 
   const userPrompt = `营业收入类型：${typeName}
 
-请分析其合适的增值税税率和计费模式。`
+Please analyze its suitable VAT rate and pricing model.`
 
   return [
     { role: 'system', content: systemPrompt },
@@ -579,42 +579,46 @@ export function generateRevenueItemsPrompt(
   },
   revenueSummary: string
 ): LLMMessage[] {
-  const systemPrompt = `作为一个专业的财务分析师，根据项目信息、投资数据和营收结构表，生成详细的营业收入项目表。
+  const systemPrompt = `作为一个专业的财务分析师，根据项目 information、investment data and revenue structure table, generate detailed revenue items table.
 
-请严格按照以下JSON格式返回：
+**Important rules: strictly generate according to revenue structure table, do not add extra revenue items!**
+
+Please strictly follow the JSON format below:
 {
   "revenue_items": [
     {
-      "name": "收入项名称",
+      "name": "revenue item name",
       "category": "agriculture-crop | agriculture-livestock | agriculture-aquaculture | digital-platform | transaction-hub | processing | agri-service | new-energy | agri-tourism | other",
-      "unit": "计量单位",
-      "quantity": 年产量数值,
-      "unitPrice": 单价数值(元),
-      "vatRate": 增值税率数值(%)
+      "unit": "unit of measurement",
+      "quantity": annual production quantity,
+      "unitPrice": unit price (yuan),
+      "vatRate": VAT rate (%)
     }
   ]
 }
 
-类别枚举值说明：
-- agriculture-crop: 农业种植
-- agriculture-livestock: 畜牧养殖
-- agriculture-aquaculture: 渔业水产
-- digital-platform: 数字平台
-- transaction-hub: 交易撮合
-- processing: 加工服务
-- agri-service: 综合农服
-- new-energy: 新能源融合
-- agri-tourism: 农旅融合
-- other: 其他
+Category enum values:
+- agriculture-crop: agriculture planting
+- agriculture-livestock: livestock breeding
+- agriculture-aquaculture: aquaculture
+- digital-platform: digital platform
+- transaction-hub: transaction hub
+- processing: processing service
+- agri-service: comprehensive agricultural service
+- new-energy: new energy integration
+- agri-tourism: agricultural tourism
+- other: other
 
-要求：
-1. 生成 3-8 个收入项目，覆盖主要营收类型
-2. 数据要符合行业常识和项目规模
-3. category 必须是上述枚举值之一
-4. 增值税率参考：农产品 9%、服务业 6%、工业产品 13%
-5. 单价以"元"为单位
-6. 年产量/规模要符合实际，考虑项目投资规模
-7. 只返回JSON格式，不要包含其他文字说明`
+**Strict requirements**:
+1. **must strictly generate according to revenue structure table, each type corresponds to one revenue item**
+2. **do not add revenue items not in revenue structure table!**
+3. **number of generated revenue items must equal number of types in revenue structure table**
+4. data must be reasonable and consistent with project scale
+5. category must be one of the above enum values
+6. VAT rate reference: agricultural products 9%, services 6%, industrial products 13%
+7. unit price in "yuan"
+8. annual production/scale must be reasonable, consider project investment scale
+9. Only return JSON format, do not include any other text`
 
   const investmentSummary = `
 总投资：${projectInfo.totalInvestment}万元
@@ -624,22 +628,25 @@ export function generateRevenueItemsPrompt(
 设备购置费：${projectInfo.equipmentCost}万元` : ''}
   `.trim()
 
-  const userPrompt = `请为以下项目生成详细的营业收入项目表：
+  const userPrompt = `Please generate detailed revenue items table for the following project:
 
-## 项目基本信息
-项目名称：${projectInfo.name}
-项目描述：${projectInfo.description || '无'}
+## Project basic information
+Project name：${projectInfo.name}
+Project description：${projectInfo.description || 'None'}
 
-## 投资简表数据
+## Investment summary data
 ${investmentSummary}
 
-## 营收结构表
+## Revenue structure table (must strictly follow)
 ${revenueSummary}
 
-��根据上述信息，生成合理的营业收入项目表。确保：
-1. 收入项与营收结构表对应
-2. 规模与投资额匹配
-3. 数据符合行业常识`
+**Important requirements**：
+1. **only generate revenue types listed in revenue structure table**
+2. **do not add any extra revenue items!**
+3. **number of generated revenue items must equal number of types in revenue structure table**
+4. each revenue item must correspond to revenue structure table
+5. scale must match investment
+6. data must be reasonable and consistent with industry`
 
   return [
     { role: 'system', content: systemPrompt },
@@ -660,66 +667,66 @@ export function estimateSingleRevenueItemPrompt(
   },
   revenueItemName: string
 ): LLMMessage[] {
-  const systemPrompt = `作为一个专业的财务分析师，根据项目信息和收入项名称，估算该收入项的关键指标。
+  const systemPrompt = `作为一个专业的财务分析师，根据 project information and revenue item name, estimate key indicators of the revenue item.
 
-请严格按照以下JSON格式返回：
+Please strictly follow the JSON format below:
 {
   "category": "agriculture-crop | digital-platform | manufacturing | service | real-estate | other",
   "fieldTemplate": "quantity-price | area-yield-price | capacity-utilization | subscription | direct-amount",
-  "quantity": 数量或面积或产能或订阅数,
-  "unit": "数量单位（如：公斤、吨、台、个等）",
-  "unitPrice": 单价(万元),
-  "vatRate": 增值税率(0-1之间的小数),
-  "area": 面积(亩)，仅area-yield-price模板,
-  "yieldPerArea": 亩产量，仅area-yield-price模板,
-  "capacity": 产能，仅capacity-utilization模板,
-  "capacityUnit": "产能单位（如：台、件、类等）"，仅capacity-utilization模板,
-  "utilizationRate": 利用率(0-1之间的小数)，仅capacity-utilization模板,
-  "subscriptions": 订阅数，仅subscription模板,
-  "directAmount": 直接金额(万元)，仅direct-amount模板,
-  "remark": "测算理由说明（150字以内，说明数据来源、估算逻辑和依据）"
+  "quantity": quantity or area or capacity or subscription number,
+  "unit": "unit of quantity（如：kg, ton, unit, piece等）",
+  "unitPrice": unit price(万元),
+  "vatRate": VAT rate(0-1之间的小数),
+  "area": area(亩)，仅area-yield-price模板,
+  "yieldPerArea": yield per area，仅area-yield-price模板,
+  "capacity": capacity，仅capacity-utilization模板,
+  "capacityUnit": "capacity unit（如：unit, piece, class等）"，仅capacity-utilization模板,
+  "utilizationRate": utilization rate(0-1之间的小数)，仅capacity-utilization模板,
+  "subscriptions": subscription number，仅subscription模板,
+  "directAmount": direct amount(万元)，仅direct-amount模板,
+  "remark": "reasoning for calculation（150字以内，说明 data source, calculation logic and basis）"
 }
 
-类别说明：
-- agriculture-crop: 农业种植
-- digital-platform: 数字平台
-- manufacturing: 制造业
-- service: 服务业
-- real-estate: 房地产
-- other: 其他
+Category description:
+- agriculture-crop: agriculture planting
+- digital-platform: digital platform
+- manufacturing: manufacturing
+- service: service
+- real-estate: real estate
+- other: other
 
-字段模板说明：
-- quantity-price: 数量 × 单价（通用）
-- area-yield-price: 面积 × 亩产量 × 单价（农业种植）
-- capacity-utilization: 产能 × 利用率 × 单件(制造业)
-- subscription: 订阅数 × 单价（平台类）
-- direct-amount: 直接金额（服务费等）
+Field template description:
+- quantity-price: quantity × unit price（general）
+- area-yield-price: area × yield per area × unit price（agriculture planting）
+- capacity-utilization: capacity × utilization rate × unit piece(manufacturing)
+- subscription: subscription number × unit price（platform）
+- direct-amount: direct amount（service fee etc）
 
-要求：
-1. 根据收入项名称推断最合适的category和fieldTemplate
-2. 数据要符合行业常识和项目规模
-3. 增值税率参考：农产品 0.09、服务业 0.06、工业产品 0.13
-4. 单价以"万元"为单位
-5. unit字段必须填写，指明数量的单位（如：公斤、吨、台、个、人次等）
-6. remark字段必须填写，说明估算依据、数据来源和计算逻辑，例如："根据项目总投资XXX万元和行业平均亩产YYY吨/亩，结合市场价格ZZZ元/吨推算"
-7. 只返回JSON格式，不要包含其他文字说明`
+Requirements:
+1. infer most suitable category and fieldTemplate based on revenue item name
+2. data must be reasonable and consistent with project scale
+3. VAT rate reference: agricultural products 0.09, services 0.06, industrial products 0.13
+4. unit price in "yuan"
+5. unit field must be filled, indicating unit of quantity（如：kg, ton, unit, piece, person etc）
+6. remark field must be filled, explaining calculation basis, data source and logic, e.g. "based on project total investment XXX yuan and industry average yield YYY ton/acre, combined with market price ZZZ yuan/ton"
+7. Only return JSON format, do not include any other text`
 
-  const userPrompt = `请为以下项目的收入项进行估算：
+  const userPrompt = `Please estimate the revenue item for the following project:
 
-## 项目基本信息
-项目名称：${projectInfo.name}
-项目描述：${projectInfo.description || '无'}
-总投资：${projectInfo.totalInvestment}万元
-建设期：${projectInfo.constructionYears}年
-运营期：${projectInfo.operationYears}年
+## Project basic information
+Project name：${projectInfo.name}
+Project description：${projectInfo.description || 'None'}
+Total investment：${projectInfo.totalInvestment}万元
+Construction period：${projectInfo.constructionYears}年
+Operation period：${projectInfo.operationYears}年
 
-## 收入项名称
+## Revenue item name
 ${revenueItemName}
 
-请根据上述信息，估算该收入项的关键指标。确保：
-1. 选择最合适的类别和模板
-2. 数据与项目规模匹配
-3. 符合行业常识`
+Please estimate key indicators of the revenue item based on the above information. Ensure:
+1. choose most suitable category and template
+2. data consistent with project scale
+3. reasonable and consistent with industry`
 
   return [
     { role: 'system', content: systemPrompt },
