@@ -30,7 +30,7 @@ import {
   IconCurrencyDollar,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { projectApi, investmentApi } from '@/lib/api'
+import { projectApi, investmentApi, revenueCostApi } from '@/lib/api'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
 import { InvestmentEstimate } from '@/types'
 import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
