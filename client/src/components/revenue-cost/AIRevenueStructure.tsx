@@ -526,6 +526,11 @@ const AIRevenueStructure: React.FC = () => {
                   if (context?.projectId && aiAnalysisResult) {
                     try {
                       console.log('💾 开始保存AI分析结果...')
+                      console.log('📊 保存数据:', {
+                        project_id: context.projectId,
+                        workflow_step: 'suggest',
+                        ai_analysis_result: aiAnalysisResult
+                      })
                       const response = await revenueCostApi.save({
                         project_id: context.projectId,
                         workflow_step: 'suggest',

@@ -183,9 +183,12 @@ export const theme = createTheme({
         option: {
           height: '32px',
           lineHeight: '32px',
-          '&[data-selected]': {
+          '&[data-combobox-selected]': {
             backgroundColor: '#F5F7FA',
             color: '#1E6FFF',
+          },
+          '&[data-hovered]': {
+            backgroundColor: '#F5F7FA',
           },
         },
       },
