@@ -694,6 +694,28 @@ const AIRevenueStructure: React.FC = () => {
           </div>
         )}
 
+        {/* AI分析中的加载动画 */}
+        {generatingSuggestions && (
+          <div style={{
+            padding: '60px 40px',
+            textAlign: 'center',
+            backgroundColor: '#F7F8FA',
+            borderRadius: '8px',
+          }}>
+            <Stack align="center" gap="lg">
+              <Loader size="lg" color="#165DFF" />
+              <div>
+                <Text size="lg" fw={600} c="#1D2129" mb={8}>
+                  AI正在分析中...
+                </Text>
+                <Text size="sm" c="#86909C">
+                  正在基于项目信息智能推荐营收结构，请稍候
+                </Text>
+              </div>
+            </Stack>
+          </div>
+        )}
+
         {/* 无数据提示 */}
         {!aiAnalysisResult && !generatingSuggestions && (
           <div style={{

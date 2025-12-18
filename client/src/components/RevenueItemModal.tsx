@@ -38,19 +38,21 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
   })
 
   useEffect(() => {
-    if (initialData) {
+    if (initialData && opened) {
+      // 编辑模式：保留原有数据
       setFormData({
         name: initialData.name || '',
         category: initialData.category || 'other',
         unit: initialData.unit || '',
         quantity: initialData.quantity || 0,
         unitPrice: initialData.unitPrice || 0,
-        unitPriceUnit: initialData.unitPriceUnit || 'yuan',
+        unitPriceUnit: initialData.unitPriceUnit || 'yuan', // 保持原有单位
         vatRate: initialData.vatRate || 9,
         priceIncreaseInterval: initialData.priceIncreaseInterval || 0,
         priceIncreaseRate: initialData.priceIncreaseRate || 0,
       })
-    } else {
+    } else if (!initialData && opened) {
+      // 新增模式：默认值
       setFormData({
         name: '',
         category: 'other',

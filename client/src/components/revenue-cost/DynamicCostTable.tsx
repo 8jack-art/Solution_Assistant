@@ -32,6 +32,7 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, CostItem, calculateTaxableIncome } from '@/stores/revenueCostStore'
+import { revenueCostApi } from '@/lib/api'
 
 /**
  * 动态成本表格组件
@@ -63,7 +64,7 @@ const DynamicCostTable: React.FC = () => {
     rawMaterials: {
       applyProductionRate: true, // 是否应用达产率
       items: [
-        { id: 1, name: '原材料1', sourceType: 'percentage', percentageOfRevenue: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
+        { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentageOfRevenue: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
         { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentageOfRevenue: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
         { id: 3, name: '原材料3', sourceType: 'directAmount', percentageOfRevenue: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
       ]
@@ -157,7 +158,7 @@ const DynamicCostTable: React.FC = () => {
                   { value: 'total', label: '整个项目年收入' },
                   ...(revenueItems || []).map((item: any) => ({
                     value: item.id,
-                    label: `${item.name} (年收入: ${(calculateTaxableIncome(item) * 10000).toFixed(2)}万元)`
+                    label: `${item.name} (年收入: ${(calculateTaxableIncome(item) / 10000).toFixed(2)}万元)`
                   }))
                 ]}
                 placeholder="请选择收入项目"
@@ -170,8 +171,62 @@ const DynamicCostTable: React.FC = () => {
                 onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, percentageOfRevenue: Number(value)})}
                 min={0}
                 max={100}
-                decimalScale={2}
+                decimalScale={1}
               />
+              {currentRawMaterial.linkedRevenueId && (
+                <div style={{
+                  padding: '8px 12px',
+                  backgroundColor: '#E8F7FF',
+                  borderRadius: '6px',
+                  borderLeft: '3px solid #1E6FFF'
+                }}>
+                  <Text size="xs" c="#1E6FFF" fw={500}>
+                    📄 计算说明：
+                    {(() => {
+                      const selectedRevenue = currentRawMaterial.linkedRevenueId === 'total' 
+                        ? null 
+                        : (revenueItems || []).find((item: any) => item.id === currentRawMaterial.linkedRevenueId)
+                      
+                      if (selectedRevenue) {
+                        const revenueAmount = (calculateTaxableIncome(selectedRevenue) / 10000).toFixed(2)
+                        const materialAmount = (parseFloat(revenueAmount) * currentRawMaterial.percentageOfRevenue / 100).toFixed(2)
+                        return `选择“${selectedRevenue.name}”作为基数（${revenueAmount}万元）× ${currentRawMaterial.percentageOfRevenue}% = ${materialAmount}万元`
+                      }
+                      return '选择整个项目年收入作为基数'
+                    })()}
+                  </Text>
+                </div>
+              )}
+              {/* 显示计算后的金额 */}
+              <div style={{
+                padding: '8px 12px',
+                backgroundColor: '#F0F8FF',
+                borderRadius: '6px',
+                border: '1px solid #B0D4FF',
+                marginTop: '8px'
+              }}>
+                <Text size="sm" c="#1E6FFF" fw={600}>
+                  金额：
+                  {(() => {
+                    // 计算总收入
+                    let totalRevenue = 0;
+                    if (currentRawMaterial.linkedRevenueId === 'total') {
+                      // 整个项目收入
+                      totalRevenue = revenueItems.reduce((sum, item) => sum + (calculateTaxableIncome(item) / 10000), 0);
+                    } else {
+                      // 特定收入项
+                      const selectedItem = (revenueItems || []).find((item: any) => item.id === currentRawMaterial.linkedRevenueId);
+                      if (selectedItem) {
+                        totalRevenue = calculateTaxableIncome(selectedItem) / 10000;
+                      }
+                    }
+                    
+                    // 应用百分比和达产率
+                    const amount = totalRevenue * currentRawMaterial.percentageOfRevenue / 100;
+                    return `${amount.toFixed(2)}万元`;
+                  })()}
+                </Text>
+              </div>
             </>
           )}
           
@@ -217,7 +272,7 @@ const DynamicCostTable: React.FC = () => {
               取消
             </Button>
             <Button 
-              onClick={() => {
+              onClick={async () => {
                 if (rawMaterialIndex !== null) {
                   const newItems = [...costConfig.rawMaterials.items];
                   newItems[rawMaterialIndex] = currentRawMaterial;
@@ -228,6 +283,33 @@ const DynamicCostTable: React.FC = () => {
                       items: newItems
                     }
                   });
+                  
+                  // 保存到后端
+                  try {
+                    const state = useRevenueCostStore.getState();
+                    if (state.context?.projectId) {
+                      await revenueCostApi.save({
+                        project_id: state.context.projectId,
+                        model_data: {
+                          costConfig: {
+                            ...costConfig,
+                            rawMaterials: {
+                              ...costConfig.rawMaterials,
+                              items: newItems
+                            }
+                          }
+                        }
+                      });
+                      console.log('✅ 原材料配置已保存到数据库');
+                    }
+                  } catch (error) {
+                    console.error('❌ 保存到数据库失败:', error);
+                    notifications.show({
+                      title: '保存失败',
+                      message: '数据未保存到数据库，请稍后重试',
+                      color: 'red',
+                    });
+                  }
                 }
                 setShowRawMaterialEditModal(false);
               }} 
@@ -329,24 +411,91 @@ const DynamicCostTable: React.FC = () => {
                 <Table.Tr>
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1</Table.Td>
                   <Table.Td style={{ border: '1px solid #dee2e6' }}>外购原材料</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                  {years.map((year) => (
-                    <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                      0.00
-                    </Table.Td>
-                  ))}
+                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                    {(() => {
+                      // 计算所有原材料的总金额
+                      let total = 0;
+                      costConfig.rawMaterials.items.forEach(item => {
+                        if (item.sourceType === 'percentage') {
+                          // 根据收入百分比计算
+                          if (item.sourceType === 'percentage') {
+                            let revenueBase = 0;
+                            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                              // 整个项目收入
+                              revenueBase = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                            } else {
+                              // 特定收入项
+                              const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                              if (revItem) {
+                                revenueBase = calculateTaxableIncome(revItem) / 10000;
+                              }
+                            }
+                            total += revenueBase * item.percentageOfRevenue / 100;
+                          } else if (item.sourceType === 'quantityPrice') {
+                            // 数量×单价
+                            total += item.quantity * item.unitPrice;
+                          } else if (item.sourceType === 'directAmount') {
+                            // 直接金额
+                            total += item.directAmount;
+                          }
+                        } else if (item.sourceType === 'quantityPrice') {
+                          // 数量×单价
+                          total += item.quantity * item.unitPrice;
+                        } else if (item.sourceType === 'directAmount') {
+                          // 直接金额
+                          total += item.directAmount;
+                        }
+                      });
+                      return total.toFixed(2);
+                    })()}
+                  </Table.Td>
+                  {years.map((year, yearIndex) => {
+                    const productionRate = costConfig.rawMaterials.applyProductionRate 
+                      ? (useRevenueCostStore.getState().productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                      : 1;
+                    
+                    // 计算该年的金额
+                    let yearTotal = 0;
+                    costConfig.rawMaterials.items.forEach(item => {
+                      if (item.sourceType === 'percentage') {
+                        // 根据收入百分比计算
+                        if (item.sourceType === 'percentage') {
+                          let revenueBase = 0;
+                          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                            // 整个项目收入
+                            revenueBase = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                          } else {
+                            // 特定收入项
+                            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                            if (revItem) {
+                              revenueBase = calculateTaxableIncome(revItem) / 10000;
+                            }
+                          }
+                          yearTotal += revenueBase * item.percentageOfRevenue / 100 * productionRate;
+                        } else if (item.sourceType === 'quantityPrice') {
+                          // 数量×单价
+                          yearTotal += item.quantity * item.unitPrice * productionRate;
+                        } else if (item.sourceType === 'directAmount') {
+                          // 直接金额
+                          yearTotal += item.directAmount * productionRate;
+                        }
+                      } else if (item.sourceType === 'quantityPrice') {
+                        // 数量×单价
+                        yearTotal += item.quantity * item.unitPrice * productionRate;
+                      } else if (item.sourceType === 'directAmount') {
+                        // 直接金额
+                        yearTotal += item.directAmount * productionRate;
+                      }
+                    });
+                    
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        {yearTotal.toFixed(2)}
+                      </Table.Td>
+                    );
+                  })}
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                    <Group gap={4} justify="center">
-                      <Tooltip label="编辑">
-                        <ActionIcon
-                          variant="light"
-                          color="blue"
-                          size="sm"
-                        >
-                          <IconEdit size={16} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
+                    {/* 序号为1的行不允许编辑 */}
                   </Table.Td>
                 </Table.Tr>
                 
@@ -464,17 +613,7 @@ const DynamicCostTable: React.FC = () => {
                     </Table.Td>
                   ))}
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                    <Group gap={4} justify="center">
-                      <Tooltip label="编辑">
-                        <ActionIcon
-                          variant="light"
-                          color="blue"
-                          size="sm"
-                        >
-                          <IconEdit size={16} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
+                    {/* 序号为4的行不允许编辑 */}
                   </Table.Td>
                 </Table.Tr>
               </Table.Tbody>

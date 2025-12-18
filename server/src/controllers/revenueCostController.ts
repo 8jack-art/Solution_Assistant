@@ -163,22 +163,47 @@ export class RevenueCostController {
         result = existing[0]
       } else {
         // 创建新记录
-        const [insertResult] = await pool.query(
-          `INSERT INTO revenue_cost_estimates 
-           (project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            project_id,
-            calculation_period || project.construction_years + project.operation_years,
-            operation_period || project.operation_years,
-            workflow_step || 'period',
-            model_data ? JSON.stringify(model_data) : null,
-            ai_analysis_result ? JSON.stringify(ai_analysis_result) : null,
-            is_completed || false
-          ]
-        ) as any[]
-
-        result = { id: insertResult.insertId }
+        try {
+          const [insertResult] = await pool.query(
+            `INSERT INTO revenue_cost_estimates 
+             (project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              project_id,
+              calculation_period || project.construction_years + project.operation_years,
+              operation_period || project.operation_years,
+              workflow_step || 'period',
+              model_data ? JSON.stringify(model_data) : null,
+              ai_analysis_result ? JSON.stringify(ai_analysis_result) : null,
+              is_completed || false
+            ]
+          ) as any[]
+          result = { id: insertResult.insertId }
+          console.log('✅ 创建新记录成功')
+        } catch (insertError: any) {
+          console.error('❌ INSERT失败:', insertError.message)
+          // 如果是ai_analysis_result字段不存在，不包含该字段后重试
+          if (insertError.code === 'ER_BAD_FIELD_ERROR') {
+            console.log('🔄 不包含ai_analysis_result字段后重试...')
+            const [retryResult] = await pool.query(
+              `INSERT INTO revenue_cost_estimates 
+               (project_id, calculation_period, operation_period, workflow_step, model_data, is_completed) 
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [
+                project_id,
+                calculation_period || project.construction_years + project.operation_years,
+                operation_period || project.operation_years,
+                workflow_step || 'period',
+                model_data ? JSON.stringify(model_data) : null,
+                is_completed || false
+              ]
+            ) as any[]
+            result = { id: retryResult.insertId }
+            console.log('✅ 重试成功（跳过ai_analysis_result）')
+          } else {
+            throw insertError
+          }
+        }
       }
 
       res.json({
