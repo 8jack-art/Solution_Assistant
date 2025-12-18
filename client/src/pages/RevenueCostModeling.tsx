@@ -59,7 +59,9 @@ const RevenueCostModeling: React.FC = () => {
     setContext, 
     currentStep, 
     setCurrentStep,
-    revenueStructureLocked 
+    revenueStructureLocked,
+    setAiAnalysisResult,
+    setRevenueStructureLocked
   } = useRevenueCostStore()
 
   // 状态管理
@@ -125,9 +127,10 @@ const RevenueCostModeling: React.FC = () => {
     const loadProjectData = async () => {
       try {
         setLoading(true)
-        const [projectResponse, estimateResponse] = await Promise.all([
+        const [projectResponse, estimateResponse, revenueCostResponse] = await Promise.all([
           projectApi.getById(id!),
-          investmentApi.getByProjectId(id!)
+          investmentApi.getByProjectId(id!),
+          revenueCostApi.getByProjectId(id!) // 加载收入成本数据
         ])
         
         if (projectResponse.success && projectResponse.data) {
@@ -170,6 +173,27 @@ const RevenueCostModeling: React.FC = () => {
           setInvestmentEstimate(estimateData)
         } else {
           console.warn('⚠️ 投资估算API响应异常:', estimateResponse)
+        }
+        
+        // 加载收入成本数据（包括AI分析结果）
+        if (revenueCostResponse.success && revenueCostResponse.data?.estimate) {
+          const revenueCostData = revenueCostResponse.data.estimate
+          console.log('✅ 成功加载收入成本数据')
+          
+          // 恢复AI分析结果
+          if (revenueCostData.ai_analysis_result) {
+            console.log('🤖 恢复AI分析结果:', revenueCostData.ai_analysis_result)
+            setAiAnalysisResult(revenueCostData.ai_analysis_result)
+            // 如果工作流步骤是suggest或更后，说明已经锁定
+            if (revenueCostData.workflow_step && ['suggest', 'revenue', 'cost', 'profit', 'validate', 'done'].includes(revenueCostData.workflow_step)) {
+              setRevenueStructureLocked(true)
+            }
+          }
+          
+          // 设置当前工作流步骤
+          if (revenueCostData.workflow_step) {
+            setCurrentStep(revenueCostData.workflow_step)
+          }
         }
       } catch (error) {
         console.error('加载项目失败:', error)

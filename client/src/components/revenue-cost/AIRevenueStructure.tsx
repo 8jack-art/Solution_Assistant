@@ -512,15 +512,41 @@ const AIRevenueStructure: React.FC = () => {
             <Switch
               checked={revenueStructureLocked}
               disabled={!aiAnalysisResult || !aiAnalysisResult.selected_categories || aiAnalysisResult.selected_categories.length === 0}
-              onChange={(event) => {
+              onChange={async (event) => {
                 const locked = event.currentTarget.checked
                 setRevenueStructureLocked(locked)
+                
                 if (locked) {
-                  notifications.show({
-                    title: '已锁定',
-                    message: '营收结构表已锁定，可以进行下一步',
-                    color: 'green',
-                  })
+                  // 锁定时保存AI分析结果到数据库
+                  if (context?.projectId && aiAnalysisResult) {
+                    try {
+                      const response = await revenueCostApi.save({
+                        project_id: context.projectId,
+                        workflow_step: 'suggest',
+                        ai_analysis_result: aiAnalysisResult,
+                      })
+                      
+                      if (response.success) {
+                        console.log('✅ AI分析结果已保存到数据库')
+                        notifications.show({
+                          title: '已锁定',
+                          message: '营收结构表已锁定并保存，可以进行下一步',
+                          color: 'green',
+                        })
+                      } else {
+                        throw new Error(response.error || '保存失败')
+                      }
+                    } catch (error: any) {
+                      console.error('❌ 保存AI分析结果失败:', error)
+                      notifications.show({
+                        title: '保存失败',
+                        message: error.message || '请稍后重试',
+                        color: 'red',
+                      })
+                      // 保存失败时取消锁定
+                      setRevenueStructureLocked(false)
+                    }
+                  }
                 } else {
                   notifications.show({
                     title: '已解锁',

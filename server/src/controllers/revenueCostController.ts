@@ -15,6 +15,7 @@ const saveRevenueCostSchema = z.object({
   operation_period: z.number().int().min(1).optional(),
   workflow_step: z.enum(['period', 'suggest', 'revenue', 'cost', 'profit', 'validate', 'done']).optional(),
   model_data: z.any().optional(), // 完整的建模数据
+  ai_analysis_result: z.any().optional(), // AI分析结果
   is_completed: z.boolean().optional()
 })
 
@@ -49,7 +50,7 @@ export class RevenueCostController {
       }
 
       const params = saveRevenueCostSchema.parse(req.body)
-      const { project_id, calculation_period, operation_period, workflow_step, model_data, is_completed } = params
+      const { project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed } = params
 
       // 验证项目存在且有权限
       const project = await InvestmentProjectModel.findById(project_id)
@@ -95,6 +96,10 @@ export class RevenueCostController {
           updateFields.push('model_data = ?')
           updateValues.push(JSON.stringify(model_data))
         }
+        if (ai_analysis_result !== undefined) {
+          updateFields.push('ai_analysis_result = ?')
+          updateValues.push(JSON.stringify(ai_analysis_result))
+        }
         if (is_completed !== undefined) {
           updateFields.push('is_completed = ?')
           updateValues.push(is_completed)
@@ -113,14 +118,15 @@ export class RevenueCostController {
         // 创建新记录
         const [insertResult] = await pool.query(
           `INSERT INTO revenue_cost_estimates 
-           (project_id, calculation_period, operation_period, workflow_step, model_data, is_completed) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
+           (project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             project_id,
             calculation_period || project.construction_years + project.operation_years,
             operation_period || project.operation_years,
             workflow_step || 'period',
             model_data ? JSON.stringify(model_data) : null,
+            ai_analysis_result ? JSON.stringify(ai_analysis_result) : null,
             is_completed || false
           ]
         ) as any[]
@@ -198,6 +204,9 @@ export class RevenueCostController {
       // 解析JSON字段
       if (estimate.model_data && typeof estimate.model_data === 'string') {
         estimate.model_data = JSON.parse(estimate.model_data)
+      }
+      if (estimate.ai_analysis_result && typeof estimate.ai_analysis_result === 'string') {
+        estimate.ai_analysis_result = JSON.parse(estimate.ai_analysis_result)
       }
       if (estimate.validation_errors && typeof estimate.validation_errors === 'string') {
         estimate.validation_errors = JSON.parse(estimate.validation_errors)
