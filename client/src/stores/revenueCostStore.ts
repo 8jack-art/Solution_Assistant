@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { revenueCostApi } from '@/lib/api'
 
 /**
  * 达产率配置
@@ -538,20 +539,36 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         try {
           set({ isSaving: true })
           
-          // TODO: 实现API调用
-          // const response = await revenueCostApi.save(state.context?.projectId!, {
-          //   revenueItems: state.revenueItems,
-          //   costItems: state.costItems,
-          //   productionRates: state.productionRates,
-          // })
+          if (!state.context?.projectId) {
+            throw new Error('项目ID不存在')
+          }
           
-          // 模拟保存
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          // 确保传递完整的model_data结构
+          const modelData = {
+            revenueItems: state.revenueItems,
+            costItems: state.costItems,
+            productionRates: state.productionRates,
+            aiAnalysisResult: state.aiAnalysisResult,
+            workflow_step: state.currentStep
+          };
+          
+          console.log('💾 正在保存数据到后端:', {
+            project_id: state.context.projectId,
+            model_data: modelData,
+            workflow_step: state.currentStep
+          });
+          
+          const response = await revenueCostApi.save({
+            project_id: state.context.projectId,
+            model_data: modelData,
+            workflow_step: state.currentStep
+          })
           
           set({ isSaving: false })
-          return true
+          console.log('✅ 数据保存成功:', response);
+          return response.success
         } catch (error) {
-          console.error('保存失败:', error)
+          console.error('❌ 保存失败:', error)
           set({ isSaving: false })
           return false
         }
@@ -561,14 +578,35 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         try {
           set({ isSubmitting: true })
           
-          // TODO: 实现API调用
-          // const response = await revenueCostApi.load(projectId)
+          const response = await revenueCostApi.getByProjectId(projectId)
           
-          // 模拟加载
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          if (response.success && response.data?.estimate) {
+            const estimate = response.data.estimate
+            
+            // 解析model_data
+            let modelData = null
+            if (typeof estimate.model_data === 'string') {
+              try {
+                modelData = JSON.parse(estimate.model_data)
+              } catch (e) {
+                console.error('解析model_data失败:', e)
+              }
+            } else {
+              modelData = estimate.model_data
+            }
+            
+            // 更新状态
+            set({
+              revenueItems: modelData?.revenueItems || [],
+              costItems: modelData?.costItems || [],
+              productionRates: modelData?.productionRates || [],
+              aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || null,
+              currentStep: estimate.workflow_step || 'period'
+            })
+          }
           
           set({ isSubmitting: false })
-          return true
+          return response.success
         } catch (error) {
           console.error('加载失败:', error)
           set({ isSubmitting: false })

@@ -214,7 +214,7 @@ const DynamicRevenueTable: React.FC = () => {
       return
     }
 
-    // 处理单价单位转换：如果是“元”，需要转换为万元后再保存
+    // 处理单价单位转换：如果是"元"，需要转换为万元后再保存
     const dataToSave = { ...formData }
     if (dataToSave.priceUnit === 'yuan' && dataToSave.unitPrice) {
       console.log('💰 单价单位为元，进行转换')
@@ -224,6 +224,7 @@ const DynamicRevenueTable: React.FC = () => {
       console.log('  转换后（万元）:', dataToSave.unitPrice)
     }
 
+    // 先更新本地状态
     if (isNewItem) {
       addRevenueItem(dataToSave)
       notifications.show({
@@ -240,28 +241,33 @@ const DynamicRevenueTable: React.FC = () => {
       })
     }
 
-    // 保存到后端
-    try {
-      const state = useRevenueCostStore.getState();
-      if (state.context?.projectId) {
-        await revenueCostApi.save({
-          project_id: state.context.projectId,
-          model_data: {
-            revenueItems: isNewItem 
-              ? [...state.revenueItems, dataToSave] 
-              : state.revenueItems.map(item => item.id === editingItem?.id ? dataToSave : item)
-          }
+    // 等待状态更新后再保存到后端
+    setTimeout(async () => {
+      try {
+        const state = useRevenueCostStore.getState();
+        if (state.context?.projectId) {
+          // 使用最新的状态数据
+          await revenueCostApi.save({
+            project_id: state.context.projectId,
+            model_data: {
+              revenueItems: state.revenueItems,
+              productionRates: state.productionRates,
+              aiAnalysisResult: state.aiAnalysisResult,
+              workflow_step: state.currentStep
+            },
+            workflow_step: state.currentStep
+          });
+          console.log('✅ 收入项已保存到数据库');
+        }
+      } catch (error) {
+        console.error('❌ 保存到数据库失败:', error);
+        notifications.show({
+          title: '保存失败',
+          message: '数据未保存到数据库，请稍后重试',
+          color: 'red',
         });
-        console.log('✅ 收入项已保存到数据库');
       }
-    } catch (error) {
-      console.error('❌ 保存到数据库失败:', error);
-      notifications.show({
-        title: '保存失败',
-        message: '数据未保存到数据库，请稍后重试',
-        color: 'red',
-      });
-    }
+    }, 100); // 给状态更新一点时间
 
     setShowEditModal(false)
     setFormData({})
@@ -1482,3 +1488,7 @@ const DynamicRevenueTable: React.FC = () => {
 }
 
 export default DynamicRevenueTable
+
+
+
+
