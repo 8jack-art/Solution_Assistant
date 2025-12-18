@@ -435,7 +435,8 @@ Please严格按照 following JSON format output,all fields must be filled:
   "land_lease_unit_price": 数值(租赁单价,万元/亩/年,混合模式时填写),
   "land_purchase_area": 数值(征地面积,亩,混合模式时填写),
   "land_purchase_unit_price": 数值(征地单价,万元/亩,混合模式时填写),
-  "seedling_compensation": 数值(青苗补偿费,万元,A和D模式时填写)
+  "seedling_compensation": 数值(征地青苗补偿费,万元,A和D模式时填写),
+  "lease_seedling_compensation": 数值(租赁青苗补偿费,万元,D模式时填写)
 }
 
 土地模式决策逻辑：
@@ -453,9 +454,9 @@ Please严格按照 following JSON format output,all fields must be filled:
    - 备注: "纯软件类项目,无土地需求。"
 
 4. D(混合用地模式): 包含种植/养殖+加工/仓储等永久性设施的项目
-   - 需要填写: land_lease_area, land_lease_unit_price, land_purchase_area, land_purchase_unit_price, seedling_compensation
-   - 计算: land_cost = (construction_years × land_lease_unit_price × land_lease_area) + (land_purchase_area × land_purchase_unit_price) + seedling_compensation
-   - 备注: "混合用地模式。租赁部分:[...]; 征地部分:[...]; 青苗补偿:[...]万元"
+   - 需要填写: land_lease_area, land_lease_unit_price, land_purchase_area, land_purchase_unit_price, seedling_compensation, lease_seedling_compensation
+   - 计算: land_cost = (construction_years × land_lease_unit_price × land_lease_area) + (land_purchase_area × land_purchase_unit_price) + (land_lease_area × lease_seedling_compensation) + (land_purchase_area × seedling_compensation)
+   - 备注: "混合用地模式。租赁部分:[...含租赁青苗补偿...]; 征地部分:[...含征地青苗补偿...]"
 
 注意事项:
 1. If information does not specify a field, please give a reasonable estimate based on industry conventions

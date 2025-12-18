@@ -31,7 +31,8 @@ export interface InvestmentProject {
   land_lease_unit_price?: number  // 租赁土地单价(万元/亩/年,混合模式)
   land_purchase_area?: number  // 征地面积(亩,混合模式)
   land_purchase_unit_price?: number  // 征地单价(万元/亩,混合模式)
-  seedling_compensation?: number  // 青苗补偿费(万元)
+  seedling_compensation?: number  // 征地青苗补偿费(万元)
+  lease_seedling_compensation?: number  // 租赁青苗补偿费(万元)
   created_at: string
   updated_at: string
 }

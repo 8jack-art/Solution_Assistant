@@ -883,7 +883,8 @@ const InvestmentSummary: React.FC = () => {
       // 加载项目信息
       const projectResponse = await projectApi.getById(id!)
       if (projectResponse.success && projectResponse.data?.project) {
-        setProject(projectResponse.data.project)
+        const projectData = projectResponse.data.project
+        setProject(projectData)
         
         // 先检查是否已有投资估算（无论是否autoGenerateRequested，都需要先加载已有数据）
         const estimateResponse = await investmentApi.getByProjectId(id!)
@@ -906,7 +907,7 @@ const InvestmentSummary: React.FC = () => {
             // 直接在这里实现生成逻辑（保留三级子项）
             setGenerating(true)
             try {
-              const tableItems = estimate?.partA?.children?.map((item) => ({
+              const tableItems = estimateData?.partA?.children?.map((item: any) => ({
                 name: item.工程或费用名称,
                 construction_cost: item.建设工程费 || 0,
                 equipment_cost: item.设备购置费 || 0,
@@ -915,7 +916,8 @@ const InvestmentSummary: React.FC = () => {
                 remark: item.备注 || ''
               }))
               
-              const response = await investmentApi.generateSummary(id!, tableItems)
+              const landCostFromProject = projectData.land_cost ?? 0
+              const response = await investmentApi.generateSummary(id!, tableItems, undefined, landCostFromProject)
               if (response.success && response.data) {
                 const newEstimateData = response.data.summary
                 // 使用 setTimeout 确保状态更新触发渲染
@@ -946,7 +948,7 @@ const InvestmentSummary: React.FC = () => {
           if (autoGenerateRequested && !autoGenerateHandled) {
             setAutoGenerateHandled(true)
           }
-          await generateEstimate(false, projectResponse.data.project)
+          await generateEstimate(false, projectData)
         }
       } else {
         notifications.show({
@@ -2375,7 +2377,7 @@ const InvestmentSummary: React.FC = () => {
       {estimate && (
         <div style={{
           position: 'fixed',
-          left: 'calc(50% - 695px)',  // 根据表格宽度(1200px)计算位置，再左移10px
+          left: 'calc(50% - 640px)',  // 根据表格宽度(1200px)计算位置，稍微向右靠近表格
           top: '280px',
           zIndex: 100,
           display: 'flex',
@@ -2468,7 +2470,7 @@ const InvestmentSummary: React.FC = () => {
                     borderRadius: '50%'
                   }}
                 >
-                  <IconMapPin size={30} stroke={1.5} />
+                  <IconCash size={30} stroke={1.5} />
                 </ActionIcon>
               </Tooltip>
               

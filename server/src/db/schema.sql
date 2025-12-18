@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS investment_projects (
   land_cost DECIMAL(15,4) DEFAULT 0,
   land_remark TEXT,
   seedling_compensation DECIMAL(15,4) DEFAULT 0,
+  lease_seedling_compensation DECIMAL(15,4) DEFAULT 0,
   is_locked BOOLEAN DEFAULT FALSE,
   locked_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -48,9 +48,9 @@ export class InvestmentProjectModel {
           construction_years, operation_years, loan_ratio, loan_interest_rate, 
           is_locked, locked_at,
           land_mode, land_area, land_unit_price, land_cost, land_remark,
-          land_lease_area, land_lease_unit_price, land_purchase_area, land_purchase_unit_price, seedling_compensation) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+          land_lease_area, land_lease_unit_price, land_purchase_area, land_purchase_unit_price, seedling_compensation, lease_seedling_compensation) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         [
           id,
           projectData.user_id,
           projectData.project_name,
@@ -72,7 +72,8 @@ export class InvestmentProjectModel {
           projectData.land_lease_unit_price || 0,
           projectData.land_purchase_area || 0,
           projectData.land_purchase_unit_price || 0,
-          projectData.seedling_compensation || 0
+          projectData.seedling_compensation || 0,
+          projectData.lease_seedling_compensation || 0
         ]
       ) as any[]
 

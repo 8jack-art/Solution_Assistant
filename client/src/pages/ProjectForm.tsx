@@ -42,7 +42,8 @@ const ProjectForm: React.FC = () => {
     land_lease_unit_price: 0,
     land_purchase_area: 0,
     land_purchase_unit_price: 0,
-    seedling_compensation: 0, // 青苗补偿费
+    seedling_compensation: 0, // 青苗补偿费（征地部分）
+    lease_seedling_compensation: 0, // 租赁部分青苗补偿费
   })
   const [loading, setLoading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
@@ -83,10 +84,11 @@ const ProjectForm: React.FC = () => {
       case 'D': // 混合用地
         const leaseCost = data.construction_years * data.land_lease_unit_price * data.land_lease_area
         const purchaseLandCost = data.land_purchase_area * data.land_purchase_unit_price
-        const seedlingCostD = data.land_purchase_area * (data.seedling_compensation || 0)
-        cost = leaseCost + purchaseLandCost + seedlingCostD
-        if (data.seedling_compensation && data.seedling_compensation > 0) {
-          remark = `混合用地模式。租赁部分：${data.land_lease_area}亩×${data.land_lease_unit_price}万元/亩/年×${data.construction_years}年=${leaseCost.toFixed(2)}万元；征地部分：征地费${data.land_purchase_area}亩×${data.land_purchase_unit_price}万元/亩=${purchaseLandCost.toFixed(2)}万元，青苗补偿费${data.land_purchase_area}亩×${data.seedling_compensation}万元/亩=${seedlingCostD.toFixed(2)}万元。`
+        const leaseSeedlingCostD = data.land_lease_area * (data.lease_seedling_compensation || 0)
+        const purchaseSeedlingCostD = data.land_purchase_area * (data.seedling_compensation || 0)
+        cost = leaseCost + purchaseLandCost + leaseSeedlingCostD + purchaseSeedlingCostD
+        if ((data.lease_seedling_compensation && data.lease_seedling_compensation > 0) || (data.seedling_compensation && data.seedling_compensation > 0)) {
+          remark = `混合用地模式。租赁部分：${data.land_lease_area}亩×${data.land_lease_unit_price}万元/亩/年×${data.construction_years}年=${leaseCost.toFixed(2)}万元，青苗补偿费${data.land_lease_area}亩×${data.lease_seedling_compensation}万元/亩=${leaseSeedlingCostD.toFixed(2)}万元；征地部分：征地费${data.land_purchase_area}亩×${data.land_purchase_unit_price}万元/亩=${purchaseLandCost.toFixed(2)}万元，青苗补偿费${data.land_purchase_area}亩×${data.seedling_compensation}万元/亩=${purchaseSeedlingCostD.toFixed(2)}万元。`
         } else {
           remark = `混合用地模式。租赁部分：${data.land_lease_area}亩×${data.land_lease_unit_price}万元/亩/年×${data.construction_years}年=${leaseCost.toFixed(2)}万元；征地部分：${data.land_purchase_area}亩×${data.land_purchase_unit_price}万元/亩=${purchaseLandCost.toFixed(2)}万元。`
         }
@@ -115,7 +117,8 @@ const ProjectForm: React.FC = () => {
     formData.land_lease_unit_price,
     formData.land_purchase_area,
     formData.land_purchase_unit_price,
-    formData.seedling_compensation
+    formData.seedling_compensation,
+    formData.lease_seedling_compensation
   ])
 
   useEffect(() => {
@@ -149,6 +152,7 @@ const ProjectForm: React.FC = () => {
           land_purchase_area: projectData.land_purchase_area || 0,
           land_purchase_unit_price: projectData.land_purchase_unit_price || 0,
           seedling_compensation: projectData.seedling_compensation || 0,
+          lease_seedling_compensation: projectData.lease_seedling_compensation || 0,
         })
       } else {
         notifications.show({
@@ -193,7 +197,9 @@ const ProjectForm: React.FC = () => {
         })
 
         if (isEdit && id) {
-          navigate(`/investment/${id}`)
+          navigate(`/investment/${id}`, {
+            state: { autoGenerate: true }
+          })
         } else {
           const createdProjectId = response.data?.project?.id
           if (createdProjectId) {
@@ -289,6 +295,7 @@ const ProjectForm: React.FC = () => {
         land_purchase_area: 0,
         land_purchase_unit_price: 0,
         seedling_compensation: 0,
+        lease_seedling_compensation: 0,
       }))
       return
     }
@@ -320,6 +327,7 @@ const ProjectForm: React.FC = () => {
           land_purchase_area: analyzedData.land_purchase_area || 0,
           land_purchase_unit_price: analyzedData.land_purchase_unit_price || 0,
           seedling_compensation: 0, // 默认为0，需用户手动填写
+          lease_seedling_compensation: 0,
         }))
         
         // 构建大模型决策内容
@@ -607,6 +615,14 @@ const ProjectForm: React.FC = () => {
                           decimalScale={2}
                         />
                       </Grid.Col>
+                      <Grid.Col span={{ base: 12, md: 6 }}>
+                        <NumberInput
+                          label="租赁青苗补偿费 (万元/亩)"
+                          value={formData.lease_seedling_compensation}
+                          onChange={(val) => setFormData({ ...formData, lease_seedling_compensation: Number(val) || 0 })}
+                          decimalScale={2}
+                        />
+                      </Grid.Col>
                     </Grid>
                     <Text size="sm" fw={600} c="#1D2129" mt="md">征地部分</Text>
                     <Grid gutter="md">
@@ -628,7 +644,7 @@ const ProjectForm: React.FC = () => {
                       </Grid.Col>
                       <Grid.Col span={{ base: 12, md: 6 }}>
                         <NumberInput
-                          label="青苗补偿费 (万元/亩)"
+                          label="征地青苗补偿费 (万元/亩)"
                           value={formData.seedling_compensation}
                           onChange={(val) => setFormData({ ...formData, seedling_compensation: Number(val) || 0 })}
                           decimalScale={2}
@@ -699,9 +715,9 @@ const ProjectForm: React.FC = () => {
             <Stack gap="md">
               <Title order={4} style={{ fontSize: '16px', fontWeight: 600, color: '#1D2129' }}>项目操作</Title>
               <Group gap={isMobile ? 'xs' : 'sm'} wrap={isMobile ? 'wrap' : 'nowrap'}>
-                <Button 
+               <Button 
                   variant="filled"
-                  onClick={() => navigate(`/investment/${project.id}`)}
+                  onClick={() => navigate(`/investment/${project.id}`, { state: { autoGenerate: true } })}
                   style={{ 
                     flex: isMobile ? 1 : 'none',
                     height: '36px',
@@ -713,6 +729,7 @@ const ProjectForm: React.FC = () => {
                 >
                   投资估算
                 </Button>
+
                 {project.is_locked ? (
                   <Button 
                     variant="outline"

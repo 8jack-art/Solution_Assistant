@@ -47,6 +47,7 @@ async function ensureLandFields() {
     "ALTER TABLE investment_projects ADD COLUMN land_cost DECIMAL(15,4) DEFAULT 0",
     "ALTER TABLE investment_projects ADD COLUMN land_remark TEXT",
     "ALTER TABLE investment_projects ADD COLUMN seedling_compensation DECIMAL(15,4) DEFAULT 0",
+    "ALTER TABLE investment_projects ADD COLUMN lease_seedling_compensation DECIMAL(15,4) DEFAULT 0",
     "ALTER TABLE investment_estimates ADD COLUMN custom_land_cost DECIMAL(15,2) DEFAULT NULL COMMENT '自定义土地费用（万元）'"
   ]
 
