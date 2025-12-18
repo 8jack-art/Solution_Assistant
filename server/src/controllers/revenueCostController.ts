@@ -39,6 +39,7 @@ export class RevenueCostController {
    */
   static async save(req: AuthRequest, res: Response<ApiResponse>) {
     try {
+      console.log('🔹 [save] 请求体:', JSON.stringify(req.body, null, 2))
       const userId = req.user?.userId
       const isAdmin = req.user?.isAdmin
 
@@ -50,6 +51,7 @@ export class RevenueCostController {
       }
 
       const params = saveRevenueCostSchema.parse(req.body)
+      console.log('🔹 [save] 验证通过，解析后的params:', params)
       const { project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed } = params
 
       // 验证项目存在且有权限
@@ -139,8 +141,11 @@ export class RevenueCostController {
         data: { estimate: result }
       })
     } catch (error) {
-      console.error('保存收入成本建模数据失败:', error)
+      console.error('❌ 保存收入成本建模数据失败:', error)
+      console.error('❌ 错误详情:', (error as any).message)
+      console.error('❌ 错误堆栈:', (error as any).stack)
       if (error instanceof z.ZodError) {
+        console.error('❌ Zod验证错误:', error.errors)
         return res.status(400).json({
           success: false,
           error: '输入验证失败',
