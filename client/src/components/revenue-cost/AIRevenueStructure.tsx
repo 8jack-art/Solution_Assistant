@@ -511,7 +511,12 @@ const AIRevenueStructure: React.FC = () => {
             {/* 锁定开关 */}
             <Switch
               checked={revenueStructureLocked}
-              disabled={!aiAnalysisResult || !aiAnalysisResult.selected_categories || aiAnalysisResult.selected_categories.length === 0}
+              disabled={
+                generatingSuggestions || // AI分析中禁用
+                !aiAnalysisResult || 
+                !aiAnalysisResult.selected_categories || 
+                aiAnalysisResult.selected_categories.length === 0
+              }
               onChange={async (event) => {
                 const locked = event.currentTarget.checked
                 setRevenueStructureLocked(locked)
@@ -520,11 +525,14 @@ const AIRevenueStructure: React.FC = () => {
                   // 锁定时保存AI分析结果到数据库
                   if (context?.projectId && aiAnalysisResult) {
                     try {
+                      console.log('💾 开始保存AI分析结果...')
                       const response = await revenueCostApi.save({
                         project_id: context.projectId,
                         workflow_step: 'suggest',
                         ai_analysis_result: aiAnalysisResult,
                       })
+                      
+                      console.log('💾 保存响应:', response)
                       
                       if (response.success) {
                         console.log('✅ AI分析结果已保存到数据库')
@@ -538,9 +546,10 @@ const AIRevenueStructure: React.FC = () => {
                       }
                     } catch (error: any) {
                       console.error('❌ 保存AI分析结果失败:', error)
+                      console.error('❌ 错误详情:', error.response?.data || error.message)
                       notifications.show({
                         title: '保存失败',
-                        message: error.message || '请稍后重试',
+                        message: error.response?.data?.error || error.message || '请稍后重试',
                         color: 'red',
                       })
                       // 保存失败时取消锁定
