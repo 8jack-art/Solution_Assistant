@@ -410,11 +410,16 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       
       updateRevenueItem: (id, updates) => {
         const state = get()
-        set({
-          revenueItems: state.revenueItems.map(item =>
-            item.id === id ? { ...item, ...updates } : item
-          )
-        })
+        console.log('🔍 [Zustand Store] 更新收入项:', id, '更新内容:', updates)
+        console.log('🔍 [Zustand Store] 更新前的收入项:', state.revenueItems.find(item => item.id === id))
+        
+        const updatedItems = state.revenueItems.map(item =>
+          item.id === id ? { ...item, ...updates } : item
+        )
+        
+        console.log('🔍 [Zustand Store] 更新后的收入项:', updatedItems.find(item => item.id === id))
+        
+        set({ revenueItems: updatedItems })
       },
       
       deleteRevenueItem: (id) => {
