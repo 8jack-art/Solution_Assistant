@@ -31,13 +31,13 @@ import {
   IconEdit
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { useRevenueCostStore, CostItem } from '@/stores/revenueCostStore'
+import { useRevenueCostStore, CostItem, calculateTaxableIncome } from '@/stores/revenueCostStore'
 
 /**
  * 动态成本表格组件
  */
 const DynamicCostTable: React.FC = () => {
-  const { context, costItems } = useRevenueCostStore()
+  const { context, costItems, revenueItems } = useRevenueCostStore()
   
   const [showCostDetailModal, setShowCostDetailModal] = useState(false)
   
@@ -154,11 +154,15 @@ const DynamicCostTable: React.FC = () => {
               <Select
                 label="选择收入项目"
                 data={[
-                  { value: 'total', label: '整个项目收入' },
-                  { value: 'item1', label: '收入项1' },
-                  { value: 'item2', label: '收入项2' },
+                  { value: 'total', label: '整个项目年收入' },
+                  ...(revenueItems || []).map((item: any) => ({
+                    value: item.id,
+                    label: `${item.name} (年收入: ${(calculateTaxableIncome(item) * 10000).toFixed(2)}万元)`
+                  }))
                 ]}
                 placeholder="请选择收入项目"
+                value={currentRawMaterial.linkedRevenueId || 'total'}
+                onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, linkedRevenueId: value || undefined})}
               />
               <NumberInput
                 label="占收入的百分比 (%)"

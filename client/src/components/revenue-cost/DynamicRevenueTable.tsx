@@ -161,22 +161,25 @@ const DynamicRevenueTable: React.FC = () => {
       const response = await revenueCostApi.estimateItem(context.projectId, formData.name)
 
       if (response.success && response.data) {
-        // 应用AI估算结果
+        // 应用AI估算结果，包含remark备注
+        const aiData: any = response.data
         setFormData({
           ...formData,
-          category: response.data.category as RevenueCategory,
-          fieldTemplate: response.data.fieldTemplate as FieldTemplate,
-          quantity: response.data.quantity,
-          unitPrice: response.data.unitPrice,
+          category: aiData.category as RevenueCategory,
+          fieldTemplate: aiData.fieldTemplate as FieldTemplate,
+          quantity: aiData.quantity,
+          unit: aiData.unit,
+          unitPrice: aiData.unitPrice,
           priceUnit: 'wan-yuan', // AI返回的是万元
-          vatRate: response.data.vatRate,
-          area: response.data.area,
-          yieldPerArea: response.data.yieldPerArea,
-          capacity: response.data.capacity,
-          utilizationRate: response.data.utilizationRate,
-          subscriptions: response.data.subscriptions,
-          directAmount: response.data.directAmount,
-        } as Partial<RevenueItem>)
+          vatRate: aiData.vatRate,
+          area: aiData.area,
+          yieldPerArea: aiData.yieldPerArea,
+          capacity: aiData.capacity,
+          utilizationRate: aiData.utilizationRate,
+          subscriptions: aiData.subscriptions,
+          directAmount: aiData.directAmount,
+          remark: aiData.remark || '',
+        } as any)
 
         notifications.show({
           title: 'AI测算成功',
@@ -211,15 +214,25 @@ const DynamicRevenueTable: React.FC = () => {
       return
     }
 
+    // 处理单价单位转换：如果是“元”，需要转换为万元后再保存
+    const dataToSave = { ...formData }
+    if (dataToSave.priceUnit === 'yuan' && dataToSave.unitPrice) {
+      console.log('💰 单价单位为元，进行转换')
+      console.log('  原单价（元）:', dataToSave.unitPrice)
+      dataToSave.unitPrice = dataToSave.unitPrice / 10000 // 元转万元
+      dataToSave.priceUnit = 'wan-yuan' // 统一使用万元存储
+      console.log('  转换后（万元）:', dataToSave.unitPrice)
+    }
+
     if (isNewItem) {
-      addRevenueItem(formData)
+      addRevenueItem(dataToSave)
       notifications.show({
         title: '成功',
         message: '收入项已添加',
         color: 'green',
       })
     } else if (editingItem) {
-      updateRevenueItem(editingItem.id, formData)
+      updateRevenueItem(editingItem.id, dataToSave)
       notifications.show({
         title: '成功',
         message: '收入项已更新',
@@ -986,7 +999,7 @@ const DynamicRevenueTable: React.FC = () => {
             border: '1px dashed #E5E6EB'
           }}>
             <Text size="sm" c="#86909C">
-              暂无收入项，请点击"新增收入项"添加
+              {isGeneratingRef.current ? '正在使用AI生成...' : '暂无收入项，请点击"新增收入项"添加'}
             </Text>
           </div>
         ) : (
