@@ -2,10 +2,11 @@ const mysql = require('mysql2/promise');
 
 async function migrate() {
   const connection = await mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '123456',
-    database: 'investment_project_db'
+    host: 'sql.gxch.site',
+    port: 3306,
+    user: 'ProjInvDB',
+    password: '8Pd6tTKmkzY6rYSC',
+    database: 'ProjInvDB'
   });
 
   try {
