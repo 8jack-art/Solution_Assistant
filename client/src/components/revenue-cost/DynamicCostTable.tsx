@@ -246,7 +246,7 @@ const DynamicCostTable: React.FC = () => {
                       const selectedItem = (revenueItems || []).find((item: any) => item.id === currentRawMaterial.linkedRevenueId);
                       if (selectedItem) {
                         totalRevenue = selectedItem.priceUnit === 'yuan' ? calculateTaxableIncome(selectedItem) / 10000 : calculateTaxableIncome(selectedItem);
-                        unit = selectedItem.priceUnit === 'yuan' ? '万元' : selectedItem.priceUnit;
+                        unit = selectedItem.priceUnit === 'yuan' ? '万元' : (selectedItem.priceUnit || '');
                       }
                     }
                     
@@ -447,7 +447,7 @@ const DynamicCostTable: React.FC = () => {
                     {(() => {
                       // 计算所有原材料的总金额
                       let total = 0;
-                      costConfig.rawMaterials.items.forEach(item => {
+                      costConfig.rawMaterials.items.forEach((item: any) => {
                         if (item.sourceType === 'percentage') {
                           // 根据收入百分比计算
                           if (item.sourceType === 'percentage') {
@@ -488,7 +488,7 @@ const DynamicCostTable: React.FC = () => {
                     
                     // 计算该年的金额
                     let yearTotal = 0;
-                    costConfig.rawMaterials.items.forEach(item => {
+                    costConfig.rawMaterials.items.forEach((item: any) => {
                       if (item.sourceType === 'percentage') {
                         // 根据收入百分比计算
                         if (item.sourceType === 'percentage') {
@@ -532,7 +532,7 @@ const DynamicCostTable: React.FC = () => {
                 </Table.Tr>
                 
                 {/* 1.1, 1.2, 1.3... 原材料项 */}
-                {costConfig.rawMaterials.items.map((item, idx) => (
+                {costConfig.rawMaterials.items.map((item: any, idx: number) => (
                   <Table.Tr key={item.id}>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.{idx + 1}</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>
@@ -623,7 +623,7 @@ const DynamicCostTable: React.FC = () => {
                             color="red"
                             size="sm"
                             onClick={() => {
-                              const newItems = costConfig.rawMaterials.items.filter((_, i) => i !== idx);
+                              const newItems = costConfig.rawMaterials.items.filter((_: any, i: number) => i !== idx);
                               setCostConfig({
                                 ...costConfig,
                                 rawMaterials: {
@@ -707,35 +707,102 @@ const DynamicCostTable: React.FC = () => {
                 <Table.Tr>
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>4</Table.Td>
                   <Table.Td style={{ border: '1px solid #dee2e6' }}>进项税额</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                  {years.map((year) => (
-                    <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                      0.00
-                    </Table.Td>
-                  ))}
+                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                    {(() => {
+                      // 计算所有原材料的进项税总额
+                      let totalInputTax = 0;
+                      costConfig.rawMaterials.items.forEach((item: any) => {
+                        // 计算基础金额的辅助函数
+                        const calculateBaseAmount = () => {
+                          if (item.sourceType === 'percentage') {
+                            let revenueBase = 0;
+                            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                              revenueBase = revenueItems.reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                            } else {
+                              const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                              if (revItem) {
+                                revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                              }
+                            }
+                            return revenueBase * item.percentage / 100;
+                          } else if (item.sourceType === 'quantityPrice') {
+                            return item.quantity * item.unitPrice;
+                          } else if (item.sourceType === 'directAmount') {
+                            return item.directAmount;
+                          }
+                          return 0;
+                        };
+                        
+                        const baseAmount = calculateBaseAmount();
+                        // 进项税 = 基础金额 × 进项税率
+                        totalInputTax += baseAmount * item.taxRate / 100;
+                      });
+                      return totalInputTax.toFixed(2);
+                    })()}
+                  </Table.Td>
+                  {years.map((year) => {
+                    // 计算该年的进项税总额
+                    let yearInputTax = 0;
+                    costConfig.rawMaterials.items.forEach((item: any) => {
+                      // 计算基础金额的辅助函数
+                      const calculateBaseAmount = () => {
+                        if (item.sourceType === 'percentage') {
+                          let revenueBase = 0;
+                          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                            revenueBase = revenueItems.reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                          } else {
+                            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                            if (revItem) {
+                              revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                            }
+                          }
+                          return revenueBase * item.percentage / 100;
+                        } else if (item.sourceType === 'quantityPrice') {
+                          return item.quantity * item.unitPrice;
+                        } else if (item.sourceType === 'directAmount') {
+                          return item.directAmount;
+                        }
+                        return 0;
+                      };
+                      
+                      const baseAmount = calculateBaseAmount();
+                      // 应用达产率
+                      const productionRate = costConfig.rawMaterials.applyProductionRate 
+                        ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                        : 1;
+                      // 进项税 = 基础金额 × 达产率 × 进项税率
+                      yearInputTax += baseAmount * productionRate * item.taxRate / 100;
+                    });
+                    
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        {yearInputTax.toFixed(2)}
+                      </Table.Td>
+                    );
+                  })}
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                     {/* 序号为4的行不允许编辑 */}
                   </Table.Td>
                 </Table.Tr>
               </Table.Tbody>
-            </Table>
-            <Group justify="flex-end" mt="md">
-              <Checkbox
-                label="应用达产率"
-                checked={costConfig.rawMaterials.applyProductionRate}
-                onChange={(event) => setCostConfig({
-                  ...costConfig,
-                  rawMaterials: { 
-                    ...costConfig.rawMaterials, 
-                    applyProductionRate: event.currentTarget.checked 
-                  }
-                })}
-              />
-            </Group>
-          </>
-        )
-      })()}
-    </Modal>
+              </Table>
+              <Group justify="flex-end" mt="md">
+                <Checkbox
+                  label="应用达产率"
+                  checked={costConfig.rawMaterials.applyProductionRate}
+                  onChange={(event) => setCostConfig({
+                    ...costConfig,
+                    rawMaterials: { 
+                      ...costConfig.rawMaterials, 
+                      applyProductionRate: event.currentTarget.checked 
+                    }
+                  })}
+                />
+              </Group>
+            </>
+          )
+        })()}
+      </Modal>
   );
   // 渲染修理费配置弹窗
   const renderRepairModal = () => (
@@ -1153,7 +1220,7 @@ const DynamicCostTable: React.FC = () => {
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
                         let total = 0;
-                        costConfig.rawMaterials.items.forEach(item => {
+                        costConfig.rawMaterials.items.forEach((item: any) => {
                           if (item.sourceType === 'percentage') {
                             const revenueBase = revenueItems.reduce((sum, revItem) => {
                               const income = calculateTaxableIncome(revItem);
@@ -1175,7 +1242,7 @@ const DynamicCostTable: React.FC = () => {
                         : 1;
                       
                       let yearTotal = 0;
-                      costConfig.rawMaterials.items.forEach(item => {
+                      costConfig.rawMaterials.items.forEach((item: any) => {
                         if (item.sourceType === 'percentage') {
                           const revenueBase = revenueItems.reduce((sum, revItem) => {
                             const income = calculateTaxableIncome(revItem);
@@ -1208,6 +1275,80 @@ const DynamicCostTable: React.FC = () => {
                           </ActionIcon>
                         </Tooltip>
                       </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  
+                  {/* 1.1.1 进项税额 */}
+                  <Table.Tr>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1.1</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>进项税额</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        // 计算所有原材料的进项税总额
+                        let totalInputTax = 0;
+                        costConfig.rawMaterials.items.forEach((item: any) => {
+                          // 计算基础金额
+                          let baseAmount = 0;
+                          if (item.sourceType === 'percentage') {
+                            let revenueBase = 0;
+                            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                              revenueBase = revenueItems.reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                            } else {
+                              const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                              if (revItem) {
+                                revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                              }
+                            }
+                            baseAmount = revenueBase * item.percentage / 100;
+                          } else if (item.sourceType === 'quantityPrice') {
+                            baseAmount = item.quantity * item.unitPrice;
+                          } else if (item.sourceType === 'directAmount') {
+                            baseAmount = item.directAmount;
+                          }
+                          // 进项税 = 基础金额 × 进项税率
+                          totalInputTax += baseAmount * item.taxRate / 100;
+                        });
+                        return totalInputTax.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      // 计算该年的进项税总额
+                      let yearInputTax = 0;
+                      costConfig.rawMaterials.items.forEach((item: any) => {
+                        // 计算基础金额
+                        let baseAmount = 0;
+                        if (item.sourceType === 'percentage') {
+                          let revenueBase = 0;
+                          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                            revenueBase = revenueItems.reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                          } else {
+                            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                            if (revItem) {
+                              revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                            }
+                          }
+                          baseAmount = revenueBase * item.percentage / 100;
+                        } else if (item.sourceType === 'quantityPrice') {
+                          baseAmount = item.quantity * item.unitPrice;
+                        } else if (item.sourceType === 'directAmount') {
+                          baseAmount = item.directAmount;
+                        }
+                        // 应用达产率
+                        const productionRate = costConfig.rawMaterials.applyProductionRate 
+                          ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                          : 1;
+                        // 进项税 = 基础金额 × 达产率 × 进项税率
+                        yearInputTax += baseAmount * productionRate * item.taxRate / 100;
+                      });
+                      
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                          {yearInputTax.toFixed(2)}
+                        </Table.Td>
+                      );
+                    })}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {/* 进项税行不允许编辑 */}
                     </Table.Td>
                   </Table.Tr>
                   
@@ -1537,6 +1678,11 @@ const DynamicCostTable: React.FC = () => {
                   </Table.Tr>
                 </Table.Tbody>
               </Table>
+              
+              {/* 添加说明文本 */}
+              <Text size="sm" c="#666" mt="md">
+                💡 进项税额根据各原材料独立税率分别计算后合计，不采用统一税率
+              </Text>
             </>
           )
         })()}
