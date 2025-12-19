@@ -38,7 +38,7 @@ import { revenueCostApi } from '@/lib/api'
  * 动态成本表格组件
  */
 const DynamicCostTable: React.FC = () => {
-  const { context, costItems, revenueItems } = useRevenueCostStore()
+  const { context, costItems, revenueItems, productionRates } = useRevenueCostStore()
   
   const [showCostDetailModal, setShowCostDetailModal] = useState(false)
   
@@ -68,6 +68,14 @@ const DynamicCostTable: React.FC = () => {
         { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentageOfRevenue: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
         { id: 3, name: '原材料3', sourceType: 'directAmount', percentageOfRevenue: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
       ]
+    },
+    // 辅助材料费用配置
+    auxiliaryMaterials: {
+      type: 'percentage', // percentage, directAmount
+      percentageOfRevenue: 1, // 营业收入的百分比
+      directAmount: 0, // 直接金额
+      applyProductionRate: true, // 是否应用达产率
+      taxRate: 13, // 进项税率
     },
     // 外购燃料及动力费配置
     fuelPower: {
@@ -506,12 +514,69 @@ const DynamicCostTable: React.FC = () => {
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>
                       {item.name}
                     </Table.Td>
-                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                    {years.map((year) => (
-                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        0.00
-                      </Table.Td>
-                    ))}
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        // 计算该原材料项目的总金额
+                        let total = 0;
+                        if (item.sourceType === 'percentage') {
+                          // 根据收入百分比计算
+                          let revenueBase = 0;
+                          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                            // 整个项目收入
+                            revenueBase = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                          } else {
+                            // 特定收入项
+                            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                            if (revItem) {
+                              revenueBase = calculateTaxableIncome(revItem) / 10000;
+                            }
+                          }
+                          total += revenueBase * item.percentageOfRevenue / 100;
+                        } else if (item.sourceType === 'quantityPrice') {
+                          // 数量×单价
+                          total += item.quantity * item.unitPrice;
+                        } else if (item.sourceType === 'directAmount') {
+                          // 直接金额
+                          total += item.directAmount;
+                        }
+                        return total.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      const productionRate = costConfig.rawMaterials.applyProductionRate 
+                        ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                        : 1;
+                      
+                      // 计算该年的金额
+                      let yearTotal = 0;
+                      if (item.sourceType === 'percentage') {
+                        // 根据收入百分比计算
+                        let revenueBase = 0;
+                        if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                          // 整个项目收入
+                          revenueBase = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                        } else {
+                          // 特定收入项
+                          const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                          if (revItem) {
+                            revenueBase = calculateTaxableIncome(revItem) / 10000;
+                          }
+                        }
+                        yearTotal += revenueBase * item.percentageOfRevenue / 100 * productionRate;
+                      } else if (item.sourceType === 'quantityPrice') {
+                        // 数量×单价
+                        yearTotal += item.quantity * item.unitPrice * productionRate;
+                      } else if (item.sourceType === 'directAmount') {
+                        // 直接金额
+                        yearTotal += item.directAmount * productionRate;
+                      }
+                      
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                          {yearTotal.toFixed(2)}
+                        </Table.Td>
+                      );
+                    })}
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                       <Group gap={4} justify="center">
                         <Tooltip label="编辑">
@@ -556,11 +621,39 @@ const DynamicCostTable: React.FC = () => {
                 <Table.Tr>
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2</Table.Td>
                   <Table.Td style={{ border: '1px solid #dee2e6' }}>辅助材料费用</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                  {years.map((year) => (
-                    <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                      0.00
-                    </Table.Td>
+                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                    {(() => {
+                      let total = 0;
+                      if (costConfig.auxiliaryMaterials.type === 'percentage') {
+                        // 根据总收入计算百分比
+                        const totalRevenue = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                        total += totalRevenue * costConfig.auxiliaryMaterials.percentageOfRevenue / 100;
+                      } else if (costConfig.auxiliaryMaterials.type === 'directAmount') {
+                        total += costConfig.auxiliaryMaterials.directAmount;
+                      }
+                      return total.toFixed(2);
+                    })()}
+                  </Table.Td>
+                  {years.map((year) => {
+                    const productionRate = costConfig.auxiliaryMaterials.applyProductionRate 
+                      ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                      : 1;
+                    
+                    let yearTotal = 0;
+                    if (costConfig.auxiliaryMaterials.type === 'percentage') {
+                      // 根据总收入计算百分比
+                      const totalRevenue = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                      yearTotal += totalRevenue * costConfig.auxiliaryMaterials.percentageOfRevenue / 100 * productionRate;
+                    } else if (costConfig.auxiliaryMaterials.type === 'directAmount') {
+                      yearTotal += costConfig.auxiliaryMaterials.directAmount * productionRate;
+                    }
+                    
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        {yearTotal.toFixed(2)}
+                      </Table.Td>
+                    );
+                  })}
                   ))}
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                     <Group gap={4} justify="center">
@@ -581,11 +674,35 @@ const DynamicCostTable: React.FC = () => {
                 <Table.Tr>
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>3</Table.Td>
                   <Table.Td style={{ border: '1px solid #dee2e6' }}>其他</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                  {years.map((year) => (
-                    <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                      0.00
-                    </Table.Td>
+                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                    {(() => {
+                      let total = 0;
+                      if (costConfig.other.type === 'percentage') {
+                        // 根据总收入计算百分比
+                        const totalRevenue = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                        total += totalRevenue * costConfig.other.percentageOfRevenue / 100;
+                      } else if (costConfig.other.type === 'directAmount') {
+                        total += costConfig.other.directAmount;
+                      }
+                      return total.toFixed(2);
+                    })()}
+                  </Table.Td>
+                  {years.map((year) => {
+                    let yearTotal = 0;
+                    if (costConfig.other.type === 'percentage') {
+                      // 根据总收入计算百分比
+                      const totalRevenue = revenueItems.reduce((sum, revItem) => sum + (calculateTaxableIncome(revItem) / 10000), 0);
+                      yearTotal += totalRevenue * costConfig.other.percentageOfRevenue / 100;
+                    } else if (costConfig.other.type === 'directAmount') {
+                      yearTotal += costConfig.other.directAmount;
+                    }
+                    
+                    return (
+                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        {yearTotal.toFixed(2)}
+                      </Table.Td>
+                    );
+                  })}
                   ))}
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                     <Group gap={4} justify="center">
@@ -953,12 +1070,49 @@ const DynamicCostTable: React.FC = () => {
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>外购原材料费</Table.Td>
-                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                    {years.map((year) => (
-                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        0.00
-                      </Table.Td>
-                    ))}
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        let total = 0;
+                        costConfig.rawMaterials.items.forEach(item => {
+                          if (item.sourceType === 'percentage') {
+                            const revenueBase = revenueItems.reduce((sum, revItem) => {
+                              return sum + calculateTaxableIncome(revItem) / 10000;
+                            }, 0);
+                            total += revenueBase * (item.percentage || 0) / 100;
+                          } else if (item.sourceType === 'quantityPrice') {
+                            total += (item.quantity || 0) * (item.unitPrice || 0);
+                          } else if (item.sourceType === 'directAmount') {
+                            total += item.directAmount || 0;
+                          }
+                        });
+                        return total.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      const productionRate = costConfig.rawMaterials.applyProductionRate 
+                        ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                        : 1;
+                      
+                      let yearTotal = 0;
+                      costConfig.rawMaterials.items.forEach(item => {
+                        if (item.sourceType === 'percentage') {
+                          const revenueBase = revenueItems.reduce((sum, revItem) => {
+                            return sum + calculateTaxableIncome(revItem) / 10000;
+                          }, 0);
+                          yearTotal += revenueBase * (item.percentage || 0) / 100 * productionRate;
+                        } else if (item.sourceType === 'quantityPrice') {
+                          yearTotal += (item.quantity || 0) * (item.unitPrice || 0) * productionRate;
+                        } else if (item.sourceType === 'directAmount') {
+                          yearTotal += (item.directAmount || 0) * productionRate;
+                        }
+                      });
+                      
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                          {yearTotal.toFixed(2)}
+                        </Table.Td>
+                      );
+                    })}
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                       <Group gap={4} justify="center">
                         <Tooltip label="编辑">
@@ -979,12 +1133,35 @@ const DynamicCostTable: React.FC = () => {
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.2</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>外购燃料及动力费</Table.Td>
-                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                    {years.map((year) => (
-                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        0.00
-                      </Table.Td>
-                    ))}
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        let total = 0;
+                        if (costConfig.fuelPower.type === 'electricity') {
+                          total += costConfig.fuelPower.quantity * costConfig.fuelPower.unitPrice;
+                        } else {
+                          total += costConfig.fuelPower.directAmount;
+                        }
+                        return total.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      const productionRate = costConfig.fuelPower.applyProductionRate 
+                        ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                        : 1;
+                      
+                      let yearTotal = 0;
+                      if (costConfig.fuelPower.type === 'electricity') {
+                        yearTotal += costConfig.fuelPower.quantity * costConfig.fuelPower.unitPrice * productionRate;
+                      } else {
+                        yearTotal += costConfig.fuelPower.directAmount * productionRate;
+                      }
+                      
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                          {yearTotal.toFixed(2)}
+                        </Table.Td>
+                      );
+                    })}
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                       <Group gap={4} justify="center">
                         <Tooltip label="编辑">
@@ -1005,10 +1182,16 @@ const DynamicCostTable: React.FC = () => {
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.3</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>工资及福利费</Table.Td>
-                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        let total = 0;
+                        total += costConfig.wages.employees * costConfig.wages.salaryPerEmployee;
+                        return total.toFixed(2);
+                      })()}
+                    </Table.Td>
                     {years.map((year) => (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        0.00
+                        {(costConfig.wages.employees * costConfig.wages.salaryPerEmployee).toFixed(2)}
                       </Table.Td>
                     ))}
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
@@ -1031,10 +1214,28 @@ const DynamicCostTable: React.FC = () => {
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.4</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>修理费</Table.Td>
-                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        let total = 0;
+                        if (costConfig.repair.type === 'percentage') {
+                          total += (context?.fixedAssetInvestment || 0) * costConfig.repair.percentageOfFixedAssets / 100;
+                        } else {
+                          total += costConfig.repair.directAmount;
+                        }
+                        return total.toFixed(2);
+                      })()}
+                    </Table.Td>
                     {years.map((year) => (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        0.00
+                        {(() => {
+                          let yearTotal = 0;
+                          if (costConfig.repair.type === 'percentage') {
+                            yearTotal += (context?.fixedAssetInvestment || 0) * costConfig.repair.percentageOfFixedAssets / 100;
+                          } else {
+                            yearTotal += costConfig.repair.directAmount;
+                          }
+                          return yearTotal.toFixed(2);
+                        })()}
                       </Table.Td>
                     ))}
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
@@ -1057,10 +1258,34 @@ const DynamicCostTable: React.FC = () => {
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.5</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>其他费用</Table.Td>
-                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        let total = 0;
+                        if (costConfig.other.type === 'percentage') {
+                          const revenueBase = revenueItems.reduce((sum, revItem) => {
+                            return sum + calculateTaxableIncome(revItem) / 10000;
+                          }, 0);
+                          total += revenueBase * costConfig.other.percentageOfRevenue / 100;
+                        } else {
+                          total += costConfig.other.directAmount;
+                        }
+                        return total.toFixed(2);
+                      })()}
+                    </Table.Td>
                     {years.map((year) => (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        0.00
+                        {(() => {
+                          let yearTotal = 0;
+                          if (costConfig.other.type === 'percentage') {
+                            const revenueBase = revenueItems.reduce((sum, revItem) => {
+                              return sum + calculateTaxableIncome(revItem) / 10000;
+                            }, 0);
+                            yearTotal += revenueBase * costConfig.other.percentageOfRevenue / 100;
+                          } else {
+                            yearTotal += costConfig.other.directAmount;
+                          }
+                          return yearTotal.toFixed(2);
+                        })()}
                       </Table.Td>
                     ))}
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
