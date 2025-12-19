@@ -410,16 +410,11 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       
       updateRevenueItem: (id, updates) => {
         const state = get()
-        console.log('🔍 [Zustand Store] 更新收入项:', id, '更新内容:', updates)
-        console.log('🔍 [Zustand Store] 更新前的收入项:', state.revenueItems.find(item => item.id === id))
-        
-        const updatedItems = state.revenueItems.map(item =>
-          item.id === id ? { ...item, ...updates } : item
-        )
-        
-        console.log('🔍 [Zustand Store] 更新后的收入项:', updatedItems.find(item => item.id === id))
-        
-        set({ revenueItems: updatedItems })
+        set({
+          revenueItems: state.revenueItems.map(item =>
+            item.id === id ? { ...item, ...updates } : item
+          )
+        })
       },
       
       deleteRevenueItem: (id) => {
@@ -600,17 +595,16 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               modelData = estimate.model_data
             }
             
-            // 获取当前状态，确保在modelData不存在相关数据时保留当前数据
-            const currentState = get()
-            
             // 更新状态
             set({
-              revenueItems: modelData?.revenueItems || currentState.revenueItems,
-              costItems: modelData?.costItems || currentState.costItems,
-              productionRates: modelData?.productionRates || currentState.productionRates,
-              aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || currentState.aiAnalysisResult,
-              currentStep: estimate.workflow_step || currentState.currentStep
-            })          }          
+              revenueItems: modelData?.revenueItems || [],
+              costItems: modelData?.costItems || [],
+              productionRates: modelData?.productionRates || [],
+              aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || null,
+              currentStep: estimate.workflow_step || 'period'
+            })
+          }
+          
           set({ isSubmitting: false })
           return response.success
         } catch (error) {

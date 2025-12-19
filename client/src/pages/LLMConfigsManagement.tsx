@@ -17,6 +17,10 @@ import {
   Grid,
   Checkbox,
   Autocomplete,
+  Code,
+  CopyButton,
+  Tooltip,
+  ActionIcon,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useMediaQuery } from '@mantine/hooks'
@@ -170,10 +174,40 @@ const LLMConfigsManagement: React.FC = () => {
       const response = await llmConfigApi.testConnection(testData)
       
       if (response.success) {
+        // 显示调试信息
+        const debugInfo = {
+          config: testData,
+          response: response.data,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent
+        }
+        
         notifications.show({
           title: '连接测试成功',
-          message: 'LLM服务连接正常',
+          message: (
+            <div>
+              <Text size="sm" mb="xs">LLM服务连接正常</Text>
+              <Code block style={{ fontSize: '12px', maxHeight: '200px', overflow: 'auto' }}>
+                {JSON.stringify(debugInfo, null, 2)}
+              </Code>
+              <CopyButton value={JSON.stringify(debugInfo, null, 2)}>
+                {({ copied, copy }) => (
+                  <Tooltip label={copied ? '已复制' : '复制调试信息'}>
+                    <ActionIcon 
+                      color={copied ? 'teal' : 'blue'} 
+                      onClick={copy}
+                      size="sm"
+                      mt="xs"
+                    >
+                      {copied ? '✅' : '📋'}
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </CopyButton>
+            </div>
+          ),
           color: 'green',
+          autoClose: 10000,
         })
       } else {
         notifications.show({

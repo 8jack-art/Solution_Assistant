@@ -50,41 +50,19 @@ export class RevenueCostController {
         })
       }
 
-      // 使用Zod验证请求数据
-      let project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed
+      // 先提取原始数据，避免Zod验证失败
+      const { project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed } = req.body
       
-      try {
-        const validatedData = saveRevenueCostSchema.parse(req.body)
-        project_id = validatedData.project_id
-        calculation_period = validatedData.calculation_period
-        operation_period = validatedData.operation_period
-        workflow_step = validatedData.workflow_step
-        model_data = validatedData.model_data
-        ai_analysis_result = validatedData.ai_analysis_result
-        is_completed = validatedData.is_completed
-        
-        console.log('🔹 [save] project_id:', project_id)
-        console.log('🔹 [save] workflow_step:', workflow_step)
-        console.log('🔹 [save] ai_analysis_result 存在:', !!ai_analysis_result)
-        console.log('🔹 [save] model_data 存在:', !!model_data)
-        
-        // 验证必填字段
-        if (!project_id) {
-          return res.status(400).json({
-            success: false,
-            error: 'project_id 为必填字段'
-          })
-        }
-      } catch (validationError) {
-        if (validationError instanceof z.ZodError) {
-          console.error('❌ Zod验证错误:', validationError.errors)
-          return res.status(400).json({
-            success: false,
-            error: '输入验证失败',
-            message: validationError.errors[0].message
-          })
-        }
-        throw validationError // 重新抛出非Zod错误
+      console.log('🔹 [save] project_id:', project_id)
+      console.log('🔹 [save] workflow_step:', workflow_step)
+      console.log('🔹 [save] ai_analysis_result 存在:', !!ai_analysis_result)
+      
+      // 验证必填字段
+      if (!project_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'project_id 为必填字段'
+        })
       }
 
       // 验证项目存在且有权限

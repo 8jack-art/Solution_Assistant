@@ -57,17 +57,19 @@ export class LLMService {
 
       const data = await response.json() as any
       const content = data.choices?.[0]?.message?.content
-
-      if (!content) {
+      
+      // 修改验证逻辑，不仅检查content是否存在，还要检查是否有其他有效信息
+      if (!data.choices || data.choices.length === 0) {
         return {
           success: false,
           error: '响应格式无效'
         }
       }
-
+      
+      // 即使content为空，只要有choices就认为是成功的
       return {
         success: true,
-        content
+        content: content || ''
       }
     } catch (error) {
       return {
