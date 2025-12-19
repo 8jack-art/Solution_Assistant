@@ -610,9 +610,7 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               productionRates: modelData?.productionRates || currentState.productionRates,
               aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || currentState.aiAnalysisResult,
               currentStep: estimate.workflow_step || currentState.currentStep
-            })
-          }
-          
+            })          }          
           set({ isSubmitting: false })
           return response.success
         } catch (error) {

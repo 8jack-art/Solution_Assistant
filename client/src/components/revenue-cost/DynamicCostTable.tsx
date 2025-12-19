@@ -60,57 +60,69 @@ const DynamicCostTable: React.FC = () => {
   const [currentRawMaterial, setCurrentRawMaterial] = useState<any>(null)
   const [rawMaterialIndex, setRawMaterialIndex] = useState<number | null>(null)
   
-  // 成本配置参数状态
-  const [costConfig, setCostConfig] = useState({
-    // 外购原材料费配置
-    rawMaterials: {
-      applyProductionRate: true, // 是否应用达产率
-      items: [
-        { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentage: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
-        { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentage: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
-        { id: 3, name: '原材料3', sourceType: 'directAmount', percentage: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
-      ]
-    },
-    // 辅助材料费用配置
-    auxiliaryMaterials: {
-      type: 'percentage', // percentage, directAmount
-      percentage: 1, // 营业收入的百分比
-      directAmount: 0, // 直接金额
-      applyProductionRate: true, // 是否应用达产率
-      taxRate: 13, // 进项税率
-    },
-    // 外购燃料及动力费配置
-    fuelPower: {
-      type: 'electricity', // electricity, water, gasoline, diesel
-      quantity: 0,
-      unitPrice: 0,
-      directAmount: 0,
-      applyProductionRate: true, // 是否应用达产率
-      taxRate: 13, // 进项税率
-    },
-    // 工资及福利费配置
-    wages: {
-      employees: 10, // 人数
-      salaryPerEmployee: 5, // 每人单价(万元)
-      directAmount: 0, // 直接金额
-      taxRate: 0, // 进项税率
-    },
-    // 修理费配置
-    repair: {
-      type: 'percentage', // percentage, directAmount
-      percentageOfFixedAssets: 2, // 固定资产投资的百分比
-      directAmount: 0, // 直接金额
-      taxRate: 13, // 进项税率
-    },
-    // 其他费用配置
-    otherExpenses: {
-      type: 'percentage', // percentage, directAmount
-      percentage: 3, // 营业收入的百分比
-      directAmount: 0, // 直接金额
-      taxRate: 6, // 进项税率
+  // 成本配置参数状态 - 从store加载或使用默认值
+  const [costConfig, setCostConfig] = useState(() => {
+    // 尝试从localStorage加载配置
+    const savedConfig = localStorage.getItem('costConfig');
+    if (savedConfig) {
+      try {
+        return JSON.parse(savedConfig);
+      } catch (e) {
+        console.warn('解析保存的成本配置失败，使用默认配置');
+      }
     }
+    
+    // 默认配置
+    return {
+      // 外购原材料费配置
+      rawMaterials: {
+        applyProductionRate: true, // 是否应用达产率
+        items: [
+          { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentage: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
+          { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentage: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
+          { id: 3, name: '原材料3', sourceType: 'directAmount', percentage: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
+        ]
+      },
+      // 辅助材料费用配置
+      auxiliaryMaterials: {
+        type: 'percentage', // percentage, directAmount
+        percentage: 1, // 营业收入的百分比
+        directAmount: 0, // 直接金额
+        applyProductionRate: true, // 是否应用达产率
+        taxRate: 13, // 进项税率
+      },
+      // 外购燃料及动力费配置
+      fuelPower: {
+        type: 'electricity', // electricity, water, gasoline, diesel
+        quantity: 0,
+        unitPrice: 0,
+        directAmount: 0,
+        applyProductionRate: true, // 是否应用达产率
+        taxRate: 13, // 进项税率
+      },
+      // 工资及福利费配置
+      wages: {
+        employees: 10, // 人数
+        salaryPerEmployee: 5, // 每人单价(万元)
+        directAmount: 0, // 直接金额
+        taxRate: 0, // 进项税率
+      },
+      // 修理费配置
+      repair: {
+        type: 'percentage', // percentage, directAmount
+        percentageOfFixedAssets: 2, // 固定资产投资的百分比
+        directAmount: 0, // 直接金额
+        taxRate: 13, // 进项税率
+      },
+      // 其他费用配置
+      otherExpenses: {
+        type: 'percentage', // percentage, directAmount
+        percentage: 3, // 营业收入的百分比
+        directAmount: 0, // 直接金额
+        taxRate: 6, // 进项税率
+      }
+    };
   });
-
   // Card with actions grid 的数据
   const costItemsData = [
     { 
@@ -165,12 +177,14 @@ const DynamicCostTable: React.FC = () => {
               <Select
                 label="选择收入项目"
                 data={[
-                  { value: 'total', label: '整个项目年收入' },
+                  { 
+                    value: 'total', 
+                    label: `整个项目年收入 (${revenueItems.reduce((sum, item) => sum + (item.priceUnit === 'yuan' ? calculateTaxableIncome(item) / 10000 : calculateTaxableIncome(item)), 0).toFixed(2)}万元)` 
+                  },
                   ...(revenueItems || []).map((item: any) => ({
                     value: item.id,
-                    label: `${item.name} (年收入: ${(item.priceUnit === 'yuan' ? calculateTaxableIncome(item) / 10000 : calculateTaxableIncome(item)).toFixed(2)}${item.priceUnit === 'yuan' ? '万元' : item.priceUnit})`
-                  }))
-                ]}
+                    label: `${item.name} (年收入: ${(item.priceUnit === 'yuan' ? calculateTaxableIncome(item) / 10000 : calculateTaxableIncome(item)).toFixed(2)}万元)`
+                  }))                ]}
                 placeholder="请选择收入项目"
                 value={currentRawMaterial.linkedRevenueId || 'total'}
                 onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, linkedRevenueId: value || undefined})}
@@ -299,21 +313,38 @@ const DynamicCostTable: React.FC = () => {
                     }
                   });
                   
+                  // 保存到localStorage
+                  localStorage.setItem('costConfig', JSON.stringify({
+                    ...costConfig,
+                    rawMaterials: {
+                      ...costConfig.rawMaterials,
+                      items: newItems
+                    }
+                  }));
+                  
                   // 保存到后端
                   try {
                     const state = useRevenueCostStore.getState();
                     if (state.context?.projectId) {
+                      // 获取当前的model_data
+                      const currentModelData = {
+                        revenueItems: state.revenueItems,
+                        costItems: state.costItems,
+                        productionRates: state.productionRates,
+                        aiAnalysisResult: state.aiAnalysisResult,
+                        costConfig: {
+                          ...costConfig,
+                          rawMaterials: {
+                            ...costConfig.rawMaterials,
+                            items: newItems
+                          }
+                        },
+                        workflow_step: state.currentStep
+                      };
+                      
                       await revenueCostApi.save({
                         project_id: state.context.projectId,
-                        model_data: {
-                          costConfig: {
-                            ...costConfig,
-                            rawMaterials: {
-                              ...costConfig.rawMaterials,
-                              items: newItems
-                            }
-                          }
-                        }
+                        model_data: currentModelData
                       });
                       console.log('✅ 原材料配置已保存到数据库');
                     }
@@ -324,8 +355,7 @@ const DynamicCostTable: React.FC = () => {
                       message: '数据未保存到数据库，请稍后重试',
                       color: 'red',
                     });
-                  }
-                }
+                  }                }
                 setShowRawMaterialEditModal(false);
               }} 
               style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
@@ -346,49 +376,35 @@ const DynamicCostTable: React.FC = () => {
       title={
         <Group justify="space-between" w="100%">
           <Text>📊 外购原材料费估算表</Text>
-          <Group gap="xs">
-            <Checkbox
-              label="应用达产率"
-              checked={costConfig.rawMaterials.applyProductionRate}
-              onChange={(event) => setCostConfig({
-                ...costConfig,
-                rawMaterials: { 
-                  ...costConfig.rawMaterials, 
-                  applyProductionRate: event.currentTarget.checked 
-                }
-              })}
-            />
-            <Tooltip label="添加原材料">
-              <ActionIcon 
-                variant="filled" 
-                color="blue" 
-                onClick={() => {
-                  const newItem = {
-                    id: Date.now(),
-                    name: `原材料${costConfig.rawMaterials.items.length + 1}`,
-                    sourceType: 'percentage',
-                    linkedRevenueId: 'total',
-                    percentage: 0,
-                    quantity: 0,
-                    unitPrice: 0,
-                    directAmount: 0,
-                    taxRate: 13
-                  };
-                  setCostConfig({
-                    ...costConfig,
-                    rawMaterials: {
-                      ...costConfig.rawMaterials,
-                      items: [...costConfig.rawMaterials.items, newItem]
-                    }
-                  });
-                }}
-              >
-                <IconPlus size={16} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
-        </Group>
-      }
+          <Tooltip label="添加原材料">
+            <ActionIcon 
+              variant="filled" 
+              color="blue" 
+              onClick={() => {
+                const newItem = {
+                  id: Date.now(),
+                  name: `原材料${costConfig.rawMaterials.items.length + 1}`,
+                  sourceType: 'percentage',
+                  linkedRevenueId: 'total',
+                  percentage: 0,
+                  quantity: 0,
+                  unitPrice: 0,
+                  directAmount: 0,
+                  taxRate: 13
+                };
+                setCostConfig({
+                  ...costConfig,
+                  rawMaterials: {
+                    ...costConfig.rawMaterials,
+                    items: [...costConfig.rawMaterials.items, newItem]
+                  }
+                });
+              }}
+            >
+              <IconPlus size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>      }
       size="calc(100vw - 100px)"
       styles={{
         body: {

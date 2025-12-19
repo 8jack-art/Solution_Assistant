@@ -40,7 +40,7 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
   useEffect(() => {
     if (initialData && opened) {
       // 编辑模式：保留原有数据
-      setFormData({
+      const formDataToSet = {
         name: initialData.name || '',
         category: initialData.category || 'other',
         unit: initialData.unit || '',
@@ -50,7 +50,9 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
         vatRate: initialData.vatRate || 9,
         priceIncreaseInterval: initialData.priceIncreaseInterval || 0,
         priceIncreaseRate: initialData.priceIncreaseRate || 0,
-      })
+      }
+      
+      setFormData(formDataToSet)
     } else if (!initialData && opened) {
       // 新增模式：默认值
       setFormData({
@@ -66,14 +68,23 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
       })
     }
   }, [initialData, opened])
-
   const handleSave = () => {
     if (!formData.name || !formData.unit || formData.quantity <= 0 || formData.unitPrice <= 0) {
       return
     }
-    onSave(formData)
+    
+    // 处理单价单位转换：如果是"元"，需要转换为万元后再保存
+    const dataToSave = { ...formData }
+    
+    // 在保存到数据库前，将所有元单位转换为万元单位
+    if (dataToSave.unitPriceUnit === 'yuan' && dataToSave.unitPrice !== undefined) {
+      // 元 -> 万元
+      dataToSave.unitPrice = dataToSave.unitPrice / 10000
+      // 注意：我们不改变unitPriceUnit，这样在编辑时就能知道用户最初选择了什么单位
+    }
+    
+    onSave(dataToSave)
   }
-
   const categoryOptions = [
     { value: 'agriculture-crop', label: '🌾 农业种植类' },
     { value: 'agriculture-aquaculture', label: '🐟 水产养殖类' },

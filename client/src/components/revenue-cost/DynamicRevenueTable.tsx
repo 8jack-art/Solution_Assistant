@@ -123,15 +123,18 @@ const DynamicRevenueTable: React.FC = () => {
     formDataToSet.priceUnit = (item.priceUnit || 'wan-yuan') as 'yuan' | 'wan-yuan'
     
     // 根据保存的价格单位转换数值以便编辑
-    // 注意：数据库中保存的是万元，所以如果用户选择元单位，需要转换为元显示
+    // 注意：数据库中保存的是万元单位，所以如果用户选择元单位，需要转换为元显示
     if (formDataToSet.unitPrice !== undefined) {
       if (formDataToSet.priceUnit === 'yuan') {
-        // 用户选择的是元单位，将万元转换为元显示
+        // 用户之前选择的是元单位，数据库中保存的是万元值，需要转换为元显示
+        // 万元 -> 元：乘以 10000
         formDataToSet.unitPrice = formDataToSet.unitPrice * 10000
+        console.log('🔄 [编辑] 单位转换 (万元->元):', formDataToSet.unitPrice / 10000, '->', formDataToSet.unitPrice)
+      } else {
+        // 万元单位，直接使用数据库中的值（已经是万元单位）
+        console.log('🔄 [编辑] 保持万元单位:', formDataToSet.unitPrice)
       }
-      // 如果是万元单位，直接使用数据库中的值
-    }
-    
+    }    
     setFormData(formDataToSet)
     setEditingItem(item)
     setIsNewItem(false)
@@ -139,7 +142,6 @@ const DynamicRevenueTable: React.FC = () => {
     
     console.log('✅ [编辑] 表单设置完成:', formDataToSet)
   }
-
   /**
    * 删除收入项
    */
@@ -260,7 +262,7 @@ const DynamicRevenueTable: React.FC = () => {
     if (dataToSave.priceUnit === 'yuan' && dataToSave.unitPrice !== undefined) {
       // 元 -> 万元
       dataToSave.unitPrice = dataToSave.unitPrice / 10000
-      dataToSave.priceUnit = 'wan-yuan' as const
+      // 注意：我们不改变priceUnit的值，这样在编辑时就知道用户最初选择了什么单位
       
       console.log('💰 [保存] 单位转换:', {
         原单位: 'yuan',
@@ -268,8 +270,7 @@ const DynamicRevenueTable: React.FC = () => {
         新单位: dataToSave.priceUnit,
         新单价: dataToSave.unitPrice
       })
-    }
-    
+    }    
     console.log('🔍 最终保存的数据:', dataToSave)
 
     // 先更新本地状态
