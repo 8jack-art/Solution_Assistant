@@ -7,7 +7,7 @@ const API_BASE_URL = '/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 60000, // 增加到60秒超时
 })
 
 api.interceptors.request.use(
@@ -140,6 +140,8 @@ export const llmConfigApi = {
     api.post<any, ApiResponse<{ analyzed_data: any; config_name: string }>>('/llm/analyze-project-info', {
       project_info: projectInfo,
       use_default_config: true
+    }, {
+      timeout: 60000 // 为项目分析设置60秒超时
     }),
 
   analyzeEngineeringItems: (params: { project_name: string; project_description?: string; total_investment: number }) =>
