@@ -130,6 +130,9 @@ const RevenueCostModeling: React.FC = () => {
     const loadProjectData = async () => {
       try {
         setLoading(true)
+        
+        // 获取store方法
+        const { loadFromBackend } = useRevenueCostStore.getState()
         const [projectResponse, estimateResponse, revenueCostResponse] = await Promise.all([
           projectApi.getById(id!),
           investmentApi.getByProjectId(id!),
@@ -183,7 +186,10 @@ const RevenueCostModeling: React.FC = () => {
           const revenueCostData = revenueCostResponse.data.estimate
           console.log('✅ 成功加载收入成本数据')
           
-          // 恢复AI分析结果
+          // 使用store的loadFromBackend方法恢复完整数据
+          await loadFromBackend(id!)
+          
+          // 恢复AI分析结果（如果store中没有的话）
           if (revenueCostData.ai_analysis_result) {
             console.log('🤖 恢复AI分析结果:', revenueCostData.ai_analysis_result)
             setAiAnalysisResult(revenueCostData.ai_analysis_result)

@@ -498,17 +498,9 @@ export function analyzeRevenueStructurePrompt(
 }
 
 export function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[] {
-  const systemPrompt = `你是一个专业的项目分析助手。请仔细分析用户提供的项目信息描述，提取关键信息并以严格的JSON格式返回。
+  const systemPrompt = `你是一个专业的项目分析助手。请仔细分析用户提供的项目信息描述,提取关键信息并以JSON格式返回。
 
-## 严格要求：
-1. **只返回JSON格式内容，不包含任何其他文字或说明**
-2. **确保JSON格式严格有效，所有字段必须正确闭合**
-3. **不要在JSON前后添加任何引号、标记或解释文字**
-4. **如果某个字段值未知，使用合理的默认值填充**
-
-## JSON格式要求：
-请严格按照以下JSON格式输出，所有字段必须填写：
-
+Please严格按照 following JSON format output,all fields must be filled:
 {
   "project_name": "项目名称",
   "total_investment": 数值(单位:万元),
@@ -529,7 +521,7 @@ export function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[] {
   "lease_seedling_compensation": 数值(租赁青苗补偿费,万元,D模式时填写)
 }
 
-## 土地模式决策逻辑：
+土地模式决策逻辑：
 1. A(一次性征地): 政府主导、基础性、永久性项目(如水库、交通枢纽、数据中心)
    - 计算: land_cost = land_area × land_unit_price + seedling_compensation
    - 备注: "按一次性征地模式,[N]亩×[单价]万元/亩 + 青苗补偿[X]万元估算。"
@@ -539,71 +531,75 @@ export function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[] {
    - 计算: land_cost = construction_years × land_unit_price × land_area
    - 备注: "按租地模式估算,计入建设期[N]年租金,[M]亩×[单价]万元/亩/年。"
 
-3. C(无土地需求): 纯软件、SaaS平台类项目
-   - land_cost = 0
-   - 备注: "纯软件类项目,无土地需求。"
+3. C(无土地需求): 软件开发、技术服务、平台运营等轻资产项目
+   - 计算: land_cost = 0
+   - 备注: "轻资产项目,无土地需求。"
 
-4. D(混合用地模式): 包含种植/养殖+加工/仓储等永久性设施的项目
-   - 需要填写: land_lease_area, land_lease_unit_price, land_purchase_area, land_purchase_unit_price, seedling_compensation, lease_seedling_compensation
-   - 计算: land_cost = (construction_years × land_lease_unit_price × land_lease_area) + (land_purchase_area × land_purchase_unit_price) + (land_lease_area × lease_seedling_compensation) + (land_purchase_area × seedling_compensation)
+4. D(混合用地): 种植+加工设施项目(如现代农业示范园)
+   - 租赁部分: land_lease_area × land_lease_unit_price × construction_years
+   - 征地部分: land_purchase_area × land_purchase_unit_price + seedling_compensation
+   - 总费用: land_cost = (construction_years × land_lease_unit_price × land_lease_area) + (land_purchase_area × land_purchase_unit_price) + (land_lease_area × lease_seedling_compensation) + (land_purchase_area × seedling_compensation)
    - 备注: "混合用地模式。租赁部分:[...含租赁青苗补偿...]; 征地部分:[...含征地青苗补偿...]"
 
-## 填写默认值规则：
-1. 如果信息不足，请根据行业惯例给出合理估计
-2. 贷款比例一般为60-80%
-3. 贷款利率一般为3-6%
-4. 建设期一般为2-5年
-5. 运营期一般为17-30年
-6. 土地征用和租赁价格根据项目所在位置和"广西土地征用和租赁价格范围表"确定
+注意事项:
+1. If information does not specify a field, please give a reasonable estimate based on industry conventions
+2. Loan ratio is generally 60-80%
+3. Loan interest rate is generally 3-6%
+4. Construction period is generally 2-5 years
+5. Operation period is generally 17-30 years
+6. Land acquisition and leasing prices are determined based on the project's location and the "Guangxi Land Acquisition and Leasing Price Range" table
+7. Only return JSON format, do not include any other text
 
-## 广西土地征用和租赁价格范围表 (2024-2025, 单位:万元/亩)
+Guangxi Land Acquisition and Leasing Price Range (2024-2025, unit: yuan/acre)
 
-一、土地征用价格范围 (区片综合地价,含土地补偿费+安置补助费)
+一、Land acquisition price range (district comprehensive land price, including land compensation fee + resettlement allowance)
 
-| 地区 | 基本农田 | 建设用地 | 未利用地 | 典型区域 |
-|------|---------|---------|---------|---------|
-| 南宁市 | 3.5~4.8万 | 1.4~1.8万 | 0.4~1.8万 | 良庆区、武鸣县 |
-| 柳州市 | 3.8~4.4万 | 1.4~1.6万 | 0.35~1.6万 | 市区、柳南区 |
-| 桂林市 | 3.6~6.5万 | 1.3~2.4万 | 0.3~2.4万 | 临桂区、龙胜县 |
-| 梧州市 | 3.6~4.4万 | 1.3~1.6万 | 0.3~1.6万 | 藤县、蒙山县 |
-| 北海市 | 3.5~4.2万 | 1.3~1.5万 | 0.3~1.5万 | 市区 |
-| 防城港市 | 3.5~4.0万 | 1.3~1.5万 | 0.3~1.5万 | 港口区、东兴市 |
-| 钦州市 | 3.5~4.2万 | 1.3~1.5万 | 0.3~1.5万 | 市区 |
-| 贵港市 | 3.5~4.0万 | 1.3~1.5万 | 0.3~1.5万 | 港北区、平南县 |
-| 玉林市 | 3.5~4.0万 | 1.3~1.5万 | 0.3~1.5万 | 玉州区 |
-| 百色市 | 3.5~4.2万 | 1.3~1.5万 | 0.3~1.5万 | 田阳区、右江区 |
-| 贺州市 | 3.5~4.0万 | 1.3~1.5万 | 0.3~1.5万 | 八步区 |
-| 河池市 | 3.5~8.3万 | 1.3~3.0万 | 0.3~3.0万 | 金城江区、宜州区 |
-| 来宾市 | 3.5~4.3万 | 1.3~1.6万 | 0.3~1.6万 | 兴宾区、兴安县 |
-| 崇左市 | 3.5~3.6万 | 1.3~1.4万 | 0.3~1.4万 | 江州区、凭祥市 |
+| Region    | Basic farmland      | Construction land      | Unutilized land      | Typical area           |
+|---------|---------------|---------------|---------------|--------------------|
+| Nanning    | 3.5~4.8万     | 1.4~1.8万     | 0.4~1.8万     | Liangqing District, Wuming County     |
+| Liuzhou    | 3.8~4.4万     | 1.4~1.6万     | 0.35~1.6万    | City area, Liuzhou District     |
+| Guilin    | 3.6~6.5万     | 1.3~2.4万     | 0.3~2.4万     | Lingui District, Longsheng County     |
+| Wuzhou    | 3.6~4.4万     | 1.3~1.6万     | 0.3~1.6万     | Teng County, Mengshan County       |
+| Beihai    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | City area             |
+| Fangchenggang  | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Port Area, Dongxing City     |
+| Qinzhou    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | City area             |
+| Guigang    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Guobei District, Pingnan County     |
+| Yulin    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Yuzhou District             |
+| Baise    | 3.5~4.2万     | 1.3~1.5万     | 0.3~1.5万     | Tianyang District, Youjiang District     |
+| Hezhou    | 3.5~4.0万     | 1.3~1.5万     | 0.3~1.5万     | Babu District             |
+| Hechi    | 3.5~8.3万     | 1.3~3.0万     | 0.3~3.0万     | Jinchengjiang District, Yizhou County   |
+| Laibin    | 3.5~4.3万     | 1.3~1.6万     | 0.3~1.6万     | Xingbin District, Xingzhou County     |
+| Chongzuo    | 3.5~3.6万     | 1.3~1.4万     | 0.3~1.4万     | Jiangzhou District, Pingxiang City     |
 
-二、土地租赁价格范围 (实际成交与市场行情)
+二、Land leasing price range (actual transactions and market conditions)
 
-| 地区 | 农用地(万元/亩/年) | 工业用地(万元/亩/年) | 建设用地(万元/亩/年) | 市场案例说明 |
-|------|------------------|------------------|------------------|------------|
-| 南宁市 | 0.05~0.2万 | 1.5万~5万 | 0.8万~2万 | 宾阳工业用地拍卖5万/亩/年 |
-| 柳州市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | 柳州工业用地交易约15.7万/亩(年租约1.6万) |
-| 桂林市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | 农用地一般1000-1500元/亩/年 |
-| 梧州市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 北海市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 防城港市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 钦州市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 贵港市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 玉林市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 百色市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 贺州市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 河池市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | 天峨县工业用地拍卖1300元/亩/年 |
-| 来宾市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | — |
-| 崇左市 | 0.05~0.2万 | 1.5万~4万 | 0.8万~2万 | 凭祥市工业用地1.5万/亩/年 |
+| Region    | Agricultural land (yuan/acre/year) | Industrial land (yuan/acre/year) | Construction land (yuan/acre/year) | Market case description                  |
+|---------|----------------------|----------------------|----------------------|-------------------------------|
+| Nanning    | 500~2000             | 1.5万~5万            | 0.8万~2万            | Binyang Industrial Land Auction 5万/acre/year   |
+| Liuzhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Liuzhou Industrial Land Transaction ~15.7万/acre (annual rental ~1.6万) |
+| Guilin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Agricultural land generally 1000-1500 yuan/acre/year  |
+| Wuzhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Beihai    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Fangchenggang  | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Qinzhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Guigang    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Yulin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Baise    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Hezhou    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Hechi    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Tian'e County Industrial Land Auction 1300 yuan/acre/year|
+| Laibin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
+| Chongzuo    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Pingxiang City Industrial Land 1.5万/acre/year     |
 
-## 输出要求：
-**请严格只返回JSON格式，不要包含任何其他文字、解释或说明。**`
 
-  const userPrompt = `请分析以下项目信息并提取关键数据，返回严格有效的JSON格式：
+
+
+`
+
+  const userPrompt = `Please analyze the following project information and extract key data:
 
 ${projectInfo}
 
-请确保返回的内容是有效的JSON格式，不要添加任何其他文字或说明。`
+Please return JSON format structured data.`
 
   return [
     { role: 'system', content: systemPrompt },

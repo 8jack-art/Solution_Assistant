@@ -240,14 +240,14 @@ interface RevenueCostState {
 
 /**
  * 生成默认达产率曲线
- * 规则：第1年50%，第2年75%，第3年及以后100%
+ * 规则：第1年75%，第2年85%，第3年及以后100%
  */
 const generateDefaultProductionRates = (operationYears: number): ProductionRateConfig[] => {
   const rates: ProductionRateConfig[] = []
   for (let i = 1; i <= operationYears; i++) {
     let rate = 1.0
-    if (i === 1) rate = 0.5
-    else if (i === 2) rate = 0.75
+    if (i === 1) rate = 0.75
+    else if (i === 2) rate = 0.85
     else rate = 1.0
     
     rates.push({
