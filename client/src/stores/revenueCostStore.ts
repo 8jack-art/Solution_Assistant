@@ -600,13 +600,16 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               modelData = estimate.model_data
             }
             
+            // 获取当前状态，确保在modelData不存在相关数据时保留当前数据
+            const currentState = get()
+            
             // 更新状态
             set({
-              revenueItems: modelData?.revenueItems || [],
-              costItems: modelData?.costItems || [],
-              productionRates: modelData?.productionRates || [],
-              aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || null,
-              currentStep: estimate.workflow_step || 'period'
+              revenueItems: modelData?.revenueItems || currentState.revenueItems,
+              costItems: modelData?.costItems || currentState.costItems,
+              productionRates: modelData?.productionRates || currentState.productionRates,
+              aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || currentState.aiAnalysisResult,
+              currentStep: estimate.workflow_step || currentState.currentStep
             })
           }
           

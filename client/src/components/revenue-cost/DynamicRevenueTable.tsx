@@ -90,9 +90,17 @@ const DynamicRevenueTable: React.FC = () => {
       category: 'other',
       fieldTemplate: 'quantity-price',
       vatRate: 0.13,
-      priceUnit: 'wan-yuan', // 默认万元
+      priceUnit: 'wan-yuan' as 'yuan' | 'wan-yuan', // 默认万元
       priceIncreaseInterval: 0, // 默认不涨价
       priceIncreaseRate: 0,
+      quantity: 0,
+      unitPrice: 0,
+      area: 0,
+      yieldPerArea: 0,
+      capacity: 0,
+      utilizationRate: 0,
+      subscriptions: 0,
+      directAmount: 0,
     })
     setEditingItem(null)
     setIsNewItem(true)
@@ -103,10 +111,33 @@ const DynamicRevenueTable: React.FC = () => {
    * 打开编辑对话框
    */
   const handleEdit = (item: RevenueItem) => {
-    setFormData({ ...item })
+    const formDataToSet = { ...item }
+    
+    console.log('🔍 [编辑] 原始数据:', { 
+      priceUnit: item.priceUnit, 
+      unitPrice: item.unitPrice,
+      name: item.name 
+    })
+    
+    // 确保priceUnit有默认值且类型正确
+    formDataToSet.priceUnit = (item.priceUnit || 'wan-yuan') as 'yuan' | 'wan-yuan'
+    
+    // 根据保存的价格单位转换数值以便编辑
+    // 注意：数据库中保存的是万元，所以如果用户选择元单位，需要转换为元显示
+    if (formDataToSet.unitPrice !== undefined) {
+      if (formDataToSet.priceUnit === 'yuan') {
+        // 用户选择的是元单位，将万元转换为元显示
+        formDataToSet.unitPrice = formDataToSet.unitPrice * 10000
+      }
+      // 如果是万元单位，直接使用数据库中的值
+    }
+    
+    setFormData(formDataToSet)
     setEditingItem(item)
     setIsNewItem(false)
     setShowEditModal(true)
+    
+    console.log('✅ [编辑] 表单设置完成:', formDataToSet)
   }
 
   /**
@@ -217,20 +248,29 @@ const DynamicRevenueTable: React.FC = () => {
     // 处理单价单位转换：如果是"元"，需要转换为万元后再保存
     const dataToSave = { ...formData }
     console.log('🔍 [保存] 保存前的formData:', formData)
-    console.log('🔍 [保存] dataToSave.unitPrice:', dataToSave.unitPrice)
-    console.log('🔍 [保存] dataToSave.priceUnit:', dataToSave.priceUnit)
-    console.log('🔍 [保存] dataToSave.unitPrice 类型:', typeof dataToSave.unitPrice)
-    console.log('🔍 [保存] dataToSave.unitPrice 是否为0:', dataToSave.unitPrice === 0)
     
-    if (dataToSave.priceUnit === 'yuan' && dataToSave.unitPrice) {
-      console.log('💰 单价单位为元，进行转换')
-      console.log('  原单价（元）:', dataToSave.unitPrice)
-      dataToSave.unitPrice = dataToSave.unitPrice / 10000 // 元转万元
-      dataToSave.priceUnit = 'wan-yuan' // 统一使用万元存储
-      console.log('  转换后（万元）:', dataToSave.unitPrice)
+    // 确保priceUnit有默认值且类型正确
+    if (!dataToSave.priceUnit) {
+      dataToSave.priceUnit = 'wan-yuan' as const
+    } else {
+      dataToSave.priceUnit = dataToSave.priceUnit as 'yuan' | 'wan-yuan'
     }
     
-    console.log('🔍 最终保存的dataToSave:', dataToSave)
+    // 在保存到数据库前，将所有元单位转换为万元单位
+    if (dataToSave.priceUnit === 'yuan' && dataToSave.unitPrice !== undefined) {
+      // 元 -> 万元
+      dataToSave.unitPrice = dataToSave.unitPrice / 10000
+      dataToSave.priceUnit = 'wan-yuan' as const
+      
+      console.log('💰 [保存] 单位转换:', {
+        原单位: 'yuan',
+        原单价: formData.unitPrice,
+        新单位: dataToSave.priceUnit,
+        新单价: dataToSave.unitPrice
+      })
+    }
+    
+    console.log('🔍 最终保存的数据:', dataToSave)
 
     // 先更新本地状态
     if (isNewItem) {
@@ -431,6 +471,18 @@ const DynamicRevenueTable: React.FC = () => {
   }, [revenueItems]) // 监听revenueItems的变化
 
   /**
+   * 监听formData的变化，用于调试
+   */
+  useEffect(() => {
+    console.log('📋 [状态变化] formData更新:', {
+      priceUnit: formData.priceUnit,
+      unitPrice: formData.unitPrice,
+      name: formData.name,
+      hasData: !!formData.name
+    })
+  }, [formData])
+
+  /**
    * 格式化金额显示（万元，2位小数）
    */
   const formatAmount = (amount: number): string => {
@@ -438,20 +490,37 @@ const DynamicRevenueTable: React.FC = () => {
   }
 
   /**
-   * 渲染字段值
+   * 渲染字段值（带单位显示）
    */
   const renderFieldValue = (item: RevenueItem): string => {
+    // 辅助函数：格式化价格和单位
+    const formatPriceWithUnit = (price: number | undefined): string => {
+      if (price === undefined || price === null) return '0';
+      
+      // 根据保存的价格单位显示
+      const priceUnit = item.priceUnit || 'wan-yuan';
+      
+      if (priceUnit === 'yuan') {
+        // 元单位显示
+        const yuanPrice = price * 10000;
+        return `${yuanPrice.toFixed(2)}元`;
+      } else {
+        // 万元单位显示
+        return `${price.toFixed(4)}万元`;
+      }
+    };
+    
     switch (item.fieldTemplate) {
       case 'quantity-price':
-        return `${item.quantity || 0} × ${item.unitPrice || 0}`
+        return `${item.quantity || 0} × ${formatPriceWithUnit(item.unitPrice)}`
       case 'area-yield-price':
-        return `${item.area || 0}亩 × ${item.yieldPerArea || 0} × ${item.unitPrice || 0}`
+        return `${item.area || 0}亩 × ${item.yieldPerArea || 0} × ${formatPriceWithUnit(item.unitPrice)}`
       case 'capacity-utilization':
-        return `${item.capacity || 0} × ${((item.utilizationRate || 0) * 100).toFixed(0)}% × ${item.unitPrice || 0}`
+        return `${item.capacity || 0} × ${((item.utilizationRate || 0) * 100).toFixed(0)}% × ${formatPriceWithUnit(item.unitPrice)}`
       case 'subscription':
-        return `${item.subscriptions || 0} × ${item.unitPrice || 0}`
+        return `${item.subscriptions || 0} × ${formatPriceWithUnit(item.unitPrice)}`
       case 'direct-amount':
-        return `${item.directAmount || 0}`
+        return `${(item.directAmount || 0).toFixed(2)}万元`
       default:
         return '-'
     }
@@ -612,25 +681,53 @@ const DynamicRevenueTable: React.FC = () => {
                     data={['元', '万元']}
                     value={formData.priceUnit === 'yuan' ? '元' : '万元'}
                     onChange={(value: string) => {
+                      console.log('🎯 [滑块切换] 用户选择:', value);
+                      console.log('📊 [滑块切换] 当前状态:', { 
+                        priceUnit: formData.priceUnit, 
+                        unitPrice: formData.unitPrice 
+                      });
+                       
                       const isYuan = value === '元';
-                      const newUnit = isYuan ? 'yuan' : 'wan-yuan';
+                      const newUnit = (isYuan ? 'yuan' : 'wan-yuan') as 'yuan' | 'wan-yuan';
                       const currentPrice = formData.unitPrice || 0;
                       let newPrice = currentPrice;
 
                       // 单位切换时转换数值
-                      if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
-                        // 万元 -> 元
-                        newPrice = currentPrice * 10000;
-                      } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
-                        // 元 -> 万元
-                        newPrice = currentPrice / 10000;
+                      if (formData.priceUnit) {
+                        const currentUnit = formData.priceUnit as 'yuan' | 'wan-yuan';
+                        
+                        if (currentUnit === 'wan-yuan' && newUnit === 'yuan') {
+                          // 万元 -> 元
+                          newPrice = currentPrice * 10000;
+                          console.log('💰 [滑块切换] 转换:', { 
+                            from: '万元', 
+                            to: '元',
+                            原价格: currentPrice, 
+                            新价格: newPrice 
+                          });
+                        } else if (currentUnit === 'yuan' && newUnit === 'wan-yuan') {
+                          // 元 -> 万元
+                          newPrice = currentPrice / 10000;
+                          console.log('💰 [滑块切换] 转换:', { 
+                            from: '元', 
+                            to: '万元',
+                            原价格: currentPrice, 
+                            新价格: newPrice 
+                          });
+                        }
+                      } else {
+                        // 首次设置单位，无需转换
+                        formData.priceUnit = newUnit;
                       }
 
-                      setFormData({ 
+                      const newFormData = { 
                         ...formData, 
                         priceUnit: newUnit,
                         unitPrice: newPrice
-                      });
+                      };
+                      
+                      console.log('📝 [滑块切换] 新状态:', newFormData);
+                      setFormData(newFormData);
                     }}
                     styles={{
                       root: {
@@ -697,17 +794,24 @@ const DynamicRevenueTable: React.FC = () => {
                     value={formData.priceUnit === 'yuan' ? '元' : '万元'}
                     onChange={(value: string) => {
                       const isYuan = value === '元';
-                      const newUnit = isYuan ? 'yuan' : 'wan-yuan';
+                      const newUnit = (isYuan ? 'yuan' : 'wan-yuan') as 'yuan' | 'wan-yuan';
                       const currentPrice = formData.unitPrice || 0;
                       let newPrice = currentPrice;
 
                       // 单位切换时转换数值
-                      if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
-                        // 万元 -> 元
-                        newPrice = currentPrice * 10000;
-                      } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
-                        // 元 -> 万元
-                        newPrice = currentPrice / 10000;
+                      if (formData.priceUnit) {
+                        const currentUnit = formData.priceUnit as 'yuan' | 'wan-yuan';
+                        
+                        if (currentUnit === 'wan-yuan' && newUnit === 'yuan') {
+                          // 万元 -> 元
+                          newPrice = currentPrice * 10000;
+                        } else if (currentUnit === 'yuan' && newUnit === 'wan-yuan') {
+                          // 元 -> 万元
+                          newPrice = currentPrice / 10000;
+                        }
+                      } else {
+                        // 首次设置单位，无需转换
+                        newPrice = currentPrice;
                       }
 
                       setFormData({ 
@@ -779,17 +883,24 @@ const DynamicRevenueTable: React.FC = () => {
                     value={formData.priceUnit === 'yuan' ? '元' : '万元'}
                     onChange={(value: string) => {
                       const isYuan = value === '元';
-                      const newUnit = isYuan ? 'yuan' : 'wan-yuan';
+                      const newUnit = (isYuan ? 'yuan' : 'wan-yuan') as 'yuan' | 'wan-yuan';
                       const currentPrice = formData.unitPrice || 0;
                       let newPrice = currentPrice;
 
                       // 单位切换时转换数值
-                      if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
-                        // 万元 -> 元
-                        newPrice = currentPrice * 10000;
-                      } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
-                        // 元 -> 万元
-                        newPrice = currentPrice / 10000;
+                      if (formData.priceUnit) {
+                        const currentUnit = formData.priceUnit as 'yuan' | 'wan-yuan';
+                        
+                        if (currentUnit === 'wan-yuan' && newUnit === 'yuan') {
+                          // 万元 -> 元
+                          newPrice = currentPrice * 10000;
+                        } else if (currentUnit === 'yuan' && newUnit === 'wan-yuan') {
+                          // 元 -> 万元
+                          newPrice = currentPrice / 10000;
+                        }
+                      } else {
+                        // 首次设置单位，无需转换
+                        newPrice = currentPrice;
                       }
 
                       setFormData({ 
@@ -853,17 +964,24 @@ const DynamicRevenueTable: React.FC = () => {
                     value={formData.priceUnit === 'yuan' ? '元' : '万元'}
                     onChange={(value: string) => {
                       const isYuan = value === '元';
-                      const newUnit = isYuan ? 'yuan' : 'wan-yuan';
+                      const newUnit = (isYuan ? 'yuan' : 'wan-yuan') as 'yuan' | 'wan-yuan';
                       const currentPrice = formData.unitPrice || 0;
                       let newPrice = currentPrice;
 
                       // 单位切换时转换数值
-                      if (formData.priceUnit === 'wan-yuan' && newUnit === 'yuan') {
-                        // 万元 -> 元
-                        newPrice = currentPrice * 10000;
-                      } else if (formData.priceUnit === 'yuan' && newUnit === 'wan-yuan') {
-                        // 元 -> 万元
-                        newPrice = currentPrice / 10000;
+                      if (formData.priceUnit) {
+                        const currentUnit = formData.priceUnit as 'yuan' | 'wan-yuan';
+                        
+                        if (currentUnit === 'wan-yuan' && newUnit === 'yuan') {
+                          // 万元 -> 元
+                          newPrice = currentPrice * 10000;
+                        } else if (currentUnit === 'yuan' && newUnit === 'wan-yuan') {
+                          // 元 -> 万元
+                          newPrice = currentPrice / 10000;
+                        }
+                      } else {
+                        // 首次设置单位，无需转换
+                        newPrice = currentPrice;
                       }
 
                       setFormData({ 
