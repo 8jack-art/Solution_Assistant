@@ -142,6 +142,22 @@ export interface CostItem {
 }
 
 /**
+ * 还本付息计划表数据
+ */
+export interface RepaymentScheduleData {
+  interest_2_2: number[] // 2.2 付息行各年数据
+}
+
+/**
+ * 折旧与摊销估算表数据
+ */
+export interface DepreciationAmortizationData {
+  A_depreciation: number[] // A行 折旧费各年数据
+  D_depreciation: number[] // D行 折旧费各年数据
+  E_amortization: number[]  // E行 摊销费各年数据
+}
+
+/**
  * 项目上下文信息
  */
 export interface ProjectContext {
@@ -154,6 +170,8 @@ export interface ProjectContext {
     name: string
     amount: number
   }>
+  repaymentSchedule?: RepaymentScheduleData // 还本付息计划表数据
+  depreciationAmortization?: DepreciationAmortizationData // 折旧与摊销估算表数据
 }
 
 /**

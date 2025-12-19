@@ -1457,11 +1457,19 @@ const DynamicRevenueTable: React.FC = () => {
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>增值税</Table.Td>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                      {revenueItems.reduce((sum, item) => {
-                        const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, 1)
-                        const revenue = calculateYearlyRevenue(item, 1, productionRate)
-                        return sum + (revenue - revenue / (1 + item.vatRate))
-                      }, 0).toFixed(2)}
+                      {(() => {
+                        // 计算所有年份增值税的合计
+                        let totalVat = 0;
+                        years.forEach((year) => {
+                          const yearVat = revenueItems.reduce((sum, item) => {
+                            const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                            const revenue = calculateYearlyRevenue(item, year, productionRate)
+                            return sum + (revenue - revenue / (1 + item.vatRate))
+                          }, 0);
+                          totalVat += yearVat;
+                        });
+                        return totalVat.toFixed(2);
+                      })()}
                     </Table.Td>
                     {years.map((year) => {
                       const yearTotal = revenueItems.reduce((sum, item) => {
@@ -1482,12 +1490,20 @@ const DynamicRevenueTable: React.FC = () => {
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.1</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>销项税额</Table.Td>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                      {revenueItems.reduce((sum, item) => {
-                        const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, 1)
-                        const revenue = calculateYearlyRevenue(item, 1, productionRate)
-                        // 销项税额 = 含税收入 - 不含税收入
-                        return sum + (revenue - revenue / (1 + item.vatRate))
-                      }, 0).toFixed(2)}
+                      {(() => {
+                        // 计算所有年份销项税额的合计
+                        let totalVat = 0;
+                        years.forEach((year) => {
+                          const yearVat = revenueItems.reduce((sum, item) => {
+                            const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                            const revenue = calculateYearlyRevenue(item, year, productionRate)
+                            // 销项税额 = 含税收入 - 不含税收入
+                            return sum + (revenue - revenue / (1 + item.vatRate))
+                          }, 0);
+                          totalVat += yearVat;
+                        });
+                        return totalVat.toFixed(2);
+                      })()}
                     </Table.Td>
                     {years.map((year) => {
                       const yearTotal = revenueItems.reduce((sum, item) => {
@@ -1534,16 +1550,21 @@ const DynamicRevenueTable: React.FC = () => {
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>其他税费及附加</Table.Td>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                       {(() => {
-                        const vatTotal = revenueItems.reduce((sum, item) => {
-                          const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, 1)
-                          const revenue = calculateYearlyRevenue(item, 1, productionRate)
-                          return sum + (revenue - revenue / (1 + item.vatRate))
-                        }, 0)
-                        // 使用状态中的税率
-                        const urbanTax = vatTotal * urbanTaxRate
-                        const educationTax = vatTotal * 0.05 // 教育费附加(3%+地方2%)
-                        const otherTaxes = urbanTax + educationTax
-                        return otherTaxes.toFixed(2)
+                        // 计算所有年份其他税费及附加的合计
+                        let totalOtherTaxes = 0;
+                        years.forEach((year) => {
+                          const vatTotal = revenueItems.reduce((sum, item) => {
+                            const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                            const revenue = calculateYearlyRevenue(item, year, productionRate)
+                            return sum + (revenue - revenue / (1 + item.vatRate))
+                          }, 0)
+                          // 使用状态中的税率
+                          const urbanTax = vatTotal * urbanTaxRate
+                          const educationTax = vatTotal * 0.05 // 教育费附加(3%+地方2%)
+                          const otherTaxes = urbanTax + educationTax
+                          totalOtherTaxes += otherTaxes;
+                        });
+                        return totalOtherTaxes.toFixed(2);
                       })()}
                     </Table.Td>
                     {years.map((year) => {

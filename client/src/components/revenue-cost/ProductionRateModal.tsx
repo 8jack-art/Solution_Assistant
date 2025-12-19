@@ -54,14 +54,12 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
       if (productionRates.length > 0) {
         setEditedRates([...productionRates])
       } else {
-        // 默认3年达产率配置 (v2.0) - 临时调试
-        console.log('🔧 生成默认达产率，弹窗打开状态:', opened)
+        // 默认3年达产率配置
         const defaultRates = [
           { yearIndex: 1, rate: 0.75 }, // 75%
           { yearIndex: 2, rate: 0.85 }, // 85%
           { yearIndex: 3, rate: 1.0 },  // 100%
         ]
-        console.log('🔧 设置的默认达产率:', defaultRates)
         setEditedRates(defaultRates)
       }
     }
@@ -168,16 +166,33 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
           <Text size="sm" c="#86909C">
             设置项目运营期前几年的达产率变化。只显示达产率逐步提升的年份，达到100%后的年份无需配置（自动按100%计算）。
           </Text>
-          <Button
-            size="xs"
-            leftSection={<IconPlus size={14} />}
-            onClick={handleAdd}
-            disabled={maxYear >= 5}
-            variant="light"
-            color="blue"
-          >
-            增加
-          </Button>
+          <Group gap="xs">
+            <Button
+              size="xs"
+              variant="light"
+              color="orange"
+              onClick={() => {
+                const defaultRates = [
+                  { yearIndex: 1, rate: 0.75 }, // 75%
+                  { yearIndex: 2, rate: 0.85 }, // 85%
+                  { yearIndex: 3, rate: 1.0 },  // 100%
+                ]
+                setEditedRates(defaultRates)
+              }}
+            >
+              重置默认
+            </Button>
+            <Button
+              size="xs"
+              leftSection={<IconPlus size={14} />}
+              onClick={handleAdd}
+              disabled={maxYear >= 5}
+              variant="light"
+              color="blue"
+            >
+              增加
+            </Button>
+          </Group>
         </Group>
 
         {editedRates.length > 0 ? (
