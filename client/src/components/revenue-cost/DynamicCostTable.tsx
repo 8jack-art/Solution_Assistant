@@ -645,58 +645,12 @@ const DynamicCostTable: React.FC = () => {
                 <Table.Tr>
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2</Table.Td>
                   <Table.Td style={{ border: '1px solid #dee2e6' }}>辅助材料费用</Table.Td>
-                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {(() => {
-                      let total = 0;
-                      if (costConfig.auxiliaryMaterials.type === 'percentage') {
-                        // 根据总收入计算百分比
-                        const totalRevenue = revenueItems.reduce((sum, revItem) => {
-                          return sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem));
-                        }, 0);
-                        total += totalRevenue * costConfig.auxiliaryMaterials.percentage / 100;
-                      } else if (costConfig.auxiliaryMaterials.type === 'directAmount') {
-                        total += costConfig.auxiliaryMaterials.directAmount;
-                      }
-                      return total.toFixed(2);
-                    })()}
-                  </Table.Td>
-                  {years.map((year) => {
-                    const productionRate = costConfig.auxiliaryMaterials.applyProductionRate 
-                      ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
-                      : 1;
-                    
-                    let yearTotal = 0;
-                    if (costConfig.auxiliaryMaterials.type === 'percentage') {
-                      // 根据总收入计算百分比
-                      const totalRevenue = revenueItems.reduce((sum, revItem) => {
-                        return sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem));
-                      }, 0);
-                      yearTotal += totalRevenue * costConfig.auxiliaryMaterials.percentage / 100 * productionRate;
-                    } else if (costConfig.auxiliaryMaterials.type === 'directAmount') {
-                      yearTotal += costConfig.auxiliaryMaterials.directAmount * productionRate;
-                    }
-                    
-                    return (
-                      <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearTotal.toFixed(2)}
-                      </Table.Td>
-                    );
-                  })}
-                  <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                    <Group gap={4} justify="center">
-                      <Tooltip label="编辑">
-                        <ActionIcon
-                          variant="light"
-                          color="blue"
-                          size="sm"
-                        >
-                          <IconEdit size={16} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-                
+                  <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                  {years.map((year) => (
+                    <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>0.00</Table.Td>
+                  ))}
+                  <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
+                </Table.Tr>                
                 {/* 3. 其他 */}
                 <Table.Tr>
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>3</Table.Td>
@@ -765,12 +719,24 @@ const DynamicCostTable: React.FC = () => {
                 </Table.Tr>
               </Table.Tbody>
             </Table>
+            <Group justify="flex-end" mt="md">
+              <Checkbox
+                label="应用达产率"
+                checked={costConfig.rawMaterials.applyProductionRate}
+                onChange={(event) => setCostConfig({
+                  ...costConfig,
+                  rawMaterials: { 
+                    ...costConfig.rawMaterials, 
+                    applyProductionRate: event.currentTarget.checked 
+                  }
+                })}
+              />
+            </Group>
           </>
         )
       })()}
     </Modal>
   );
-
   // 渲染修理费配置弹窗
   const renderRepairModal = () => (
     <Modal
