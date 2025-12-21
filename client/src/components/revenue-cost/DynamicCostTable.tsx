@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import {
   Card,
   Stack,
@@ -28,8 +28,150 @@ import {
   IconEdit
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { useRevenueCostStore, calculateTaxableIncome } from '@/stores/revenueCostStore'
+import { useRevenueCostStore, calculateTaxableIncome, type RevenueItem } from '@/stores/revenueCostStore'
 import { revenueCostApi } from '@/lib/api'
+
+// 类型定义
+interface CostItem {
+  id: number;
+  name: string;
+  sourceType: 'percentage' | 'quantityPrice' | 'directAmount';
+  linkedRevenueId?: string;
+  percentage?: number;
+  quantity?: number;
+  unitPrice?: number;
+  directAmount?: number;
+  taxRate?: number;
+}
+
+interface FuelPowerItem {
+  id: number;
+  name: string;
+  type: 'water' | 'electricity' | 'gasoline' | 'diesel' | 'naturalGas';
+  quantity?: number;
+  unitPrice?: number;
+  taxRate?: number;
+}
+
+interface CostConfig {
+  rawMaterials: {
+    applyProductionRate: boolean;
+    items: CostItem[];
+  };
+  auxiliaryMaterials: {
+    type: 'percentage' | 'directAmount';
+    percentage?: number;
+    directAmount?: number;
+    applyProductionRate: boolean;
+    taxRate?: number;
+  };
+  fuelPower: {
+    applyProductionRate: boolean;
+    items?: FuelPowerItem[];
+  };
+  wages: {
+    employees: number;
+    salaryPerEmployee: number;
+    directAmount: number;
+    taxRate?: number;
+  };
+  repair: {
+    type: 'percentage' | 'directAmount';
+    percentageOfFixedAssets?: number;
+    directAmount?: number;
+    taxRate?: number;
+    applyProductionRate?: boolean;
+  };
+  otherExpenses: {
+    type: 'percentage' | 'directAmount';
+    percentage?: number;
+    directAmount?: number;
+    taxRate?: number;
+    applyProductionRate?: boolean;
+  };
+}
+
+// 常量定义
+const PERCENTAGE_MULTIPLIER = 100;
+const FUEL_CONVERSION_FACTOR = 10000;
+const DEFAULT_TAX_RATE = 13;
+
+// 工具函数
+const validateNumberInput = (value: unknown, min: number = 0, max: number = Infinity): number => {
+  const num = Number(value);
+  if (isNaN(num) || num < min || num > max) {
+    return min; // 返回最小值作为默认值
+  }
+  return num;
+};
+
+const safeLocalStorageGet = (key: string): unknown | null => {
+  try {
+    const value = localStorage.getItem(key);
+    if (!value) return null;
+    return JSON.parse(value);
+  } catch (error) {
+    console.error(`Failed to parse localStorage item ${key}:`, error);
+    return null;
+  }
+};
+
+const safeLocalStorageSet = (key: string, value: unknown): boolean => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.error(`Failed to set localStorage item ${key}:`, error);
+    return false;
+  }
+};
+
+// 计算工具函数
+const calculateBaseAmount = (
+  item: CostItem, 
+  revenueItems: any[]
+): number => {
+  switch (item.sourceType) {
+    case 'percentage':
+      const revenueBase = item.linkedRevenueId === 'total' || !item.linkedRevenueId
+        ? revenueItems.reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0)
+        : revenueItems.find(r => r.id === item.linkedRevenueId)
+          ? calculateTaxableIncome(revenueItems.find(r => r.id === item.linkedRevenueId)!)
+          : 0;
+      return revenueBase * (item.percentage || 0) / PERCENTAGE_MULTIPLIER;
+    case 'quantityPrice':
+      return (item.quantity || 0) * (item.unitPrice || 0);
+    case 'directAmount':
+      return item.directAmount || 0;
+    default:
+      return 0;
+  }
+};
+
+const calculateWithTax = (
+  baseAmount: number, 
+  taxRate: number, 
+  productionRate: number = 1
+): { withTax: number; inputTax: number; excludingTax: number } => {
+  const withTax = baseAmount * productionRate;
+  const validTaxRate = validateNumberInput(taxRate, 0, 100);
+  const inputTax = withTax * (validTaxRate / PERCENTAGE_MULTIPLIER) / (1 + validTaxRate / PERCENTAGE_MULTIPLIER);
+  return {
+    withTax,
+    inputTax,
+    excludingTax: withTax - inputTax
+  };
+};
+
+const handleApiError = (error: unknown, operation: string) => {
+  console.error(`${operation} failed:`, error);
+  const message = error instanceof Error ? error.message : '未知错误';
+  notifications.show({
+    title: `${operation}失败`,
+    message: `${message}，请稍后重试`,
+    color: 'red',
+  });
+};
 
 /**
  * 动态成本表格组件
@@ -61,7 +203,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   // 外购原材料费估算表弹窗状态
   const [showRawMaterialsModal, setShowRawMaterialsModal] = useState(false)
   // 计算外购原材料（除税）
-  const calculateRawMaterialsExcludingTax = () => {
+  const calculateRawMaterialsExcludingTax = useMemo(() => {
     // 如果没有项目上下文，返回0
     if (!context) return 0;
     
@@ -82,37 +224,15 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       // 计算该年的进项税额总额
       let yearTotalInputTax = 0;
       
-      costConfig.rawMaterials.items.forEach((item: any) => {
-        // 计算基础金额的辅助函数
-        const calculateBaseAmount = () => {
-          if (item.sourceType === 'percentage') {
-            let revenueBase = 0;
-            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-              // 整个项目收入
-              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-            } else {
-              // 特定收入项
-              const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-              if (revItem) {
-                revenueBase = calculateTaxableIncome(revItem);
-              }
-            }
-            return revenueBase * item.percentage / 100;
-          } else if (item.sourceType === 'quantityPrice') {
-            return item.quantity * item.unitPrice;
-          } else if (item.sourceType === 'directAmount') {
-            return item.directAmount;
-          }
-          return 0;
-        };
-        
-        const baseAmount = calculateBaseAmount();
+      costConfig.rawMaterials.items.forEach((item: CostItem) => {
+        const baseAmount = calculateBaseAmount(item, revenueItems || []);
         
         // 计算该年的含税金额（应用达产率）
         yearTotalWithTax += baseAmount * productionRate;
         
         // 计算该年的进项税额（应用达产率）
-        yearTotalInputTax += baseAmount * productionRate * (item.taxRate / 100) / (1 + item.taxRate / 100);
+        const taxRate = Number(item.taxRate) || 0;
+        yearTotalInputTax += baseAmount * productionRate * (taxRate / 100) / (1 + taxRate / 100);
       });
       
       // 该年的外购原材料（除税） = 含税金额 - 进项税额
@@ -123,7 +243,13 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     });
     
     return totalSum;
-  };
+  }, [context, costConfig.rawMaterials, productionRates, revenueItems]);
+
+  // 计算总收入（用于多处复用）
+  const totalRevenue = useMemo(() => {
+    return (revenueItems || []).reduce((sum, item) => sum + calculateTaxableIncome(item), 0);
+  }, [revenueItems]);
+
   // 辅助材料费用估算表弹窗状态
   const [showAuxiliaryMaterialsModal, setShowAuxiliaryMaterialsModal] = useState(false)
   // 外购燃料及动力费估算表弹窗状态
@@ -143,71 +269,70 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   const [currentFuelPowerItem, setCurrentFuelPowerItem] = useState<any>(null)
   const [fuelPowerItemIndex, setFuelPowerItemIndex] = useState<number | null>(null)
   
-  // 成本配置参数状态 - 从store加载或使用默认值
-  const [costConfig, setCostConfig] = useState(() => {
-    // 尝试从localStorage加载配置
-    const savedConfig = localStorage.getItem('costConfig');
-    if (savedConfig) {
-      try {
-        return JSON.parse(savedConfig);
-      } catch (e) {
-        console.warn('解析保存的成本配置失败，使用默认配置');
-      }
+  // 获取默认成本配置
+  const getDefaultCostConfig = (): CostConfig => ({
+    // 外购原材料费配置
+    rawMaterials: {
+      applyProductionRate: true, // 是否应用达产率
+      items: [
+        { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentage: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
+        { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentage: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
+        { id: 3, name: '原材料3', sourceType: 'directAmount', percentage: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
+      ]
+    },
+    // 辅助材料费用配置
+    auxiliaryMaterials: {
+      type: 'percentage', // percentage, directAmount
+      percentage: 1, // 营业收入的百分比
+      directAmount: 0, // 直接金额
+      applyProductionRate: true, // 是否应用达产率
+      taxRate: 13, // 进项税率
+    },
+    // 外购燃料及动力费配置
+    fuelPower: {
+      applyProductionRate: true, // 是否应用达产率
+      items: [
+        { id: 1, name: '水费', type: 'water', quantity: 0, unitPrice: 2.99, taxRate: 9 },
+        { id: 2, name: '电费', type: 'electricity', quantity: 0, unitPrice: 0.65, taxRate: 13 },
+        { id: 3, name: '汽油', type: 'gasoline', quantity: 1000, unitPrice: 9453, taxRate: 13 },
+        { id: 4, name: '柴油', type: 'diesel', quantity: 1000, unitPrice: 7783, taxRate: 13 },
+        { id: 5, name: '天然气', type: 'naturalGas', quantity: 0, unitPrice: 3.75, taxRate: 9 },
+      ]
+    },
+    // 工资及福利费配置
+    wages: {
+      employees: 10, // 人数
+      salaryPerEmployee: 5, // 每人单价(万元)
+      directAmount: 0, // 直接金额
+      taxRate: 0, // 进项税率
+    },
+    // 修理费配置
+    repair: {
+      type: 'percentage', // percentage, directAmount
+      percentageOfFixedAssets: 2, // 固定资产投资的百分比
+      directAmount: 0, // 直接金额
+      taxRate: 13, // 进项税率
+    },
+    // 其他费用配置
+    otherExpenses: {
+      type: 'percentage', // percentage, directAmount
+      percentage: 3, // 营业收入的百分比
+      directAmount: 0, // 直接金额
+      taxRate: 6, // 进项税率
     }
-    
-    // 默认配置
-    return {
-      // 外购原材料费配置
-      rawMaterials: {
-        applyProductionRate: true, // 是否应用达产率
-        items: [
-          { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentage: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
-          { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentage: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
-          { id: 3, name: '原材料3', sourceType: 'directAmount', percentage: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
-        ]
-      },
-      // 辅助材料费用配置
-      auxiliaryMaterials: {
-        type: 'percentage', // percentage, directAmount
-        percentage: 1, // 营业收入的百分比
-        directAmount: 0, // 直接金额
-        applyProductionRate: true, // 是否应用达产率
-        taxRate: 13, // 进项税率
-      },
-      // 外购燃料及动力费配置
-      fuelPower: {
-        applyProductionRate: true, // 是否应用达产率
-        items: [
-          { id: 1, name: '水费', type: 'water', quantity: 0, unitPrice: 2.99, taxRate: 9 },
-          { id: 2, name: '电费', type: 'electricity', quantity: 0, unitPrice: 0.65, taxRate: 13 },
-          { id: 3, name: '汽油', type: 'gasoline', quantity: 1000, unitPrice: 9453, taxRate: 13 },
-          { id: 4, name: '柴油', type: 'diesel', quantity: 1000, unitPrice: 7783, taxRate: 13 },
-          { id: 5, name: '天然气', type: 'naturalGas', quantity: 0, unitPrice: 3.75, taxRate: 9 },
-        ]
-      },
-      // 工资及福利费配置
-      wages: {
-        employees: 10, // 人数
-        salaryPerEmployee: 5, // 每人单价(万元)
-        directAmount: 0, // 直接金额
-        taxRate: 0, // 进项税率
-      },
-      // 修理费配置
-      repair: {
-        type: 'percentage', // percentage, directAmount
-        percentageOfFixedAssets: 2, // 固定资产投资的百分比
-        directAmount: 0, // 直接金额
-        taxRate: 13, // 进项税率
-      },
-      // 其他费用配置
-      otherExpenses: {
-        type: 'percentage', // percentage, directAmount
-        percentage: 3, // 营业收入的百分比
-        directAmount: 0, // 直接金额
-        taxRate: 6, // 进项税率
-      }
-    };
   });
+
+  // 尝试从localStorage加载配置
+  const loadConfigFromStorage = (): CostConfig => {
+    const savedConfig = safeLocalStorageGet('costConfig');
+    if (savedConfig && typeof savedConfig === 'object') {
+      return { ...getDefaultCostConfig(), ...savedConfig };
+    }
+    return getDefaultCostConfig();
+  };
+
+  // 成本配置参数状态 - 从store加载或使用默认值
+  const [costConfig, setCostConfig] = useState<CostConfig>(loadConfigFromStorage);
   // Card with actions grid 的数据
   const costItemsData = [
     { 
@@ -267,9 +392,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 data={[
                   { 
                     value: 'total', 
-                    label: `整个项目年收入 (${(revenueItems || []).reduce((sum, item) => sum + calculateTaxableIncome(item), 0).toFixed(2)}万元)`
+                    label: `整个项目年收入 (${totalRevenue.toFixed(2)}万元)`
                   },
-                  ...(revenueItems || []).map((item: any) => ({
+                  ...(revenueItems || []).map((item: RevenueItem) => ({
                     value: item.id,
                     label: `${item.name} (年收入: ${calculateTaxableIncome(item).toFixed(2)}万元)`
                   }))                ]}
@@ -341,16 +466,16 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     {(() => {
                       const selectedRevenue = currentRawMaterial.linkedRevenueId === 'total' 
                         ? null 
-                        : (revenueItems || []).find((item: any) => item.id === currentRawMaterial.linkedRevenueId)
+                        : (revenueItems || []).find((item: RevenueItem) => item.id === currentRawMaterial.linkedRevenueId)
                       
                       if (selectedRevenue) {
                         const revenueAmount = calculateTaxableIncome(selectedRevenue).toFixed(2)
                         const materialAmount = (parseFloat(revenueAmount) * currentRawMaterial.percentage / 100).toFixed(2)
                         return `选择"${selectedRevenue.name}"作为基数（${revenueAmount}万元）× ${currentRawMaterial.percentage}% = ${materialAmount}万元`
                       }
-                      const totalRevenue = (revenueItems || []).reduce((sum, item) => sum + calculateTaxableIncome(item), 0).toFixed(2)
-                      const totalMaterialAmount = (parseFloat(totalRevenue) * currentRawMaterial.percentage / 100).toFixed(2)
-                      return `选择整个项目年收入作为基数（${totalRevenue}万元）× ${currentRawMaterial.percentage}% = ${totalMaterialAmount}万元`
+                      const totalRevenueValue = totalRevenue.toFixed(2)
+                        const totalMaterialAmount = (totalRevenue * currentRawMaterial.percentage / 100).toFixed(2)
+                        return `选择整个项目年收入作为基数（${totalRevenueValue}万元）× ${currentRawMaterial.percentage}% = ${totalMaterialAmount}万元`
                     })()}
                   </Text>
                 </div>
@@ -371,10 +496,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     let unit = '万元';
                     if (currentRawMaterial.linkedRevenueId === 'total') {
                       // 整个项目收入
-                      totalRevenue = (revenueItems || []).reduce((sum, item) => sum + calculateTaxableIncome(item), 0);
+                      totalRevenue = totalRevenue;
                     } else {
                       // 特定收入项
-                      const selectedItem = (revenueItems || []).find((item: any) => item.id === currentRawMaterial.linkedRevenueId);
+                      const selectedItem = (revenueItems || []).find((item: RevenueItem) => item.id === currentRawMaterial.linkedRevenueId);
                       if (selectedItem) {
                         totalRevenue = calculateTaxableIncome(selectedItem);
                         unit = '万元';
@@ -580,7 +705,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         
                         // 计算该年的外购原材料总额
                         let yearTotal = 0;
-                        costConfig.rawMaterials.items.forEach((item: any) => {
+                        costConfig.rawMaterials.items.forEach((item: CostItem) => {
                           if (item.sourceType === 'percentage') {
                             // 根据收入百分比计算
                             let revenueBase = 0;
@@ -618,7 +743,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     // 序号1 = 合计其下辖子项（1.1, 1.2, 1.3...）该年的值
                     let yearTotal = 0;
-                    costConfig.rawMaterials.items.forEach((item: any) => {
+                    costConfig.rawMaterials.items.forEach((item: CostItem) => {
                       if (item.sourceType === 'percentage') {
                         // 根据收入百分比计算
                         let revenueBase = 0;
@@ -654,7 +779,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 </Table.Tr>
                 
                 {/* 1.1, 1.2, 1.3... 原材料项 */}
-                {costConfig.rawMaterials.items.map((item: any, idx: number) => (
+                {costConfig.rawMaterials.items.map((item: CostItem, idx: number) => (
                   <Table.Tr key={item.id}>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.{idx + 1}</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>
@@ -759,7 +884,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             color="red"
                             size="sm"
                             onClick={() => {
-                              const newItems = costConfig.rawMaterials.items.filter((_: any, i: number) => i !== idx);
+                              const newItems = costConfig.rawMaterials.items.filter((_: CostItem, i: number) => i !== idx);
                               setCostConfig({
                                 ...costConfig,
                                 rawMaterials: {
@@ -839,29 +964,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       years.forEach((year) => {
                         // 计算该年的进项税总额
                         let yearInputTax = 0;
-                        costConfig.rawMaterials.items.forEach((item: any) => {
-                          // 计算基础金额的辅助函数
-                          const calculateBaseAmount = () => {
-                            if (item.sourceType === 'percentage') {
-                              let revenueBase = 0;
-                              if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                              } else {
-                                const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                                if (revItem) {
-                                  revenueBase = calculateTaxableIncome(revItem);
-                                }
-                              }
-                              return revenueBase * item.percentage / 100;
-                            } else if (item.sourceType === 'quantityPrice') {
-                              return item.quantity * item.unitPrice;
-                            } else if (item.sourceType === 'directAmount') {
-                              return item.directAmount;
-                            }
-                            return 0;
-                          };
-                          
-                          const baseAmount = calculateBaseAmount();
+                        costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                          const baseAmount = calculateBaseAmount(item, revenueItems || []);
                           // 应用达产率
                           const productionRate = costConfig.rawMaterials.applyProductionRate 
                             ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
@@ -880,29 +984,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                   {years.map((year) => {
                     // 计算该年的进项税总额
                     let yearInputTax = 0;
-                    costConfig.rawMaterials.items.forEach((item: any) => {
-                      // 计算基础金额的辅助函数
-                      const calculateBaseAmount = () => {
-                        if (item.sourceType === 'percentage') {
-                          let revenueBase = 0;
-                          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                          } else {
-                            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                            if (revItem) {
-                              revenueBase = calculateTaxableIncome(revItem);
-                            }
-                          }
-                          return revenueBase * item.percentage / 100;
-                        } else if (item.sourceType === 'quantityPrice') {
-                          return item.quantity * item.unitPrice;
-                        } else if (item.sourceType === 'directAmount') {
-                          return item.directAmount;
-                        }
-                        return 0;
-                      };
-                      
-                      const baseAmount = calculateBaseAmount();
+                    costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                      const baseAmount = calculateBaseAmount(item, revenueItems || []);
                       // 应用达产率
                       const productionRate = costConfig.rawMaterials.applyProductionRate 
                         ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
@@ -921,7 +1004,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           // 应交增值税 = 销项税额 - 进项税额
                           // 销项税额按13%税率计算
                           const fuelPowerItems = costConfig.fuelPower.items || [];
-                          const fuelPowerIncome = fuelPowerItems.reduce((sum: number, item: any) => {
+                          const fuelPowerIncome = fuelPowerItems.reduce((sum: number, item: FuelPowerItem) => {
                             // 对汽油和柴油进行特殊处理：单价×数量/10000
                             let amount = 0;
                             if (['汽油', '柴油'].includes(item.name)) {
@@ -932,7 +1015,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             return sum + amount * 0.13; // 销项税率为13%
                           }, 0);
                           
-                          const fuelPowerInputTax = fuelPowerItems.reduce((sum: number, item: any) => {
+                          const fuelPowerInputTax = fuelPowerItems.reduce((sum: number, item: FuelPowerItem) => {
                             // 对汽油和柴油进行特殊处理：单价×数量/10000
                             let amount = 0;
                             if (['汽油', '柴油'].includes(item.name)) {
@@ -970,49 +1053,15 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     // 外购原材料（含税）
                     let totalWithTax = 0;
-                    costConfig.rawMaterials.items.forEach((item: any) => {
-                      if (item.sourceType === 'percentage') {
-                        let revenueBase = 0;
-                        if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                          revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                        } else {
-                          const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                          if (revItem) {
-                            revenueBase = calculateTaxableIncome(revItem);
-                          }
-                        }
-                        totalWithTax += revenueBase * item.percentage / 100 * productionRate;
-                      } else if (item.sourceType === 'quantityPrice') {
-                        totalWithTax += item.quantity * item.unitPrice * productionRate;
-                      } else if (item.sourceType === 'directAmount') {
-                        totalWithTax += item.directAmount * productionRate;
-                      }
+                    costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                      const baseAmount = calculateBaseAmount(item, revenueItems || []);
+                      totalWithTax += baseAmount * productionRate;
                     });
                     
                     // 进项税额
                     let totalInputTax = 0;
-                    costConfig.rawMaterials.items.forEach((item: any) => {
-                      const calculateBaseAmount = () => {
-                        if (item.sourceType === 'percentage') {
-                          let revenueBase = 0;
-                          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                          } else {
-                            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                            if (revItem) {
-                              revenueBase = calculateTaxableIncome(revItem);
-                            }
-                          }
-                          return revenueBase * item.percentage / 100;
-                        } else if (item.sourceType === 'quantityPrice') {
-                          return item.quantity * item.unitPrice;
-                        } else if (item.sourceType === 'directAmount') {
-                          return item.directAmount;
-                        }
-                        return 0;
-                      };
-                      
-                      const baseAmount = calculateBaseAmount();
+                    costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                      const baseAmount = calculateBaseAmount(item, revenueItems || []);
                       totalInputTax += baseAmount * productionRate * (item.taxRate / 100) / (1 + item.taxRate / 100);
                     });
                     
@@ -1194,7 +1243,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   };
 
   // 计算外购燃料及动力（除税）的函数
-  const calculateFuelPowerExcludingTax = (targetYear?: number, yearsArray?: number[]) => {
+  const calculateFuelPowerExcludingTax = useCallback((targetYear?: number, yearsArray?: number[]) => {
     if (targetYear !== undefined) {
       // 计算指定年份的外购燃料及动力（除税）
       const productionRate = costConfig.fuelPower.applyProductionRate 
@@ -1204,7 +1253,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       let yearFuelPowerTotal = 0;  // 燃料、动力费总额
       let yearInputTaxTotal = 0;   // 进项税额总额
       
-      (costConfig.fuelPower.items || []).forEach((item: any) => {
+      (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
         let quantity = item.quantity || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
@@ -1231,7 +1280,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       });
       return totalSum;
     }
-  };
+  }, [costConfig.fuelPower, productionRates]);
 
   // 渲染燃料及动力费编辑弹窗
   const renderFuelPowerEditModal = () => (
@@ -1376,7 +1425,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           : 1;
                         
                         let yearTotal = 0;
-                        (costConfig.fuelPower.items || []).forEach((item: any) => {
+                        (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
                           let quantity = item.quantity || 0;
                           // 对汽油和柴油进行特殊处理：单价×数量/10000
                           if (['汽油', '柴油'].includes(item.name)) {
@@ -1398,7 +1447,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           : 1;
                     
                     let yearTotal = 0;
-                    (costConfig.fuelPower.items || []).forEach((item: any) => {
+                    (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
                       let quantity = item.quantity || 0;
                       // 对汽油和柴油进行特殊处理：单价×数量/10000
                       if (['汽油', '柴油'].includes(item.name)) {
@@ -1421,7 +1470,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 </Table.Tr>
                 
                 {/* 1.1, 1.2, 1.3... 燃料及动力费项目 */}
-                {(costConfig.fuelPower.items || []).map((item: any, idx: number) => (
+                {(costConfig.fuelPower.items || []).map((item: FuelPowerItem, idx: number) => (
                   <Table.Tr key={item.id}>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.{idx + 1}</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>
@@ -1502,7 +1551,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           : 1;
                         
                         let yearInputTax = 0;
-                        (costConfig.fuelPower.items || []).forEach((item: any) => {
+                        (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
                           let quantity = item.quantity || 0;
                           let amount = 0;
                           // 对汽油和柴油进行特殊处理：单价×数量/10000
@@ -1527,7 +1576,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           : 1;
                     
                     let yearInputTax = 0;
-                    (costConfig.fuelPower.items || []).forEach((item: any) => {
+                    (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
                       let quantity = item.quantity || 0;
                       let amount = 0;
                       // 对汽油和柴油进行特殊处理：单价×数量/10000
@@ -1569,7 +1618,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         let yearFuelPowerTotal = 0;  // 燃料、动力费总额
                         let yearInputTaxTotal = 0;   // 进项税额总额
                         
-                        (costConfig.fuelPower.items || []).forEach((item: any) => {
+                        (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
                           let quantity = item.quantity || 0;
                           let amount = 0;
                           // 对汽油和柴油进行特殊处理：单价×数量/10000
@@ -1600,7 +1649,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     let yearFuelPowerTotal = 0;  // 燃料、动力费总额
                     let yearInputTaxTotal = 0;   // 进项税额总额
                     
-                    (costConfig.fuelPower.items || []).forEach((item: any) => {
+                    (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
                       let quantity = item.quantity || 0;
                       let amount = 0;
                       // 对汽油和柴油进行特殊处理：单价×数量/10000
@@ -1972,37 +2021,18 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         years.forEach((year) => {
                           // 计算达产率
                           const productionRate = costConfig.rawMaterials.applyProductionRate || costConfig.fuelPower.applyProductionRate || costConfig.repair.applyProductionRate || costConfig.otherExpenses.applyProductionRate
-                            ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                            ? (Number(productionRates.find(p => p.yearIndex === year)?.rate) || 1)
                             : 1;
                           
                           // 1.1 外购原材料费（使用除税金额）
                           let yearRawMaterialsWithTax = 0;
                           let yearRawMaterialsInputTax = 0;
-                          costConfig.rawMaterials.items.forEach((item: any) => {
-                            // 计算基础金额
-                            const calculateBaseAmount = () => {
-                              if (item.sourceType === 'percentage') {
-                                let revenueBase = 0;
-                                if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                  revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                                } else {
-                                  const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                                  if (revItem) {
-                                    revenueBase = calculateTaxableIncome(revItem);
-                                  }
-                                }
-                                return revenueBase * item.percentage / 100;
-                              } else if (item.sourceType === 'quantityPrice') {
-                                return item.quantity * item.unitPrice;
-                              } else if (item.sourceType === 'directAmount') {
-                                return item.directAmount;
-                              }
-                              return 0;
-                            };
-                            
-                            const baseAmount = calculateBaseAmount();
+                          costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                            const baseAmount = calculateBaseAmount(item, revenueItems || []);
                             yearRawMaterialsWithTax += baseAmount * productionRate;
-                            yearRawMaterialsInputTax += baseAmount * productionRate * (item.taxRate / 100) / (1 + item.taxRate / 100);
+                            // 确保税率是有效数字，避免NaN
+                            const taxRate = Number(item.taxRate) || 0;
+                            yearRawMaterialsInputTax += baseAmount * productionRate * (taxRate / 100) / (1 + taxRate / 100);
                           });
                           total += yearRawMaterialsWithTax - yearRawMaterialsInputTax;
                           
@@ -2023,7 +2053,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           // 1.4 修理费
                           let yearRepair = 0;
                           if (costConfig.repair.type === 'percentage') {
-                            yearRepair += (context?.totalInvestment || 0) * costConfig.repair.percentageOfFixedAssets / 100;
+                            // 确保百分比是有效数字，避免NaN
+                            const repairPercentage = Number(costConfig.repair.percentageOfFixedAssets) || 0;
+                            yearRepair += (context?.totalInvestment || 0) * repairPercentage / 100;
                           } else {
                             yearRepair += costConfig.repair.directAmount;
                           }
@@ -2038,16 +2070,34 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           if (costConfig.otherExpenses.type === 'percentage') {
                             const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                               const income = calculateTaxableIncome(revItem);
+
                               return sum + income;
                             }, 0);
-                            yearOtherExpenses += revenueBase * costConfig.otherExpenses.percentage / 100 * productionRate;
+                            // 确保百分比是有效数字，避免NaN
+                            const otherPercentage = Number(costConfig.otherExpenses.percentage) || 0;
+                            yearOtherExpenses += revenueBase * otherPercentage / 100 * productionRate;
                           } else {
                             yearOtherExpenses += costConfig.otherExpenses.directAmount * productionRate;
                           }
                           total += yearOtherExpenses;
                         });
                         
-                        return total.toFixed(2);
+                        // 调试：检查NaN值
+                      if (isNaN(total)) {
+                        console.log('营业成本 NaN detected:', { 
+                          year, 
+                          total, 
+                          yearTotalWithTax, 
+                          yearInputTax, 
+                          fuelPowerTotal, 
+                          wagesTotal, 
+                          repairTotal, 
+                          otherExpensesTotal,
+                          revenueItems,
+                          context
+                        });
+                      }
+                      return total.toFixed(2);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -2061,7 +2111,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       // 1.1 外购原材料费（使用除税金额）
                       // 计算该年的外购原材料（除税）
                       let yearTotalWithTax = 0;
-                      costConfig.rawMaterials.items.forEach((item: any) => {
+                      costConfig.rawMaterials.items.forEach((item: CostItem) => {
                         if (item.sourceType === 'percentage') {
                           let revenueBase = 0;
                           if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
@@ -2082,28 +2132,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       // 计算该年的进项税额
                       let yearInputTax = 0;
-                      costConfig.rawMaterials.items.forEach((item: any) => {
-                        const calculateBaseAmount = () => {
-                          if (item.sourceType === 'percentage') {
-                            let revenueBase = 0;
-                            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                            } else {
-                              const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                              if (revItem) {
-                                revenueBase = calculateTaxableIncome(revItem);
-                              }
-                            }
-                            return revenueBase * item.percentage / 100;
-                          } else if (item.sourceType === 'quantityPrice') {
-                            return item.quantity * item.unitPrice;
-                          } else if (item.sourceType === 'directAmount') {
-                            return item.directAmount;
-                          }
-                          return 0;
-                        };
-                        
-                        const baseAmount = calculateBaseAmount();
+                      costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                        const baseAmount = calculateBaseAmount(item, revenueItems || []);
                         // 进项税 = 基础金额(含税价) × 达产率 × 进项税率 / (1 + 进项税率)
                         yearInputTax += baseAmount * productionRate * (item.taxRate / 100) / (1 + item.taxRate / 100);
                       });
@@ -2175,7 +2205,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       // 计算该年的外购原材料（除税）
                       // 外购原材料（含税）
                       let totalWithTax = 0;
-                      costConfig.rawMaterials.items.forEach((item: any) => {
+                      costConfig.rawMaterials.items.forEach((item: CostItem) => {
                         if (item.sourceType === 'percentage') {
                           let revenueBase = 0;
                           if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
@@ -2196,28 +2226,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       // 进项税额
                       let totalInputTax = 0;
-                      costConfig.rawMaterials.items.forEach((item: any) => {
-                        const calculateBaseAmount = () => {
-                          if (item.sourceType === 'percentage') {
-                            let revenueBase = 0;
-                            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                            } else {
-                              const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                              if (revItem) {
-                                revenueBase = calculateTaxableIncome(revItem);
-                              }
-                            }
-                            return revenueBase * item.percentage / 100;
-                          } else if (item.sourceType === 'quantityPrice') {
-                            return item.quantity * item.unitPrice;
-                          } else if (item.sourceType === 'directAmount') {
-                            return item.directAmount;
-                          }
-                          return 0;
-                        };
-                        
-                        const baseAmount = calculateBaseAmount();
+                      costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                        const baseAmount = calculateBaseAmount(item, revenueItems || []);
                         totalInputTax += baseAmount * productionRate * (item.taxRate / 100) / (1 + item.taxRate / 100);
                       });
                       
@@ -2593,28 +2603,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           // 1.1 外购原材料费（使用除税金额）
                           let yearRawMaterialsWithTax = 0;
                           let yearRawMaterialsInputTax = 0;
-                          costConfig.rawMaterials.items.forEach((item: any) => {
-                            const calculateBaseAmount = () => {
-                              if (item.sourceType === 'percentage') {
-                                let revenueBase = 0;
-                                if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                  revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                                } else {
-                                  const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                                  if (revItem) {
-                                    revenueBase = calculateTaxableIncome(revItem);
-                                  }
-                                }
-                                return revenueBase * item.percentage / 100;
-                              } else if (item.sourceType === 'quantityPrice') {
-                                return item.quantity * item.unitPrice;
-                              } else if (item.sourceType === 'directAmount') {
-                                return item.directAmount;
-                              }
-                              return 0;
-                            };
-                            
-                            const baseAmount = calculateBaseAmount();
+                          costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                            const baseAmount = calculateBaseAmount(item, revenueItems || []);
                             yearRawMaterialsWithTax += baseAmount * productionRate;
                             yearRawMaterialsInputTax += baseAmount * productionRate * (item.taxRate / 100) / (1 + item.taxRate / 100);
                           });
@@ -2718,29 +2708,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             // 1.1 外购原材料费（使用除税金额）
                             let yearRawMaterialsWithTax = 0;
                             let yearRawMaterialsInputTax = 0;
-                            costConfig.rawMaterials.items.forEach((item: any) => {
-                              // 计算基础金额
-                              const calculateBaseAmount = () => {
-                                if (item.sourceType === 'percentage') {
-                                  let revenueBase = 0;
-                                  if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                    revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-                                  } else {
-                                    const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
-                                    if (revItem) {
-                                      revenueBase = calculateTaxableIncome(revItem);
-                                    }
-                                  }
-                                  return revenueBase * item.percentage / 100;
-                                } else if (item.sourceType === 'quantityPrice') {
-                                  return item.quantity * item.unitPrice;
-                                } else if (item.sourceType === 'directAmount') {
-                                  return item.directAmount;
-                                }
-                                return 0;
-                              };
-                              
-                              const baseAmount = calculateBaseAmount();
+                            costConfig.rawMaterials.items.forEach((item: CostItem) => {
+                            const baseAmount = calculateBaseAmount(item, revenueItems || []);
                               yearRawMaterialsWithTax += baseAmount * productionRate;
                               yearRawMaterialsInputTax += baseAmount * productionRate * (item.taxRate / 100) / (1 + item.taxRate / 100);
                             });

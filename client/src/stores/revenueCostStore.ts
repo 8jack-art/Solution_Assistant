@@ -282,26 +282,27 @@ const generateDefaultProductionRates = (operationYears: number): ProductionRateC
 export const calculateTaxableIncome = (item: RevenueItem): number => {
   let taxableIncome = 0
   
+  // 确保所有数值都是有效数字，避免NaN
   switch (item.fieldTemplate) {
     case 'quantity-price':
-      taxableIncome = (item.quantity || 0) * (item.unitPrice || 0)
+      taxableIncome = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)
       break
     case 'area-yield-price':
-      taxableIncome = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0)
+      taxableIncome = (Number(item.area) || 0) * (Number(item.yieldPerArea) || 0) * (Number(item.unitPrice) || 0)
       break
     case 'capacity-utilization':
-      taxableIncome = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0)
+      taxableIncome = (Number(item.capacity) || 0) * (Number(item.utilizationRate) || 0) * (Number(item.unitPrice) || 0)
       break
     case 'subscription':
-      taxableIncome = (item.subscriptions || 0) * (item.unitPrice || 0)
+      taxableIncome = (Number(item.subscriptions) || 0) * (Number(item.unitPrice) || 0)
       break
     case 'direct-amount':
-      taxableIncome = item.directAmount || 0
+      taxableIncome = Number(item.directAmount) || 0
       break
   }
   
-  // 返回含税收入（万元单位）
-  return taxableIncome
+  // 确保返回有效数字，避免NaN
+  return isNaN(taxableIncome) ? 0 : taxableIncome
 }
 
 /**
@@ -310,7 +311,9 @@ export const calculateTaxableIncome = (item: RevenueItem): number => {
  */
 export const calculateNonTaxIncome = (item: RevenueItem): number => {
   const taxableIncome = calculateTaxableIncome(item)
-  return taxableIncome / (1 + item.vatRate)
+  // 检查vatRate是否有效，避免NaN
+  const vatRate = item.vatRate || 0
+  return taxableIncome / (1 + vatRate)
 }
 
 /**
