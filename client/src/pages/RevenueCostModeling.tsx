@@ -1510,7 +1510,10 @@ const RevenueCostModeling: React.FC = () => {
         )
 
       case 3:
-        return <DynamicCostTable />
+        return <DynamicCostTable 
+          repaymentTableData={repaymentTableData}
+          depreciationData={depreciationData}
+        />
 
       case 4:
         return (

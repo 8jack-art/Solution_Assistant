@@ -244,6 +244,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             label="原材料名称"
             value={currentRawMaterial.name}
             onChange={(e) => setCurrentRawMaterial({...currentRawMaterial, name: e.target.value})}
+            required
+            withAsterisk
+            error={!currentRawMaterial.name.trim() ? "请输入原材料名称" : undefined}
           />
           
           <Select
@@ -283,6 +286,49 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 max={100}
                 decimalScale={2}
               />
+            </>
+          )}
+          
+          {currentRawMaterial.sourceType === 'quantityPrice' && (
+            <>
+              <NumberInput
+                label="数量"
+                value={currentRawMaterial.quantity}
+                onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, quantity: Number(value)})}
+                min={0}
+              />
+              <NumberInput
+                label="单价"
+                value={currentRawMaterial.unitPrice}
+                onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, unitPrice: Number(value)})}
+                min={0}
+                decimalScale={2}
+              />
+            </>
+          )}
+          
+          {currentRawMaterial.sourceType === 'directAmount' && (
+            <NumberInput
+              label="直接金额（万元）"
+              value={currentRawMaterial.directAmount}
+              onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, directAmount: Number(value)})}
+              min={0}
+              decimalScale={2}
+            />
+          )}
+          
+          <NumberInput
+            label="进项税率 (%)"
+            value={currentRawMaterial.taxRate}
+            onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, taxRate: Number(value)})}
+            min={0}
+            max={100}
+            decimalScale={2}
+          />
+          
+          {/* 计算说明和金额显示 - 移动到进项税后方 */}
+          {currentRawMaterial.sourceType === 'percentage' && (
+            <>
               {currentRawMaterial.linkedRevenueId && (
                 <div style={{
                   padding: '8px 12px',
@@ -346,19 +392,6 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           
           {currentRawMaterial.sourceType === 'quantityPrice' && (
             <>
-              <NumberInput
-                label="数量"
-                value={currentRawMaterial.quantity}
-                onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, quantity: Number(value)})}
-                min={0}
-              />
-              <NumberInput
-                label="单价"
-                value={currentRawMaterial.unitPrice}
-                onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, unitPrice: Number(value)})}
-                min={0}
-                decimalScale={2}
-              />
               {/* 显示计算后的金额 */}
               <div style={{
                 padding: '8px 12px',
@@ -379,31 +412,22 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             </>
           )}
           
-          {currentRawMaterial.sourceType === 'directAmount' && (
-            <NumberInput
-              label="直接金额（万元）"
-              value={currentRawMaterial.directAmount}
-              onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, directAmount: Number(value)})}
-              min={0}
-              decimalScale={2}
-            />
-          )}
-          
-          <NumberInput
-            label="进项税率 (%)"
-            value={currentRawMaterial.taxRate}
-            onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, taxRate: Number(value)})}
-            min={0}
-            max={100}
-            decimalScale={2}
-          />
-          
           <Group justify="flex-end" mt="xl">
             <Button variant="default" onClick={() => setShowRawMaterialEditModal(false)}>
               取消
             </Button>
             <Button 
               onClick={async () => {
+                // 表单验证
+                if (!currentRawMaterial.name.trim()) {
+                  notifications.show({
+                    title: '验证失败',
+                    message: '请输入原材料名称',
+                    color: 'red',
+                  });
+                  return;
+                }
+                
                 if (rawMaterialIndex !== null) {
                   const newItems = [...costConfig.rawMaterials.items];
                   newItems[rawMaterialIndex] = currentRawMaterial;
