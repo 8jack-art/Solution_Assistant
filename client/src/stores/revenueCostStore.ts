@@ -101,7 +101,6 @@ export interface RevenueItem {
   capacityUnit?: string    // 产能单位
   
   // 价格相关字段
-  priceUnit?: 'yuan' | 'wan-yuan'  // 货币单位：元或万元
   priceIncreaseInterval?: number   // 涨价间隔年数
   priceIncreaseRate?: number       // 涨价幅度（%）
   
@@ -277,34 +276,37 @@ const generateDefaultProductionRates = (operationYears: number): ProductionRateC
 }
 
 /**
- * 计算收入项的含税收入
+ * 计算收入项的含税收入（万元单位）
+ * 注意：这里假设unitPrice已经是万元单位（由前端保存时转换）
  */
 export const calculateTaxableIncome = (item: RevenueItem): number => {
-  let baseAmount = 0
+  let taxableIncome = 0
   
   switch (item.fieldTemplate) {
     case 'quantity-price':
-      baseAmount = (item.quantity || 0) * (item.unitPrice || 0)
+      taxableIncome = (item.quantity || 0) * (item.unitPrice || 0)
       break
     case 'area-yield-price':
-      baseAmount = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0)
+      taxableIncome = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0)
       break
     case 'capacity-utilization':
-      baseAmount = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0)
+      taxableIncome = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0)
       break
     case 'subscription':
-      baseAmount = (item.subscriptions || 0) * (item.unitPrice || 0)
+      taxableIncome = (item.subscriptions || 0) * (item.unitPrice || 0)
       break
     case 'direct-amount':
-      baseAmount = item.directAmount || 0
+      taxableIncome = item.directAmount || 0
       break
   }
   
-  return baseAmount
+  // 返回含税收入（万元单位）
+  return taxableIncome
 }
 
 /**
- * 计算不含税收入
+ * 计算不含税收入（万元单位）
+ * 公式：不含税收入 = 含税收入 / (1 + 增值税率)
  */
 export const calculateNonTaxIncome = (item: RevenueItem): number => {
   const taxableIncome = calculateTaxableIncome(item)
@@ -312,7 +314,8 @@ export const calculateNonTaxIncome = (item: RevenueItem): number => {
 }
 
 /**
- * 计算增值税金额
+ * 计算增值税金额（万元单位）
+ * 公式：增值税 = 含税收入 - 不含税收入
  */
 export const calculateVatAmount = (item: RevenueItem): number => {
   const taxableIncome = calculateTaxableIncome(item)
@@ -338,12 +341,7 @@ export const calculateYearlyRevenue = (item: RevenueItem, year: number, producti
   // 1. 计算基础含税收入（万元）
   let baseRevenue = calculateTaxableIncome(item)
   
-  // 2. 如果单价单位是元，需要转换为万元
-  if (item.priceUnit === 'yuan') {
-    baseRevenue = baseRevenue / 10000
-  }
-  
-  // 3. 应用涨价规则
+  // 2. 应用涨价规则
   if (item.priceIncreaseInterval && item.priceIncreaseInterval > 0 && item.priceIncreaseRate && item.priceIncreaseRate > 0) {
     // 计算当前年份处于第几个涨价周期
     const priceRoundIndex = Math.floor((year - 1) / item.priceIncreaseInterval)

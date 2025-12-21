@@ -89,12 +89,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             let revenueBase = 0;
             if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
               // 整个项目收入
-              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
             } else {
               // 特定收入项
               const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
               if (revItem) {
-                revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                revenueBase = calculateTaxableIncome(revItem);
               }
             }
             return revenueBase * item.percentage / 100;
@@ -264,11 +264,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 data={[
                   { 
                     value: 'total', 
-                    label: `整个项目年收入 (${(revenueItems || []).reduce((sum, item) => sum + (item.priceUnit === 'yuan' ? calculateTaxableIncome(item) / 10000 : calculateTaxableIncome(item)), 0).toFixed(2)}万元)`
+                    label: `整个项目年收入 (${(revenueItems || []).reduce((sum, item) => sum + calculateTaxableIncome(item), 0).toFixed(2)}万元)`
                   },
                   ...(revenueItems || []).map((item: any) => ({
                     value: item.id,
-                    label: `${item.name} (年收入: ${(item.priceUnit === 'yuan' ? calculateTaxableIncome(item) / 10000 : calculateTaxableIncome(item)).toFixed(2)}万元)`
+                    label: `${item.name} (年收入: ${calculateTaxableIncome(item).toFixed(2)}万元)`
                   }))                ]}
                 placeholder="请选择收入项目"
                 value={currentRawMaterial.linkedRevenueId || 'total'}
@@ -298,11 +298,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         : (revenueItems || []).find((item: any) => item.id === currentRawMaterial.linkedRevenueId)
                       
                       if (selectedRevenue) {
-                        const revenueAmount = (selectedRevenue.priceUnit === 'yuan' ? calculateTaxableIncome(selectedRevenue) / 10000 : calculateTaxableIncome(selectedRevenue)).toFixed(2)
+                        const revenueAmount = calculateTaxableIncome(selectedRevenue).toFixed(2)
                         const materialAmount = (parseFloat(revenueAmount) * currentRawMaterial.percentage / 100).toFixed(2)
-                        return `选择"${selectedRevenue.name}"作为基数（${revenueAmount}${selectedRevenue.priceUnit === 'yuan' ? '万元' : selectedRevenue.priceUnit}）× ${currentRawMaterial.percentage}% = ${materialAmount}${selectedRevenue.priceUnit === 'yuan' ? '万元' : selectedRevenue.priceUnit}`
+                        return `选择"${selectedRevenue.name}"作为基数（${revenueAmount}万元）× ${currentRawMaterial.percentage}% = ${materialAmount}万元`
                       }
-                      const totalRevenue = (revenueItems || []).reduce((sum, item) => sum + (item.priceUnit === 'yuan' ? calculateTaxableIncome(item) / 10000 : calculateTaxableIncome(item)), 0).toFixed(2)
+                      const totalRevenue = (revenueItems || []).reduce((sum, item) => sum + calculateTaxableIncome(item), 0).toFixed(2)
                       const totalMaterialAmount = (parseFloat(totalRevenue) * currentRawMaterial.percentage / 100).toFixed(2)
                       return `选择整个项目年收入作为基数（${totalRevenue}万元）× ${currentRawMaterial.percentage}% = ${totalMaterialAmount}万元`
                     })()}
@@ -325,13 +325,13 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     let unit = '万元';
                     if (currentRawMaterial.linkedRevenueId === 'total') {
                       // 整个项目收入
-                      totalRevenue = (revenueItems || []).reduce((sum, item) => sum + (item.priceUnit === 'yuan' ? calculateTaxableIncome(item) / 10000 : calculateTaxableIncome(item)), 0);
+                      totalRevenue = (revenueItems || []).reduce((sum, item) => sum + calculateTaxableIncome(item), 0);
                     } else {
                       // 特定收入项
                       const selectedItem = (revenueItems || []).find((item: any) => item.id === currentRawMaterial.linkedRevenueId);
                       if (selectedItem) {
-                        totalRevenue = selectedItem.priceUnit === 'yuan' ? calculateTaxableIncome(selectedItem) / 10000 : calculateTaxableIncome(selectedItem);
-                        unit = selectedItem.priceUnit === 'yuan' ? '万元' : (selectedItem.priceUnit || '');
+                        totalRevenue = calculateTaxableIncome(selectedItem);
+                        unit = '万元';
                       }
                     }
                     
@@ -562,12 +562,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             let revenueBase = 0;
                             if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
                               // 整个项目收入
-                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                             } else {
                               // 特定收入项
                               const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                               if (revItem) {
-                                revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                revenueBase = calculateTaxableIncome(revItem);
                               }
                             }
                             yearTotal += revenueBase * item.percentage / 100 * productionRate;
@@ -600,12 +600,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         let revenueBase = 0;
                         if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
                           // 整个项目收入
-                          revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                          revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                         } else {
                           // 特定收入项
                           const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                           if (revItem) {
-                            revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                            revenueBase = calculateTaxableIncome(revItem);
                           }
                         }
                         yearTotal += revenueBase * item.percentage / 100 * productionRate;
@@ -654,12 +654,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             let revenueBase = 0;
                             if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
                               // 整个项目收入
-                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                             } else {
                               // 特定收入项
                               const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                               if (revItem) {
-                                revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                revenueBase = calculateTaxableIncome(revItem);
                               }
                             }
                             yearAmount = revenueBase * item.percentage / 100 * productionRate;
@@ -690,12 +690,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         let revenueBase = 0;
                         if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
                             // 整个项目收入
-                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                           } else {
                           // 特定收入项
                           const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                           if (revItem) {
-                            revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                            revenueBase = calculateTaxableIncome(revItem);
                           }
                         }
                         yearTotal += revenueBase * item.percentage / 100 * productionRate;
@@ -821,11 +821,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             if (item.sourceType === 'percentage') {
                               let revenueBase = 0;
                               if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                                revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                               } else {
                                 const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                                 if (revItem) {
-                                  revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                  revenueBase = calculateTaxableIncome(revItem);
                                 }
                               }
                               return revenueBase * item.percentage / 100;
@@ -862,11 +862,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         if (item.sourceType === 'percentage') {
                           let revenueBase = 0;
                           if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                           } else {
                             const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                             if (revItem) {
-                              revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                              revenueBase = calculateTaxableIncome(revItem);
                             }
                           }
                           return revenueBase * item.percentage / 100;
@@ -950,11 +950,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       if (item.sourceType === 'percentage') {
                         let revenueBase = 0;
                         if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                          revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                          revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                         } else {
                           const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                           if (revItem) {
-                            revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                            revenueBase = calculateTaxableIncome(revItem);
                           }
                         }
                         totalWithTax += revenueBase * item.percentage / 100 * productionRate;
@@ -972,11 +972,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         if (item.sourceType === 'percentage') {
                           let revenueBase = 0;
                           if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                           } else {
                             const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                             if (revItem) {
-                              revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                              revenueBase = calculateTaxableIncome(revItem);
                             }
                           }
                           return revenueBase * item.percentage / 100;
@@ -1960,11 +1960,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                               if (item.sourceType === 'percentage') {
                                 let revenueBase = 0;
                                 if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                  revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                                  revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                                 } else {
                                   const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                                   if (revItem) {
-                                    revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                    revenueBase = calculateTaxableIncome(revItem);
                                   }
                                 }
                                 return revenueBase * item.percentage / 100;
@@ -2014,7 +2014,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           if (costConfig.otherExpenses.type === 'percentage') {
                             const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                               const income = calculateTaxableIncome(revItem);
-                              return sum + (revItem.priceUnit === 'yuan' ? income / 10000 : income);
+                              return sum + income;
                             }, 0);
                             yearOtherExpenses += revenueBase * costConfig.otherExpenses.percentage / 100 * productionRate;
                           } else {
@@ -2041,11 +2041,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         if (item.sourceType === 'percentage') {
                           let revenueBase = 0;
                           if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                           } else {
                             const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                             if (revItem) {
-                              revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                              revenueBase = calculateTaxableIncome(revItem);
                             }
                           }
                           yearTotalWithTax += revenueBase * item.percentage / 100 * productionRate;
@@ -2063,11 +2063,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           if (item.sourceType === 'percentage') {
                             let revenueBase = 0;
                             if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                             } else {
                               const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                               if (revItem) {
-                                revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                revenueBase = calculateTaxableIncome(revItem);
                               }
                             }
                             return revenueBase * item.percentage / 100;
@@ -2117,7 +2117,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       if (costConfig.otherExpenses.type === 'percentage') {
                         const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                           const income = calculateTaxableIncome(revItem);
-                          return sum + (revItem.priceUnit === 'yuan' ? income / 10000 : income);
+                          return sum + income;
                         }, 0);
                         otherExpensesTotal += revenueBase * costConfig.otherExpenses.percentage / 100 * productionRate;
                       } else {
@@ -2155,11 +2155,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         if (item.sourceType === 'percentage') {
                           let revenueBase = 0;
                           if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                            revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                           } else {
                             const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                             if (revItem) {
-                              revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                              revenueBase = calculateTaxableIncome(revItem);
                             }
                           }
                           totalWithTax += revenueBase * item.percentage / 100 * productionRate;
@@ -2177,11 +2177,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           if (item.sourceType === 'percentage') {
                             let revenueBase = 0;
                             if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                              revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                             } else {
                               const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                               if (revItem) {
-                                revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                revenueBase = calculateTaxableIncome(revItem);
                               }
                             }
                             return revenueBase * item.percentage / 100;
@@ -2367,7 +2367,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           if (costConfig.otherExpenses.type === 'percentage') {
                             const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                               const income = calculateTaxableIncome(revItem);
-                              return sum + (revItem.priceUnit === 'yuan' ? income / 10000 : income);
+                              return sum + income;
                             }, 0);
                             yearTotal += revenueBase * costConfig.otherExpenses.percentage / 100 * productionRate;
                           } else {
@@ -2387,7 +2387,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       if (costConfig.otherExpenses.type === 'percentage') {
                         const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                           const income = calculateTaxableIncome(revItem);
-                          return sum + (revItem.priceUnit === 'yuan' ? income / 10000 : income);
+                          return sum + income;
                         }, 0);
                         yearTotal += revenueBase * costConfig.otherExpenses.percentage / 100 * productionRate;
                       } else {
@@ -2574,11 +2574,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                               if (item.sourceType === 'percentage') {
                                 let revenueBase = 0;
                                 if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                  revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                                  revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                                 } else {
                                   const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                                   if (revItem) {
-                                    revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                    revenueBase = calculateTaxableIncome(revItem);
                                   }
                                 }
                                 return revenueBase * item.percentage / 100;
@@ -2623,7 +2623,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           if (costConfig.otherExpenses.type === 'percentage') {
                             const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                               const income = calculateTaxableIncome(revItem);
-                              return sum + (revItem.priceUnit === 'yuan' ? income / 10000 : income);
+                              return sum + income;
                             }, 0);
                             yearOtherExpenses += revenueBase * costConfig.otherExpenses.percentage / 100 * productionRate;
                           } else {
@@ -2700,11 +2700,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                                 if (item.sourceType === 'percentage') {
                                   let revenueBase = 0;
                                   if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
-                                    revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + (revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem)), 0);
+                                    revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
                                   } else {
                                     const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
                                     if (revItem) {
-                                      revenueBase = revItem.priceUnit === 'yuan' ? calculateTaxableIncome(revItem) / 10000 : calculateTaxableIncome(revItem);
+                                      revenueBase = calculateTaxableIncome(revItem);
                                     }
                                   }
                                   return revenueBase * item.percentage / 100;
@@ -2727,7 +2727,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             if (costConfig.auxiliaryMaterials.type === 'percentage') {
                               const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                                 const income = calculateTaxableIncome(revItem);
-                                return sum + (revItem.priceUnit === 'yuan' ? income / 10000 : income);
+                                return sum + income;
                               }, 0);
                               yearAuxiliaryMaterials += revenueBase * costConfig.auxiliaryMaterials.percentage / 100 * productionRate;
                             } else {
@@ -2766,7 +2766,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             if (costConfig.otherExpenses.type === 'percentage') {
                               const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
                                 const income = calculateTaxableIncome(revItem);
-                                return sum + (revItem.priceUnit === 'yuan' ? income / 10000 : income);
+                                return sum + income;
                               }, 0);
                               yearOtherExpenses += revenueBase * costConfig.otherExpenses.percentage / 100;
                             } else {
