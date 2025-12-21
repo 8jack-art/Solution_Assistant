@@ -587,7 +587,7 @@ const DynamicRevenueTable: React.FC = () => {
                   value={formData.quantity || 0}
                   onChange={(value) => setFormData({ ...formData, quantity: Number(value) })}
                   min={0}
-                  decimalScale={7}
+                  decimalScale={4}
                 />
               </Grid.Col>
               <Grid.Col span={3}>
@@ -599,22 +599,39 @@ const DynamicRevenueTable: React.FC = () => {
                 />
               </Grid.Col>
               <Grid.Col span={3}>
-                <NumberInput
-                  label="单价(万元)"
-                  placeholder="请输入单价"
-                  value={formData.unitPrice || 0}
-                  onChange={(value) => {
-                    const newUnitPrice = value !== null && value !== undefined ? Number(value) : undefined;
-                    console.log('🔍 [表单输入] 单价变化:', { 
-                      inputValue: value, 
-                      newUnitPrice, 
-                      fieldName: 'unitPrice (quantity-price)' 
-                    });
-                    setFormData({ ...formData, unitPrice: newUnitPrice });
-                  }}
-                  min={0}
-                  decimalScale={7}
-                />
+                <div style={{ position: 'relative' }}>
+                  <NumberInput
+                    label="单价(万元)"
+                    placeholder="请输入单价"
+                    value={formData.unitPrice || 0}
+                    onChange={(value) => {
+                      const newUnitPrice = value !== null && value !== undefined ? Number(value) : undefined;
+                      console.log('🔍 [表单输入] 单价变化:', { 
+                        inputValue: value, 
+                        newUnitPrice, 
+                        fieldName: 'unitPrice (quantity-price)' 
+                      });
+                      setFormData({ ...formData, unitPrice: newUnitPrice });
+                    }}
+                    min={0}
+                    decimalScale={7}
+                  />
+                  {formData.unitPrice !== undefined && formData.unitPrice !== null && formData.unitPrice > 0 && formData.unitPrice < 0.1 && (
+                    <Text 
+                      size="sm" 
+                      c="blue" 
+                      style={{ 
+                        position: 'absolute', 
+                        right: '-80px', 
+                        top: '32px',
+                        whiteSpace: 'nowrap',
+                        zIndex: 1
+                      }}
+                    >
+                      {(formData.unitPrice * 10000).toFixed(2)}元
+                    </Text>
+                  )}
+                </div>
               </Grid.Col>
 
             </>
@@ -643,14 +660,31 @@ const DynamicRevenueTable: React.FC = () => {
                 />
               </Grid.Col>
               <Grid.Col span={3}>
-                <NumberInput
-                  label="单价(万元)"
-                  placeholder="请输入单价"
-                  value={formData.unitPrice || 0}
-                  onChange={(value) => setFormData({ ...formData, unitPrice: value !== null && value !== undefined ? Number(value) : undefined })}
-                  min={0}
-                  decimalScale={7}
-                />
+                <div style={{ position: 'relative' }}>
+                  <NumberInput
+                    label="单价(万元)"
+                    placeholder="请输入单价"
+                    value={formData.unitPrice || 0}
+                    onChange={(value) => setFormData({ ...formData, unitPrice: value !== null && value !== undefined ? Number(value) : undefined })}
+                    min={0}
+                    decimalScale={7}
+                  />
+                  {formData.unitPrice !== undefined && formData.unitPrice !== null && formData.unitPrice > 0 && formData.unitPrice < 0.1 && (
+                    <Text 
+                      size="sm" 
+                      c="blue" 
+                      style={{ 
+                        position: 'absolute', 
+                        right: '-80px', 
+                        top: '32px',
+                        whiteSpace: 'nowrap',
+                        zIndex: 1
+                      }}
+                    >
+                      {(formData.unitPrice * 10000).toFixed(2)}元
+                    </Text>
+                  )}
+                </div>
               </Grid.Col>
 
             </>
@@ -677,14 +711,31 @@ const DynamicRevenueTable: React.FC = () => {
                 />
               </Grid.Col>
               <Grid.Col span={3}>
-                <NumberInput
-                  label="单价(万元)"
-                  placeholder="请输入单价"
-                  value={formData.unitPrice || 0}
-                  onChange={(value) => setFormData({ ...formData, unitPrice: value !== null && value !== undefined ? Number(value) : undefined })}
-                  min={0}
-                  decimalScale={4}
-                />
+                <div style={{ position: 'relative' }}>
+                  <NumberInput
+                    label="单价(万元)"
+                    placeholder="请输入单价"
+                    value={formData.unitPrice || 0}
+                    onChange={(value) => setFormData({ ...formData, unitPrice: value !== null && value !== undefined ? Number(value) : undefined })}
+                    min={0}
+                    decimalScale={7}
+                  />
+                  {formData.unitPrice !== undefined && formData.unitPrice !== null && formData.unitPrice > 0 && formData.unitPrice < 0.1 && (
+                    <Text 
+                      size="sm" 
+                      c="blue" 
+                      style={{ 
+                        position: 'absolute', 
+                        right: '-80px', 
+                        top: '32px',
+                        whiteSpace: 'nowrap',
+                        zIndex: 1
+                      }}
+                    >
+                      {(formData.unitPrice * 10000).toFixed(2)}元
+                    </Text>
+                  )}
+                </div>
               </Grid.Col>
 
             </>
@@ -703,14 +754,31 @@ const DynamicRevenueTable: React.FC = () => {
                 />
               </Grid.Col>
               <Grid.Col span={3}>
-                <NumberInput
-                  label="单价(万元)"
-                  placeholder="请输入单价"
-                  value={formData.unitPrice || 0}
-                  onChange={(value) => setFormData({ ...formData, unitPrice: value !== null && value !== undefined ? Number(value) : undefined })}
-                  min={0}
-                  decimalScale={4}
-                />
+                <div style={{ position: 'relative' }}>
+                  <NumberInput
+                    label="单价(万元)"
+                    placeholder="请输入单价"
+                    value={formData.unitPrice || 0}
+                    onChange={(value) => setFormData({ ...formData, unitPrice: value !== null && value !== undefined ? Number(value) : undefined })}
+                    min={0}
+                    decimalScale={7}
+                  />
+                  {formData.unitPrice !== undefined && formData.unitPrice !== null && formData.unitPrice > 0 && formData.unitPrice < 0.1 && (
+                    <Text 
+                      size="sm" 
+                      c="blue" 
+                      style={{ 
+                        position: 'absolute', 
+                        right: '-80px', 
+                        top: '32px',
+                        whiteSpace: 'nowrap',
+                        zIndex: 1
+                      }}
+                    >
+                      {(formData.unitPrice * 10000).toFixed(2)}元
+                    </Text>
+                  )}
+                </div>
               </Grid.Col>
 
               <Grid.Col span={3}>
