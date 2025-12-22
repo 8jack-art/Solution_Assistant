@@ -32,8 +32,16 @@ import {
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, calculateTaxableIncome, calculateNonTaxIncome, type RevenueItem } from '@/stores/revenueCostStore'
 import { revenueCostApi } from '@/lib/api'
+import WagesModal from './WagesModal'
 
 // 类型定义
+interface WageItem {
+  id: string
+  name: string
+  employees: number
+  salaryPerEmployee: number // 万元/年
+  welfareRate: number // 福利费率 %
+}
 interface CostItem {
   id: number;
   name: string;
@@ -76,6 +84,7 @@ interface CostConfig {
     salaryPerEmployee: number;
     directAmount: number;
     taxRate?: number;
+    items?: WageItem[];
   };
   repair: {
     type: 'percentage' | 'directAmount';
@@ -229,6 +238,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   // 其他费用配置弹窗状态
   const [showOtherModal, setShowOtherModal] = useState(false)
   
+  // 工资及福利费配置弹窗状态
+  const [showWagesModal, setShowWagesModal] = useState(false)
+  
   // 原材料编辑弹窗状态
   const [showRawMaterialEditModal, setShowRawMaterialEditModal] = useState(false)
   const [currentRawMaterial, setCurrentRawMaterial] = useState<any>(null)
@@ -376,7 +388,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       title: '工资及福利费', 
       icon: IconUserDollar, 
       color: 'orange',
-      onClick: () => {} // 暂时禁用
+      onClick: () => setShowWagesModal(true)
     },
   ];
 
@@ -2915,6 +2927,14 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       
       {/* 其他费用配置弹窗 */}
       {renderOtherModal()}
+      
+      {/* 工资及福利费配置弹窗 */}
+      <WagesModal 
+        opened={showWagesModal}
+        onClose={() => setShowWagesModal(false)}
+        costConfig={costConfig}
+        setCostConfig={setCostConfig}
+      />
     </>
   )
 }
