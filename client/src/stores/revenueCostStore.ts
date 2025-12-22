@@ -6,7 +6,11 @@ import { revenueCostApi } from '@/lib/api'
 const getDefaultCostConfig = (): CostConfig => ({
   rawMaterials: {
     applyProductionRate: true,
-    items: []
+    items: [
+      { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentage: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
+      { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentage: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
+      { id: 3, name: '原材料3', sourceType: 'directAmount', percentage: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
+    ]
   },
   auxiliaryMaterials: {
     type: 'percentage',
@@ -67,15 +71,18 @@ interface WageItem {
 
 
 
-interface FuelPowerItem {
+export interface FuelPowerItem {
   id: number;
   name: string;
   specification: string;
   unit: string;
-  price: number;
-  consumption: number;
+  quantity?: number;
+  unitPrice?: number;
+  price?: number;
+  consumption?: number;
   totalCost: number;
   applyProductionRate: boolean;
+  taxRate?: number;
 }
 
 export interface CostConfig {

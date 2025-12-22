@@ -16,7 +16,7 @@ import {
 } from '@mantine/core'
 import { IconPlus, IconTrash, IconEye } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { CostConfig } from './DynamicCostTable'
+import { CostConfig } from '@/stores/revenueCostStore'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
 
 // 工资项接口定义
@@ -34,13 +34,13 @@ interface WagesModalProps {
   opened: boolean
   onClose: () => void
   costConfig: CostConfig
-  setCostConfig: React.Dispatch<React.SetStateAction<CostConfig>>
+  updateCostConfig: (updates: Partial<CostConfig>) => void
 }
 
 /**
  * 工资及福利费估算表弹窗
  */
-const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, setCostConfig }) => {
+const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, updateCostConfig }) => {
   const [wageItems, setWageItems] = useState<WageItem[]>([])
   const [windowSize, setWindowSize] = useState({
     width: typeof window !== 'undefined' ? window.innerWidth : 1200,
@@ -188,7 +188,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
     })
 
     // 更新costConfig，保存详细的工资项数据
-    setCostConfig({
+    updateCostConfig({
       ...costConfig,
       wages: {
         employees: totalEmployees,
