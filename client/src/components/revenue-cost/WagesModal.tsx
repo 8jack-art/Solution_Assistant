@@ -222,12 +222,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
   // 计算多年期的工资调整
   const calculateMultiYearTotal = (item: WageItem, years?: number) => {
     const operationYears = years || context?.operationYears || 10
-    if (!item.changeInterval || !item.changePercentage) {
-      return calculateTotal(item) * operationYears
-    }
-
-    let total = 0
     let currentSalary = item.salaryPerEmployee
+    let total = 0
     
     for (let year = 0; year < operationYears; year++) {
       // 每年的总成本（包括福利费）
@@ -236,8 +232,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
       const yearlyTotal = yearlySubtotal + yearlyWelfare
       total += yearlyTotal
       
-      // 每隔changeInterval年调整一次工资
-      if ((year + 1) % item.changeInterval === 0) {
+      // 根据调整周期和幅度调整工资
+      if (item.changeInterval && item.changePercentage && (year + 1) % item.changeInterval === 0) {
         currentSalary = currentSalary * (1 + item.changePercentage / 100)
       }
     }
@@ -245,28 +241,29 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
     return total
   }
 
-  const grandTotal = wageItems.reduce((sum, item) => sum + calculateTotal(item), 0)
+  const calculateGrandTotal = (items: WageItem[]) => {
+    return items.reduce((sum, item) => sum + calculateMultiYearTotal(item), 0)
+  }
+
+  const grandTotal = calculateGrandTotal(wageItems)
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={
-        <Text size="md">
-          💼 工资及福利费估算表
-        </Text>
-      }
-      size={windowSize.width < 768 ? '100%' : 'calc(100vw - 100px)'}
-      centered
-      fullScreen={windowSize.width < 768}
-      styles={{
-        body: {
-          maxHeight: windowSize.width < 768 ? '100vh' : 'calc(100vh - 200px)',
-          overflowY: 'auto',
-          padding: windowSize.width < 768 ? '10px' : '0',
-        },
-      }}
-    >
+    <>
+      <Modal
+        opened={opened}
+        onClose={onClose}
+        title="工资及福利费用估算"
+        size={windowSize.width < 768 ? '100%' : 'calc(100vw - 100px)'}
+        centered
+        fullScreen={windowSize.width < 768}
+        styles={{
+          body: {
+            maxHeight: windowSize.width < 768 ? '100vh' : 'calc(100vh - 200px)',
+            overflowY: 'auto',
+            padding: windowSize.width < 768 ? '10px' : '0',
+          },
+        }}
+      >
       <Stack gap="md">
         <Group justify="space-between" mb="md" wrap="nowrap">
           <Text 
@@ -574,11 +571,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
           </Box>
         </Card>
 
-        {/* 说明信息 */}
-        <Text size="xs" c="#86909C">
-          💡 福利费通常包括社保、公积金、工会经费、职工教育经费等，一般为工资总额的20-30%。
-          工资调整规则：设置变化（年）和幅度（%）后，系统将自动计算多年期的工资成本变化。
-        </Text>
+
 
         {/* 操作按钮 */}
         <Group justify="flex-end" gap="md" style={{ marginTop: '16px', marginBottom: '8px' }}>
@@ -598,6 +591,211 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
         </Group>
       </Stack>
     </Modal>
+    <Modal
+          opened={detailModalOpen}
+          onClose={() => setDetailModalOpen(false)}
+          title="工资及福利明细表"
+          size="xl"
+          styles={{
+            body: {
+              padding: '15px',
+              maxHeight: '80vh',
+              overflow: 'hidden',
+            },
+            content: {
+              maxHeight: '80vh',
+              overflow: 'hidden',
+            },
+          }}
+        >
+          {(() => {
+            if (!context) return <Text c="red">项目上下文未加载</Text>
+
+            const operationYears = context.operationYears
+            const years = Array.from({ length: operationYears }, (_, i) => i + 1)
+
+            return (
+              <Table striped withTableBorder style={{ fontSize: '11px', width: '100%', tableLayout: 'auto' }}>
+                <Table.Thead>
+                  <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                    <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>序号</Table.Th>
+                    <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', minWidth: '150px' }}>项目</Table.Th>
+                    <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '120px' }}>合计（万元）</Table.Th>
+                    <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>运营期（万元）</Table.Th>
+                  </Table.Tr>
+                  <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                    {years.map((year) => (
+                      <Table.Th key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6', minWidth: '80px' }}>
+                        第{year}年
+                      </Table.Th>
+                    ))}
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {/* 1. 新员工类别明细 */}
+                  {wageItems.map((item, index) => (
+                    <Table.Tr key={item.id}>
+                      <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{index + 1}</Table.Td>
+                      <Table.Td style={{ border: '1px solid #dee2e6', paddingLeft: '16px' }}>
+                        {item.name}
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                        {(() => {
+                          // 该员工类别合计列 = 运营期各年数值的总和
+                          let totalSum = 0;
+                          years.forEach((year) => {
+                            const yearlySubtotal = item.employees * item.salaryPerEmployee
+                            totalSum += yearlySubtotal
+                          });
+                          return totalSum.toFixed(2);
+                        })()}
+                      </Table.Td>
+                      {years.map((year) => {
+                        const yearlySubtotal = item.employees * item.salaryPerEmployee
+                        
+                        return (
+                          <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                            {yearlySubtotal.toFixed(2)}
+                          </Table.Td>
+                        );
+                      })}
+                    </Table.Tr>
+                  ))}
+                  
+                  {/* 5. 工资总额 */}
+                  <Table.Tr style={{ backgroundColor: '#f0f8ff' }}>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', fontWeight: 'bold' }}>{wageItems.length + 1}</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6', fontWeight: 'bold' }}>工资总额</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                      {(() => {
+                        // 工资总额合计列 = 运营期各年工资总额的总和
+                        let totalSum = 0;
+                        years.forEach((year) => {
+                          let yearTotal = 0;
+                          wageItems.forEach((item) => {
+                            const yearlySubtotal = item.employees * item.salaryPerEmployee
+                            yearTotal += yearlySubtotal
+                          });
+                          totalSum += yearTotal;
+                        });
+                        return totalSum.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      // 计算该年的工资总额
+                      let yearTotal = 0;
+                      wageItems.forEach((item) => {
+                        const yearlySubtotal = item.employees * item.salaryPerEmployee
+                        yearTotal += yearlySubtotal
+                      });
+                      
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                          {yearTotal.toFixed(2)}
+                        </Table.Td>
+                      );
+                    })}
+                  </Table.Tr>
+                  
+                  {/* 6. 福利费 */}
+                  <Table.Tr style={{ backgroundColor: '#fff5ee' }}>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', fontWeight: 'bold' }}>{wageItems.length + 2}</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                      福利费（{(() => {
+                        // 计算平均福利费率
+                        const totalSalary = wageItems.reduce((sum, item) => sum + (item.employees * item.salaryPerEmployee), 0);
+                        const totalWelfare = wageItems.reduce((sum, item) => {
+                          const yearlySubtotal = item.employees * item.salaryPerEmployee
+                          const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
+                          return sum + yearlyWelfare
+                        }, 0);
+                        const avgRate = totalSalary > 0 ? (totalWelfare / totalSalary * 100) : 0;
+                        return avgRate.toFixed(1);
+                      })()}%）
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                      {(() => {
+                        // 福利费合计列 = 运营期各年福利费的总和
+                        let totalSum = 0;
+                        years.forEach((year) => {
+                          let yearTotal = 0;
+                          wageItems.forEach((item) => {
+                            const yearlySubtotal = item.employees * item.salaryPerEmployee
+                            const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
+                            yearTotal += yearlyWelfare
+                          });
+                          totalSum += yearTotal;
+                        });
+                        return totalSum.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      // 计算该年的福利费总额
+                      let yearTotal = 0;
+                      wageItems.forEach((item) => {
+                        const yearlySubtotal = item.employees * item.salaryPerEmployee
+                        const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
+                        yearTotal += yearlyWelfare
+                      });
+                      
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
+                          {yearTotal.toFixed(2)}
+                        </Table.Td>
+                      );
+                    })}
+                  </Table.Tr>
+                  
+                  {/* 7. 合计 */}
+                  <Table.Tr style={{ backgroundColor: '#f0fff0', fontWeight: 'bold' }}>
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{wageItems.length + 3}</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>合计</Table.Td>
+                    <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        // 总计 = 工资总额 + 福利费总额
+                        let grandTotal = 0;
+                        years.forEach((year) => {
+                          let yearTotal = 0;
+                          wageItems.forEach((item) => {
+                            const yearlySubtotal = item.employees * item.salaryPerEmployee
+                            const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
+                            yearTotal += yearlySubtotal + yearlyWelfare
+                          });
+                          grandTotal += yearTotal;
+                        });
+                        return grandTotal.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      // 计算该年的合计（工资+福利）
+                      let yearTotal = 0;
+                      wageItems.forEach((item) => {
+                        const yearlySubtotal = item.employees * item.salaryPerEmployee
+                        const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
+                        yearTotal += yearlySubtotal + yearlyWelfare
+                      });
+                      
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                          {yearTotal.toFixed(2)}
+                        </Table.Td>
+                      );
+                    })}
+                  </Table.Tr>
+                </Table.Tbody>
+              </Table>
+            )
+          })()}
+
+
+
+      <Group justify="flex-end" mt="md">
+        <Button variant="outline" onClick={() => setDetailModalOpen(false)}>
+          关闭
+        </Button>
+      </Group>
+    </Modal>
+    </>
   )
 }
 
