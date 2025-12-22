@@ -35,13 +35,6 @@ import { revenueCostApi } from '@/lib/api'
 import WagesModal from './WagesModal'
 
 // 类型定义
-interface WageItem {
-  id: string
-  name: string
-  employees: number
-  salaryPerEmployee: number // 万元/年
-  welfareRate: number // 福利费率 %
-}
 interface CostItem {
   id: number;
   name: string;
@@ -53,6 +46,14 @@ interface CostItem {
   directAmount?: number;
   taxRate?: number;
 }
+interface WageItem {
+  id: string
+  name: string
+  employees: number
+  salaryPerEmployee: number // 万元/年
+  welfareRate: number // 福利费率 %
+}
+
 
 interface FuelPowerItem {
   id: number;
@@ -222,7 +223,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   repaymentTableData = [], 
   depreciationData = [] 
 }) => {
-  const { context, revenueItems, productionRates } = useRevenueCostStore()
+  const { context, revenueItems, productionRates, costConfig, updateCostConfig } = useRevenueCostStore()
   
   const [showCostDetailModal, setShowCostDetailModal] = useState(false)
   
@@ -313,8 +314,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     return getDefaultCostConfig();
   };
 
-  // 成本配置参数状态 - 从store加载或使用默认值
-  const [costConfig, setCostConfig] = useState<CostConfig>(loadConfigFromStorage);
+  
 
   // 计算外购原材料（除税）
   const calculateRawMaterialsExcludingTax = useMemo(() => {
@@ -593,22 +593,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 if (rawMaterialIndex !== null) {
                   const newItems = [...costConfig.rawMaterials.items];
                   newItems[rawMaterialIndex] = currentRawMaterial;
-                  setCostConfig({
-                    ...costConfig,
+                  updateCostConfig({
                     rawMaterials: {
                       ...costConfig.rawMaterials,
                       items: newItems
                     }
                   });
-                  
-                  // 保存到localStorage
-                  localStorage.setItem('costConfig', JSON.stringify({
-                    ...costConfig,
-                    rawMaterials: {
-                      ...costConfig.rawMaterials,
-                      items: newItems
-                    }
-                  }));
                   
                   // 保存到后端
                   try {
@@ -678,8 +668,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                   directAmount: 0,
                   taxRate: 13
                 };
-                setCostConfig({
-                  ...costConfig,
+                updateCostConfig({
                   rawMaterials: {
                     ...costConfig.rawMaterials,
                     items: [...costConfig.rawMaterials.items, newItem]
@@ -922,8 +911,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             size="sm"
                             onClick={() => {
                               const newItems = costConfig.rawMaterials.items.filter((_: CostItem, i: number) => i !== idx);
-                              setCostConfig({
-                                ...costConfig,
+                              updateCostConfig({
                                 rawMaterials: {
                                   ...costConfig.rawMaterials,
                                   items: newItems
@@ -1098,8 +1086,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 <Checkbox
                   label="应用达产率"
                   checked={costConfig.rawMaterials.applyProductionRate}
-                  onChange={(event) => setCostConfig({
-                    ...costConfig,
+                  onChange={(event) => updateCostConfig({
                     rawMaterials: { 
                       ...costConfig.rawMaterials, 
                       applyProductionRate: event.currentTarget.checked 
@@ -1128,8 +1115,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             { value: 'directAmount', label: '直接填金额' },
           ]}
           value={costConfig.repair.type}
-          onChange={(value) => setCostConfig({
-            ...costConfig,
+          onChange={(value) => updateCostConfig({
             repair: { ...costConfig.repair, type: value as any }
           })}
         />
@@ -1138,8 +1124,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           <NumberInput
             label="固定资产投资的百分比 (%)"
             value={costConfig.repair.percentageOfFixedAssets}
-            onChange={(value) => setCostConfig({
-              ...costConfig,
+            onChange={(value) => updateCostConfig({
               repair: { ...costConfig.repair, percentageOfFixedAssets: Number(value) }
             })}
             min={0}
@@ -1152,7 +1137,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           <NumberInput
             label="直接金额（万元）"
             value={costConfig.repair.directAmount}
-            onChange={(value) => setCostConfig({
+            onChange={(value) => updateCostConfig({
               ...costConfig,
               repair: { ...costConfig.repair, directAmount: Number(value) }
             })}
@@ -1164,8 +1149,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         <NumberInput
           label="进项税率 (%)"
           value={costConfig.repair.taxRate}
-          onChange={(value) => setCostConfig({
-            ...costConfig,
+          onChange={(value) => updateCostConfig({
             repair: { ...costConfig.repair, taxRate: Number(value) }
           })}
           min={0}
@@ -1203,22 +1187,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     if (fuelPowerItemIndex !== null) {
       const newItems = [...(costConfig.fuelPower.items || [])];
       newItems[fuelPowerItemIndex] = currentFuelPowerItem;
-      setCostConfig({
-        ...costConfig,
+      updateCostConfig({
         fuelPower: {
           ...costConfig.fuelPower,
           items: newItems
         }
       });
-      
-      // 保存到localStorage
-      localStorage.setItem('costConfig', JSON.stringify({
-        ...costConfig,
-        fuelPower: {
-          ...costConfig.fuelPower,
-          items: newItems
-        }
-      }));
       
       // 保存到后端
       try {
@@ -1554,8 +1528,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             onClick={() => {
                               const updatedItems = [...(costConfig.fuelPower.items || [])];
                               updatedItems[idx] = {...item, quantity: 0};
-                              setCostConfig({
-                                ...costConfig,
+                              updateCostConfig({
                                 fuelPower: {
                                   ...costConfig.fuelPower,
                                   items: updatedItems
@@ -1721,8 +1694,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
               <Checkbox
                 label="应用达产率"
                 checked={costConfig.fuelPower.applyProductionRate}
-                onChange={(event) => setCostConfig({
-                  ...costConfig,
+                onChange={(event) => updateCostConfig({
                   fuelPower: { 
                     ...costConfig.fuelPower, 
                     applyProductionRate: event.currentTarget.checked 
@@ -1752,8 +1724,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             { value: 'directAmount', label: '直接填金额' },
           ]}
           value={costConfig.auxiliaryMaterials.type}
-          onChange={(value) => setCostConfig({
-            ...costConfig,
+          onChange={(value) => updateCostConfig({
             auxiliaryMaterials: { ...costConfig.auxiliaryMaterials, type: value as any }
           })}
         />
@@ -1772,8 +1743,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             <NumberInput
               label="营业收入的百分比 (%)"
               value={costConfig.auxiliaryMaterials.percentage}
-              onChange={(value) => setCostConfig({
-                ...costConfig,
+              onChange={(value) => updateCostConfig({
                 auxiliaryMaterials: { ...costConfig.auxiliaryMaterials, percentage: Number(value) }
               })}
               min={0}
@@ -1787,8 +1757,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           <NumberInput
             label="直接金额（万元）"
             value={costConfig.auxiliaryMaterials.directAmount}
-            onChange={(value) => setCostConfig({
-              ...costConfig,
+            onChange={(value) => updateCostConfig({
               auxiliaryMaterials: { ...costConfig.auxiliaryMaterials, directAmount: Number(value) }
             })}
             min={0}
@@ -1799,8 +1768,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         <NumberInput
           label="进项税率 (%)"
           value={costConfig.auxiliaryMaterials.taxRate}
-          onChange={(value) => setCostConfig({
-            ...costConfig,
+          onChange={(value) => updateCostConfig({
             auxiliaryMaterials: { ...costConfig.auxiliaryMaterials, taxRate: Number(value) }
           })}
           min={0}
@@ -1836,8 +1804,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             { value: 'directAmount', label: '直接填金额' },
           ]}
           value={costConfig.otherExpenses.type}
-          onChange={(value) => setCostConfig({
-            ...costConfig,
+          onChange={(value) => updateCostConfig({
             otherExpenses: { ...costConfig.otherExpenses, type: value as any }
           })}
         />
@@ -2093,7 +2060,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           
                           // 1.3 工资及福利费
                           let yearWages = 0;
-                          yearWages += (costConfig.wages.employees || 0) * (costConfig.wages.salaryPerEmployee || 0);
+                          yearWages += costConfig.wages.directAmount || 0;
                           total += yearWages; // 工资通常不受达产率影响
                           
                           // 1.4 修理费
@@ -2202,7 +2169,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                                         
                       // 1.3 工资及福利费
                       let wagesTotal = 0;
-                      wagesTotal += (costConfig.wages.employees || 0) * (costConfig.wages.salaryPerEmployee || 0);
+                      wagesTotal += costConfig.wages.directAmount || 0;
                       total += wagesTotal; // 工资通常不受达产率影响
                                         
                       // 1.4 修理费
@@ -2378,8 +2345,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>工资及福利费</Table.Td>
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
-                        // 工资及福利费合计 = 员工人数 × 人年工资 × 运营期年数（通常不受达产率影响）
-                        const yearlyWages = (costConfig.wages.employees || 0) * (costConfig.wages.salaryPerEmployee || 0);
+                        // 工资及福利费合计 = 工资及福利明细表合计 × 运营期年数（通常不受达产率影响）
+                        const yearlyWages = costConfig.wages.directAmount || 0;
                         const totalWages = yearlyWages * years.length;
                         return totalWages.toFixed(2);
                       })()}
@@ -2387,8 +2354,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     {years.map((year) => (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {(() => {
-                          // 工资及福利费 = 员工人数 × 人年工资（通常不受达产率影响）
-                          const wages = (costConfig.wages.employees || 0) * (costConfig.wages.salaryPerEmployee || 0);
+                          // 工资及福利费 = 直接引用工资及福利明细表合计（通常不受达产率影响）
+                          const wages = costConfig.wages.directAmount || 0;
                           return wages.toFixed(2);
                         })()}
                       </Table.Td>
@@ -2699,7 +2666,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           
                           // 1.3 工资及福利费
                           let yearWages = 0;
-                          yearWages += (costConfig.wages.employees || 0) * (costConfig.wages.salaryPerEmployee || 0);
+                          yearWages += costConfig.wages.directAmount || 0;
                           row1Total += yearWages; // 工资通常不受达产率影响
                           
                           // 1.4 修理费
@@ -2831,7 +2798,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             yearTotal += yearFuelPower;
                             
                             // 1.3 工资及福利费
-                            const yearWages = (costConfig.wages.employees || 0) * (costConfig.wages.salaryPerEmployee || 0);
+                            const yearWages = costConfig.wages.directAmount || 0;
                             yearTotal += yearWages; // 工资通常不受达产率影响
                             
                             // 1.4 修理费
@@ -2933,7 +2900,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         opened={showWagesModal}
         onClose={() => setShowWagesModal(false)}
         costConfig={costConfig}
-        setCostConfig={setCostConfig}
+        setCostConfig={updateCostConfig}
       />
     </>
   )

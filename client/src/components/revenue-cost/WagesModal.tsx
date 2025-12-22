@@ -179,13 +179,21 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
     const totalSalary = wageItems.reduce((sum, item) => sum + (item.employees * item.salaryPerEmployee), 0)
     const averageSalary = totalEmployees > 0 ? totalSalary / totalEmployees : 0
 
+    // 计算第一年的工资及福利费合计（工资+福利费）
+    let firstYearTotal = 0;
+    wageItems.forEach((item) => {
+      const yearlySubtotal = item.employees * item.salaryPerEmployee
+      const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
+      firstYearTotal += yearlySubtotal + yearlyWelfare
+    })
+
     // 更新costConfig，保存详细的工资项数据
     setCostConfig({
       ...costConfig,
       wages: {
         employees: totalEmployees,
         salaryPerEmployee: averageSalary,
-        directAmount: totalSalary, // 添加总金额作为directAmount
+        directAmount: firstYearTotal, // 存储第一年的工资及福利费合计
         items: wageItems // 保存完整的工资项数据
       }
     })

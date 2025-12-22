@@ -2,6 +2,128 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { revenueCostApi } from '@/lib/api'
 
+// 默认成本配置
+const getDefaultCostConfig = (): CostConfig => ({
+  rawMaterials: {
+    applyProductionRate: true,
+    items: []
+  },
+  auxiliaryMaterials: {
+    type: 'percentage',
+    percentage: 5,
+    applyProductionRate: true,
+    taxRate: 13
+  },
+  fuelPower: {
+    applyProductionRate: true,
+    items: []
+  },
+  wages: {
+    employees: 0,
+    salaryPerEmployee: 0,
+    directAmount: 0,
+    taxRate: 0
+  },
+  repair: {
+    type: 'percentage',
+    percentageOfFixedAssets: 5,
+    taxRate: 13,
+    applyProductionRate: true
+  },
+  otherExpenses: {
+    type: 'percentage',
+    percentage: 3,
+    taxRate: 6,
+    applyProductionRate: true
+  },
+  depreciation: {
+    type: 'percentage',
+    percentageOfFixedAssets: 10
+  },
+  amortization: {
+    type: 'percentage',
+    percentageOfFixedAssets: 5
+  },
+  interest: {
+    type: 'percentage',
+    percentage: 5
+  }
+})
+
+// 成本配置类型定义
+interface WageItem {
+  id: string
+  name: string
+  employees: number
+  salaryPerEmployee: number // 万元/年
+  welfareRate: number // 福利费率 %
+}
+
+
+
+interface FuelPowerItem {
+  id: number;
+  name: string;
+  type: 'water' | 'electricity' | 'gasoline' | 'diesel' | 'naturalGas';
+  quantity?: number;
+  unitPrice?: number;
+  taxRate?: number;
+}
+
+export interface CostConfig {
+  rawMaterials: {
+    applyProductionRate: boolean;
+    items: any[]; // 使用any[]避免类型冲突
+  };
+  auxiliaryMaterials: {
+    type: 'percentage' | 'directAmount';
+    percentage?: number;
+    directAmount?: number;
+    applyProductionRate: boolean;
+    taxRate?: number;
+  };
+  fuelPower: {
+    applyProductionRate: boolean;
+    items?: FuelPowerItem[];
+  };
+  wages: {
+    employees: number;
+    salaryPerEmployee: number;
+    directAmount: number;
+    taxRate?: number;
+    items?: WageItem[];
+  };
+  repair: {
+    type: 'percentage' | 'directAmount';
+    percentageOfFixedAssets?: number;
+    directAmount?: number;
+    taxRate?: number;
+    applyProductionRate?: boolean;
+  };
+  otherExpenses: {
+    type: 'percentage' | 'directAmount';
+    percentage?: number;
+    directAmount?: number;
+    taxRate?: number;
+    applyProductionRate: boolean;
+  };
+  depreciation: {
+    type: 'percentage' | 'directAmount';
+    percentageOfFixedAssets?: number;
+    directAmount?: number;
+  };
+  amortization: {
+    type: 'percentage' | 'directAmount';
+    percentageOfFixedAssets?: number;
+    directAmount?: number;
+  };
+  interest: {
+    type: 'percentage' | 'directAmount';
+    percentage?: number;
+    directAmount?: number;
+  };
+}
+
 /**
  * 达产率配置
  */
@@ -204,6 +326,7 @@ interface RevenueCostState {
   revenueItems: RevenueItem[]
   costItems: CostItem[]
   productionRates: ProductionRateConfig[]
+  costConfig: CostConfig
   
   // ========== 控制状态 ==========
   currentStep: WorkflowStep
@@ -237,6 +360,10 @@ interface RevenueCostState {
   // 达产率管理
   setProductionRates: (rates: ProductionRateConfig[]) => void
   updateProductionRate: (yearIndex: number, rate: number) => void
+  
+  // 成本配置管理
+  setCostConfig: (config: CostConfig) => void
+  updateCostConfig: (updates: Partial<CostConfig>) => void
   
   // 步骤控制
   setCurrentStep: (step: WorkflowStep) => void
@@ -372,6 +499,7 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       revenueItems: [],
       costItems: [],
       productionRates: [],
+      costConfig: getDefaultCostConfig(),
       currentStep: 'period',
       isSubmitting: false,
       isSaving: false,
@@ -447,11 +575,11 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       addCostItem: (item) => {
         const state = get()
         const newItem: CostItem = {
-          id: `cost-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: `cost-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // 使用字符串id
           index: state.costItems.length + 1,
           name: item.name || '新成本项',
-          category: item.category || 'other',
-          fieldTemplate: item.fieldTemplate || 'quantity-price',
+          category: 'other',
+          fieldTemplate: 'quantity-price',
           ...item
         }
         set({ costItems: [...state.costItems, newItem] })
@@ -478,12 +606,22 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       },
       
       updateProductionRate: (yearIndex, rate) => {
-        const state = get()
-        set({
-          productionRates: state.productionRates.map(item =>
+        set((state) => ({
+          productionRates: state.productionRates.map((item) =>
             item.yearIndex === yearIndex ? { ...item, rate } : item
           )
-        })
+        }))
+      },
+      
+      // 成本配置管理
+      setCostConfig: (config) => {
+        set({ costConfig: config })
+      },
+      
+      updateCostConfig: (updates) => {
+        set((state) => ({
+          costConfig: { ...state.costConfig, ...updates }
+        }))
       },
       
       setCurrentStep: (step) => {
