@@ -19,9 +19,10 @@ import {
   useMantineTheme,
   rem,
 } from '@mantine/core'
-import { IconPlus, IconTrash, IconEdit } from '@tabler/icons-react'
+import { IconPlus, IconTrash, IconEdit, IconEye } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { CostConfig } from './DynamicCostTable'
+import { useRevenueCostStore } from '@/stores/revenueCostStore'
 
 // 工资项接口定义
 interface WageItem {
@@ -50,7 +51,9 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
     width: typeof window !== 'undefined' ? window.innerWidth : 1200,
     height: typeof window !== 'undefined' ? window.innerHeight : 800
   })
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
   const theme = useMantineTheme()
+  const { context } = useRevenueCostStore()
 
   // 响应式：监听窗口大小变化
   useEffect(() => {
@@ -86,7 +89,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
             name: '员工工资',
             employees: costConfig.wages.employees || 10,
             salaryPerEmployee: costConfig.wages.salaryPerEmployee || 5,
-            welfareRate: 20, // 默认福利费率20%
+            welfareRate: 10, // 默认福利费率10%
             changeInterval: 0, // 默认不调整
             changePercentage: 0 // 默认不调整
           }
@@ -100,7 +103,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
             name: '管理人员',
             employees: 5,
             salaryPerEmployee: 8,
-            welfareRate: 20,
+            welfareRate: 10,
             changeInterval: 3, // 每3年调整一次
             changePercentage: 5 // 每次上涨5%
           },
@@ -109,7 +112,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
             name: '生产人员',
             employees: 15,
             salaryPerEmployee: 6,
-            welfareRate: 20,
+            welfareRate: 10,
             changeInterval: 2, // 每2年调整一次
             changePercentage: 3 // 每次上涨3%
           },
@@ -118,7 +121,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
             name: '销售人员',
             employees: 3,
             salaryPerEmployee: 7,
-            welfareRate: 20,
+            welfareRate: 10,
             changeInterval: 3, // 每3年调整一次
             changePercentage: 5 // 每次上涨5%
           }
@@ -150,7 +153,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
       name: '新员工类别',
       employees: 1,
       salaryPerEmployee: 5,
-      welfareRate: 20,
+      welfareRate: 10,
       changeInterval: 0, // 默认不调整
       changePercentage: 0 // 默认不调整
     }
@@ -217,15 +220,16 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
   }
 
   // 计算多年期的工资调整
-  const calculateMultiYearTotal = (item: WageItem, years: number = 10) => {
+  const calculateMultiYearTotal = (item: WageItem, years?: number) => {
+    const operationYears = years || context?.operationYears || 10
     if (!item.changeInterval || !item.changePercentage) {
-      return calculateTotal(item) * years
+      return calculateTotal(item) * operationYears
     }
 
     let total = 0
     let currentSalary = item.salaryPerEmployee
     
-    for (let year = 0; year < years; year++) {
+    for (let year = 0; year < operationYears; year++) {
       // 每年的总成本（包括福利费）
       const yearlySubtotal = item.employees * currentSalary
       const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
@@ -272,15 +276,31 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
           >
             配置各岗位人员数量、工资标准及福利费率，系统将自动计算工资及福利费总额。
           </Text>
-          <Button
-            size="sm"
-            leftSection={<IconPlus size={14} />}
-            onClick={handleAdd}
-            variant="light"
-            color="blue"
-          >
-            {windowSize.width < 768 ? '' : '添加项目'}
-          </Button>
+          <Group gap="sm">
+            <Tooltip label="查看工资及福利明细">
+              <ActionIcon
+                variant="light"
+                color="blue"
+                size={36}
+                onClick={() => {
+                  setDetailModalOpen(true)
+                }}
+              >
+                <IconEye size={windowSize.width < 768 ? 16 : 18} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={windowSize.width < 768 ? '添加' : '添加项目'}>
+              <ActionIcon
+                variant="light"
+                color="blue"
+                size={36}
+                onClick={handleAdd}
+                style={{ marginRight: '8px' }}
+              >
+                <IconPlus size={windowSize.width < 768 ? 16 : 18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         </Group>
 
         <Box style={{ overflowX: 'auto' }}>
@@ -297,11 +317,11 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '30px' : '40px' }}>序号</Table.Th>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '120px' }}>岗位名称</Table.Th>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '60px' : '80px' }}>人数</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>人年工资</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>工资小计</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>人均年工资（万元）</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>工资小计（万元）</Table.Th>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '70px' : '80px' }}>福利费率</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>福利费</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>合计</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>福利费（万元）</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>合计（万元）</Table.Th>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '70px' : '80px' }}>变化(年)</Table.Th>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '70px' : '80px' }}>幅度(%)</Table.Th>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '50px' : '60px' }}>操作</Table.Th>
@@ -315,7 +335,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     {index + 1}
                   </Text>
                 </Table.Td>
-                <Table.Td style={{ border: '1px solid #dee2e6' }}>
+                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <TextInput
                     value={item.name}
                     onChange={(e) => handleItemChange(item.id, 'name', e.target.value)}
@@ -324,9 +344,10 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     placeholder="岗位名称"
                     styles={{
                       input: {
+                        textAlign: 'center',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(windowSize.width < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 11 : 13),
                       }
                     }}
                   />
@@ -340,10 +361,10 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     variant="unstyled"
                     styles={{
                       input: {
-                        textAlign: 'right',
+                        textAlign: 'center',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(windowSize.width < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 11 : 13),
                       }
                     }}
                   />
@@ -358,16 +379,16 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     variant="unstyled"
                     styles={{
                       input: {
-                        textAlign: 'right',
+                        textAlign: 'center',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(windowSize.width < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 11 : 13),
                       }
                     }}
                   />
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
-                  <Text size="sm" ta="right" fw={500}>
+                  <Text size="sm" ta="center" fw={500}>
                     {calculateSubtotal(item).toFixed(2)}
                   </Text>
                 </Table.Td>
@@ -381,7 +402,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     variant="unstyled"
                     styles={{
                       input: {
-                        textAlign: 'right',
+                        textAlign: 'center',
                         fontWeight: 500,
                         color: '#1D2129',
                         fontSize: rem(windowSize.width < 768 ? 12 : 14),
@@ -390,12 +411,12 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                   />
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
-                  <Text size="sm" ta="right" fw={500}>
+                  <Text size="sm" ta="center" fw={500}>
                     {calculateWelfare(item).toFixed(2)}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
-                  <Text size="sm" ta="right" fw={600} c="#165DFF">
+                  <Text size="sm" ta="center" fw={600} c="#165DFF">
                     {calculateTotal(item).toFixed(2)}
                   </Text>
                 </Table.Td>
@@ -409,10 +430,10 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     placeholder="0"
                     styles={{
                       input: {
-                        textAlign: 'right',
+                        textAlign: 'center',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(window.innerWidth < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 11 : 13),
                       }
                     }}
                   />
@@ -428,50 +449,50 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     placeholder="0"
                     styles={{
                       input: {
-                        textAlign: 'right',
+                        textAlign: 'center',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(window.innerWidth < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 11 : 13),
                       }
                     }}
                   />
                 </Table.Td>
-                <Table.Td style={{ border: '1px solid #dee2e6' }}>
+                <Table.Td style={{ border: '1px solid #dee2e6', textAlign: 'center' }}>
                   <Tooltip label={windowSize.width < 768 ? '' : '删除'}>
                     <ActionIcon
                       variant="subtle"
                       color="red"
                       onClick={() => handleDelete(item.id)}
                     >
-                      <IconTrash size={windowSize.width < 768 ? 12 : 14} />
+                      <IconTrash size={windowSize.width < 768 ? 14 : 16} />
                     </ActionIcon>
                   </Tooltip>
                 </Table.Td>
               </Table.Tr>
             ))}
             <Table.Tr>
-              <Table.Td colSpan={4}>
+              <Table.Td colSpan={4} style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                 <Text size="sm" fw={600}>合计</Text>
               </Table.Td>
-              <Table.Td style={{ border: '1px solid #dee2e6' }}>
-                <Text size="sm" ta="right" fw={600}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                <Text size="sm" ta="center" fw={600}>
                   {wageItems.reduce((sum, item) => sum + calculateSubtotal(item), 0).toFixed(2)}
                 </Text>
               </Table.Td>
-              <Table.Td style={{ border: '1px solid #dee2e6' }}></Table.Td>
-              <Table.Td style={{ border: '1px solid #dee2e6' }}>
-                <Text size="sm" ta="right" fw={600}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}></Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                <Text size="sm" ta="center" fw={600}>
                   {wageItems.reduce((sum, item) => sum + calculateWelfare(item), 0).toFixed(2)}
                 </Text>
               </Table.Td>
-              <Table.Td style={{ border: '1px solid #dee2e6' }}>
-                <Text size="sm" ta="right" fw={700} c="#F53F3F">
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                <Text size="sm" ta="center" fw={700} c="#F53F3F">
                   {grandTotal.toFixed(2)}
                 </Text>
               </Table.Td>
-              <Table.Td style={{ border: '1px solid #dee2e6' }}></Table.Td>
-              <Table.Td></Table.Td>
-              <Table.Td></Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}></Table.Td>
+              <Table.Td style={{ textAlign: 'center', verticalAlign: 'middle' }}></Table.Td>
+              <Table.Td style={{ textAlign: 'center', verticalAlign: 'middle' }}></Table.Td>
             </Table.Tr>
           </Table.Tbody>
         </Table>
@@ -483,7 +504,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
           p={windowSize.width < 768 ? "xs" : "md"} 
           withBorder
         >
-          <Text size="sm" fw={600} mb="md">工资调整多年期计算（10年）</Text>
+          <Text size="xs" fw={600} mb="md" style={{ fontSize: rem(windowSize.width < 768 ? 11 : 13) }}>工资调整多年期计算（{context?.operationYears || 10}年）</Text>
           <Box style={{ overflowX: 'auto' }}>
             <Table 
               striped 
@@ -496,8 +517,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
             <Table.Thead>
               <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>岗位名称</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>年度总成本</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>10年总成本</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>年度总成本（万元）</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>{context?.operationYears || 10}年总成本（万元）</Table.Th>
               <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>调整规则</Table.Th>
             </Table.Tr>
             </Table.Thead>
@@ -505,44 +526,45 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
               {wageItems.map((item) => (
                 <Table.Tr key={item.id}>
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
-              <Text size="sm" truncate>
-                {item.name}
-              </Text>
+              <Text size="xs" truncate ta="center" style={{ fontSize: rem(windowSize.width < 768 ? 11 : 13) }}>
+                    {item.name}
+                  </Text>
             </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
-                  <Text size="sm">
+                  <Text size="xs" style={{ fontSize: rem(windowSize.width < 768 ? 11 : 13) }}>
                     {calculateTotal(item).toFixed(2)}
                   </Text>
                 </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
-                  <Text size="sm">
-                    {calculateMultiYearTotal(item, 10).toFixed(2)}
+                  <Text size="xs" style={{ fontSize: rem(windowSize.width < 768 ? 11 : 13) }}>
+                    {calculateMultiYearTotal(item).toFixed(2)}
                   </Text>
                 </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text 
-                    size="sm"
+                    size="xs"
                     truncate
+                    style={{ fontSize: rem(windowSize.width < 768 ? 11 : 13) }}
                   >
                     {item.changeInterval && item.changePercentage 
                       ? `每${item.changeInterval}年+${item.changePercentage}%` 
                       : '不调整'}
                   </Text>
-                </Table.Td>
+              </Table.Td>
                 </Table.Tr>
               ))}
               <Table.Tr>
-                <Table.Td style={{ textAlign: 'left', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
-                  <Text size="sm" fw={600}>总计</Text>
+                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                  <Text size="xs" fw={600} style={{ fontSize: rem(windowSize.width < 768 ? 12 : 14) }}>总计</Text>
                 </Table.Td>
-                <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
-                  <Text size="sm" fw={600}>
+                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                  <Text size="xs" fw={600} style={{ fontSize: rem(windowSize.width < 768 ? 12 : 14) }}>
                     {grandTotal.toFixed(2)}
                   </Text>
                 </Table.Td>
-                <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
-                  <Text size="sm" fw={700} c="#F53F3F">
-                    {wageItems.reduce((sum, item) => sum + calculateMultiYearTotal(item, 10), 0).toFixed(2)}
+                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                  <Text size="xs" fw={700} c="#F53F3F" style={{ fontSize: rem(windowSize.width < 768 ? 12 : 14) }}>
+                    {wageItems.reduce((sum, item) => sum + calculateMultiYearTotal(item), 0).toFixed(2)}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}></Table.Td>
@@ -559,8 +581,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
         </Text>
 
         {/* 操作按钮 */}
-        <Group justify="flex-end" gap="md">
-          <Button variant="default" onClick={onClose}>
+        <Group justify="flex-end" gap="md" style={{ marginTop: '16px', marginBottom: '8px' }}>
+          <Button variant="default" onClick={onClose} style={{ marginRight: '8px' }}>
             取消
           </Button>
           <Button
@@ -568,6 +590,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
             style={{
               backgroundColor: '#165DFF',
               color: '#FFFFFF',
+              marginRight: '8px',
             }}
           >
             应用
