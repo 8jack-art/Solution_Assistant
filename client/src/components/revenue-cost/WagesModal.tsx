@@ -46,7 +46,25 @@ interface WagesModalProps {
  */
 const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, setCostConfig }) => {
   const [wageItems, setWageItems] = useState<WageItem[]>([])
+  const [windowSize, setWindowSize] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800
+  })
   const theme = useMantineTheme()
+
+  // 响应式：监听窗口大小变化
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      })
+    }
+
+    handleResize() // 初始化
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // 当弹窗打开时，初始化编辑数据
   useEffect(() => {
@@ -234,13 +252,14 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
           💼 工资及福利费估算表
         </Text>
       }
-      size="calc(100vw - 100px)"
+      size={windowSize.width < 768 ? '100%' : 'calc(100vw - 100px)'}
       centered
-      fullScreen={window.innerWidth < 768}
+      fullScreen={windowSize.width < 768}
       styles={{
         body: {
-          maxHeight: 'calc(100vh - 200px)',
+          maxHeight: windowSize.width < 768 ? '100vh' : 'calc(100vh - 200px)',
           overflowY: 'auto',
+          padding: windowSize.width < 768 ? '10px' : '0',
         },
       }}
     >
@@ -260,35 +279,43 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
             variant="light"
             color="blue"
           >
-            {window.innerWidth < 768 ? '' : '添加项目'}
+            {windowSize.width < 768 ? '' : '添加项目'}
           </Button>
         </Group>
 
-        <Table striped withTableBorder style={{ fontSize: '11px' }}>
+        <Box style={{ overflowX: 'auto' }}>
+          <Table 
+            striped 
+            withTableBorder 
+            style={{ 
+              fontSize: windowSize.width < 768 ? '10px' : '11px',
+              minWidth: windowSize.width < 768 ? '800px' : 'auto'
+            }}
+          >
           <Table.Thead>
             <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '40px' }}>序号</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '120px' }}>岗位名称</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>人数</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>人年工资</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>工资小计</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>福利费率</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>福利费</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>合计</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>变化(年)</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>幅度(%)</Table.Th>
-              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '60px' }}>操作</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '30px' : '40px' }}>序号</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '120px' }}>岗位名称</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '60px' : '80px' }}>人数</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>人年工资</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>工资小计</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '70px' : '80px' }}>福利费率</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>福利费</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>合计</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '70px' : '80px' }}>变化(年)</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '70px' : '80px' }}>幅度(%)</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '50px' : '60px' }}>操作</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {wageItems.map((item, index) => (
               <Table.Tr key={item.id}>
-                <Table.Td>
+                <Table.Td style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>
                   <Text size="sm" fw={500}>
                     {index + 1}
                   </Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <TextInput
                     value={item.name}
                     onChange={(e) => handleItemChange(item.id, 'name', e.target.value)}
@@ -299,12 +326,12 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                       input: {
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(window.innerWidth < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 12 : 14),
                       }
                     }}
                   />
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <NumberInput
                     value={item.employees}
                     onChange={(val) => handleItemChange(item.id, 'employees', val)}
@@ -316,12 +343,12 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                         textAlign: 'right',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(window.innerWidth < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 12 : 14),
                       }
                     }}
                   />
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <NumberInput
                     value={item.salaryPerEmployee}
                     onChange={(val) => handleItemChange(item.id, 'salaryPerEmployee', val)}
@@ -334,17 +361,17 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                         textAlign: 'right',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(window.innerWidth < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 12 : 14),
                       }
                     }}
                   />
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <Text size="sm" ta="right" fw={500}>
                     {calculateSubtotal(item).toFixed(2)}
                   </Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <NumberInput
                     value={item.welfareRate}
                     onChange={(val) => handleItemChange(item.id, 'welfareRate', val)}
@@ -357,22 +384,22 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                         textAlign: 'right',
                         fontWeight: 500,
                         color: '#1D2129',
-                        fontSize: rem(window.innerWidth < 768 ? 12 : 14),
+                        fontSize: rem(windowSize.width < 768 ? 12 : 14),
                       }
                     }}
                   />
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <Text size="sm" ta="right" fw={500}>
                     {calculateWelfare(item).toFixed(2)}
                   </Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <Text size="sm" ta="right" fw={600} c="#165DFF">
                     {calculateTotal(item).toFixed(2)}
                   </Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <NumberInput
                     value={item.changeInterval}
                     onChange={(val) => handleItemChange(item.id, 'changeInterval', val)}
@@ -390,7 +417,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     }}
                   />
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <NumberInput
                     value={item.changePercentage}
                     onChange={(val) => handleItemChange(item.id, 'changePercentage', val)}
@@ -409,15 +436,14 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
                     }}
                   />
                 </Table.Td>
-                <Table.Td>
-                  <Tooltip label={window.innerWidth < 768 ? '' : '删除'}>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>
+                  <Tooltip label={windowSize.width < 768 ? '' : '删除'}>
                     <ActionIcon
                       variant="subtle"
                       color="red"
-                      size="sm"
                       onClick={() => handleDelete(item.id)}
                     >
-                      <IconTrash size={window.innerWidth < 768 ? 12 : 14} />
+                      <IconTrash size={windowSize.width < 768 ? 12 : 14} />
                     </ActionIcon>
                   </Tooltip>
                 </Table.Td>
@@ -427,92 +453,103 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
               <Table.Td colSpan={4}>
                 <Text size="sm" fw={600}>合计</Text>
               </Table.Td>
-              <Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>
                 <Text size="sm" ta="right" fw={600}>
                   {wageItems.reduce((sum, item) => sum + calculateSubtotal(item), 0).toFixed(2)}
                 </Text>
               </Table.Td>
-              <Table.Td></Table.Td>
-              <Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}></Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>
                 <Text size="sm" ta="right" fw={600}>
                   {wageItems.reduce((sum, item) => sum + calculateWelfare(item), 0).toFixed(2)}
                 </Text>
               </Table.Td>
-              <Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>
                 <Text size="sm" ta="right" fw={700} c="#F53F3F">
                   {grandTotal.toFixed(2)}
                 </Text>
               </Table.Td>
-              <Table.Td></Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}></Table.Td>
               <Table.Td></Table.Td>
               <Table.Td></Table.Td>
             </Table.Tr>
           </Table.Tbody>
         </Table>
-      </ScrollArea.Autosize>
+        </Box>
 
         {/* 多年期计算结果展示 */}
-        <Card shadow="xs" p="md" withBorder>
+        <Card 
+          shadow="xs" 
+          p={windowSize.width < 768 ? "xs" : "md"} 
+          withBorder
+        >
           <Text size="sm" fw={600} mb="md">工资调整多年期计算（10年）</Text>
-          <ScrollArea.Autosize mah={300} type="scroll" offsetScrollbars>
-            <Table striped highlightOnHover horizontalSpacing="md" verticalSpacing="xs" layout="fixed">
+          <Box style={{ overflowX: 'auto' }}>
+            <Table 
+              striped 
+              withTableBorder 
+              style={{ 
+                fontSize: windowSize.width < 768 ? '10px' : '11px',
+                minWidth: windowSize.width < 768 ? '600px' : 'auto'
+              }}
+            >
             <Table.Thead>
-              <Table.Tr>
-              <Table.Th w={120}>岗位名称</Table.Th>
-              <Table.Th w={120} ta="right">年度总成本</Table.Th>
-              <Table.Th w={120} ta="right">10年总成本</Table.Th>
-              <Table.Th w={100} ta="right">调整规则</Table.Th>
+              <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>岗位名称</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>年度总成本</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '100px' : '120px' }}>10年总成本</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: windowSize.width < 768 ? '80px' : '100px' }}>调整规则</Table.Th>
             </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {wageItems.map((item) => (
                 <Table.Tr key={item.id}>
-                  <Table.Td>
-                    <Text size="sm" truncate>
-                      {item.name}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Text size="sm">
-                      {calculateTotal(item).toFixed(2)}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Text size="sm">
-                      {calculateMultiYearTotal(item, 10).toFixed(2)}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Text 
-                      size="sm"
-                      truncate
-                    >
-                      {item.changeInterval && item.changePercentage 
-                        ? `每${item.changeInterval}年+${item.changePercentage}%` 
-                        : '不调整'}
-                    </Text>
-                  </Table.Td>
+                  <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+              <Text size="sm" truncate>
+                {item.name}
+              </Text>
+            </Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                  <Text size="sm">
+                    {calculateTotal(item).toFixed(2)}
+                  </Text>
+                </Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                  <Text size="sm">
+                    {calculateMultiYearTotal(item, 10).toFixed(2)}
+                  </Text>
+                </Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
+                  <Text 
+                    size="sm"
+                    truncate
+                  >
+                    {item.changeInterval && item.changePercentage 
+                      ? `每${item.changeInterval}年+${item.changePercentage}%` 
+                      : '不调整'}
+                  </Text>
+                </Table.Td>
                 </Table.Tr>
               ))}
               <Table.Tr>
-                <Table.Td>
+                <Table.Td style={{ textAlign: 'left', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text size="sm" fw={600}>总计</Text>
                 </Table.Td>
-                <Table.Td ta="right">
+                <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text size="sm" fw={600}>
                     {grandTotal.toFixed(2)}
                   </Text>
                 </Table.Td>
-                <Table.Td ta="right">
+                <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text size="sm" fw={700} c="#F53F3F">
                     {wageItems.reduce((sum, item) => sum + calculateMultiYearTotal(item, 10), 0).toFixed(2)}
                   </Text>
                 </Table.Td>
-                <Table.Td></Table.Td>
+                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}></Table.Td>
               </Table.Tr>
             </Table.Tbody>
           </Table>
-        </ScrollArea.Autosize>
+          </Box>
         </Card>
 
         {/* 说明信息 */}
