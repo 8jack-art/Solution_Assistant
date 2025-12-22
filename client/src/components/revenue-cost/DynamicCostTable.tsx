@@ -63,7 +63,7 @@ interface FuelPowerItem {
   taxRate?: number;
 }
 
-interface CostConfig {
+export interface CostConfig {
   rawMaterials: {
     applyProductionRate: boolean;
     items: CostItem[];
