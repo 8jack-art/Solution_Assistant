@@ -230,14 +230,19 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
       opened={opened}
       onClose={onClose}
       title={
-        <Text size="lg" fw={600} c="#1D2129">
+        <Text size="md">
           💼 工资及福利费估算表
         </Text>
       }
-      size="xl"
+      size="calc(100vw - 100px)"
       centered
       fullScreen={window.innerWidth < 768}
-      scrollAreaComponent={ScrollArea.Autosize}
+      styles={{
+        body: {
+          maxHeight: 'calc(100vh - 200px)',
+          overflowY: 'auto',
+        },
+      }}
     >
       <Stack gap="md">
         <Group justify="space-between" mb="md" wrap="nowrap">
@@ -259,21 +264,20 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, se
           </Button>
         </Group>
 
-        <ScrollArea.Autosize mah={400} type="scroll" offsetScrollbars>
-          <Table striped highlightOnHover horizontalSpacing="md" verticalSpacing="xs" layout="fixed">
+        <Table striped withTableBorder style={{ fontSize: '11px' }}>
           <Table.Thead>
-            <Table.Tr>
-              <Table.Th w={40}>序号</Table.Th>
-              <Table.Th w={150}>岗位名称</Table.Th>
-              <Table.Th w={100}>人数</Table.Th>
-              <Table.Th w={120}>人年工资</Table.Th>
-              <Table.Th w={120}>工资小计</Table.Th>
-              <Table.Th w={100}>福利费率</Table.Th>
-              <Table.Th w={120}>福利费</Table.Th>
-              <Table.Th w={120}>合计</Table.Th>
-              <Table.Th w={100}>变化(年)</Table.Th>
-              <Table.Th w={100}>幅度(%)</Table.Th>
-              <Table.Th w={60}>操作</Table.Th>
+            <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '40px' }}>序号</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '120px' }}>岗位名称</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>人数</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>人年工资</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>工资小计</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>福利费率</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>福利费</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '100px' }}>合计</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>变化(年)</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '80px' }}>幅度(%)</Table.Th>
+              <Table.Th style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '60px' }}>操作</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
