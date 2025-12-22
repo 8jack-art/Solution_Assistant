@@ -275,11 +275,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     fuelPower: {
       applyProductionRate: true, // 是否应用达产率
       items: [
-        { id: 1, name: '水费', type: 'water', quantity: 0, unitPrice: 2.99, taxRate: 9 },
-        { id: 2, name: '电费', type: 'electricity', quantity: 0, unitPrice: 0.65, taxRate: 13 },
-        { id: 3, name: '汽油', type: 'gasoline', quantity: 1000, unitPrice: 9453, taxRate: 13 },
-        { id: 4, name: '柴油', type: 'diesel', quantity: 1000, unitPrice: 7783, taxRate: 13 },
-        { id: 5, name: '天然气', type: 'naturalGas', quantity: 0, unitPrice: 3.75, taxRate: 9 },
+        { id: 1, name: '水费', specification: '', unit: 'm³', price: 2.99, consumption: 0, totalCost: 0, applyProductionRate: true },
+        { id: 2, name: '电费', specification: '', unit: 'kWh', price: 0.65, consumption: 0, totalCost: 0, applyProductionRate: true },
+        { id: 3, name: '汽油', specification: '', unit: 'L', price: 9453, consumption: 1000, totalCost: 9453000, applyProductionRate: true },
+        { id: 4, name: '柴油', specification: '', unit: 'L', price: 7783, consumption: 1000, totalCost: 7783000, applyProductionRate: true },
+        { id: 5, name: '天然气', specification: '', unit: 'm³', price: 3.75, consumption: 0, totalCost: 0, applyProductionRate: true },
       ]
     },
     // 工资及福利费配置
@@ -1297,8 +1297,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           
           <NumberInput
             label={getQuantityLabel(currentFuelPowerItem.name)}
-            value={currentFuelPowerItem.quantity || 0}
-            onChange={(value) => setCurrentFuelPowerItem({...currentFuelPowerItem, quantity: Number(value)})}
+            value={currentFuelPowerItem.consumption || 0}
+            onChange={(value) => setCurrentFuelPowerItem({...currentFuelPowerItem, consumption: Number(value)})}
             min={0}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -1310,8 +1310,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           
           <NumberInput
             label="单价（元）"
-            value={currentFuelPowerItem.unitPrice || 0}
-            onChange={(value) => setCurrentFuelPowerItem({...currentFuelPowerItem, unitPrice: Number(value)})}
+            value={currentFuelPowerItem.price || 0}
+            onChange={(value) => setCurrentFuelPowerItem({...currentFuelPowerItem, price: Number(value)})}
             min={0}
             decimalScale={4}
             onKeyDown={(event) => {
@@ -1324,7 +1324,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           
           <NumberInput
             label="进项税率 (%)"
-            value={currentFuelPowerItem.taxRate || 13}
+            value={13}
             disabled
             styles={{
               input: { backgroundColor: '#f8f9fa' }
@@ -1389,6 +1389,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                   <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>成本项目</Table.Th>
                   <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>合计</Table.Th>
                   <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>运营期</Table.Th>
+                  <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>操作</Table.Th>
                 </Table.Tr>
                 <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
                   {years.map((year) => (
@@ -1414,12 +1415,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         
                         let yearTotal = 0;
                         (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
-                          let quantity = item.quantity || 0;
+                          let consumption = item.consumption || 0;
                           // 对汽油和柴油进行特殊处理：单价×数量/10000
                           if (['汽油', '柴油'].includes(item.name)) {
-                            yearTotal += (item.unitPrice || 0) * quantity / 10000 * productionRate;
+                            yearTotal += (item.price || 0) * consumption / 10000 * productionRate;
                           } else {
-                            yearTotal += quantity * (item.unitPrice || 0) * productionRate;
+                            yearTotal += consumption * (item.price || 0) * productionRate;
                           }
                         });
                         
@@ -1476,9 +1477,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           
                           // 对汽油和柴油进行特殊处理：单价×数量/10000
                           if (['汽油', '柴油'].includes(item.name)) {
-                            totalSum += (item.unitPrice || 0) * (item.quantity || 0) / 10000 * productionRate;
+                            totalSum += (item.price || 0) * (item.consumption || 0) / 10000 * productionRate;
                           } else {
-                            totalSum += (item.quantity || 0) * (item.unitPrice || 0) * productionRate;
+                            totalSum += (item.consumption || 0) * (item.price || 0) * productionRate;
                           }
                         });
                         
@@ -1493,9 +1494,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       // 对汽油和柴油进行特殊处理：单价×数量/10000
                       let yearTotal = 0;
                       if (['汽油', '柴油'].includes(item.name)) {
-                        yearTotal = (item.unitPrice || 0) * (item.quantity || 0) / 10000 * productionRate;
+                        yearTotal = (item.price || 0) * (item.consumption || 0) / 10000 * productionRate;
                       } else {
-                        yearTotal = (item.quantity || 0) * (item.unitPrice || 0) * productionRate;
+                        yearTotal = (item.consumption || 0) * (item.price || 0) * productionRate;
                       }
                       
                       return (
@@ -1527,7 +1528,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             size="sm"
                             onClick={() => {
                               const updatedItems = [...(costConfig.fuelPower.items || [])];
-                              updatedItems[idx] = {...item, quantity: 0};
+                              updatedItems[idx] = {...item, consumption: 0};
                               updateCostConfig({
                                 fuelPower: {
                                   ...costConfig.fuelPower,
@@ -1823,7 +1824,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             <NumberInput
               label="营业收入的百分比 (%)"
               value={costConfig.otherExpenses.percentage}
-              onChange={(value) => setCostConfig({
+              onChange={(value) => updateCostConfig({
                 ...costConfig,
                 otherExpenses: { ...costConfig.otherExpenses, percentage: Number(value) }
               })}
@@ -1838,7 +1839,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           <NumberInput
             label="直接金额（万元）"
             value={costConfig.otherExpenses.directAmount}
-            onChange={(value) => setCostConfig({
+            onChange={(value) => updateCostConfig({
               ...costConfig,
               otherExpenses: { ...costConfig.otherExpenses, directAmount: Number(value) }
             })}
@@ -1850,7 +1851,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         <NumberInput
           label="进项税率 (%)"
           value={costConfig.otherExpenses.taxRate}
-          onChange={(value) => setCostConfig({
+          onChange={(value) => updateCostConfig({
             ...costConfig,
             otherExpenses: { ...costConfig.otherExpenses, taxRate: Number(value) }
           })}
@@ -2047,13 +2048,13 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           // 1.2 外购燃料及动力费
                           let yearFuelPower = 0;
                           (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
-                            const quantity = Number(item.quantity) || 0;
-                            const unitPrice = Number(item.unitPrice) || 0;
+                            const consumption = Number(item.consumption) || 0;
+                            const price = Number(item.price) || 0;
                             // 对汽油和柴油进行特殊处理：单价×数量/10000
                             if (['汽油', '柴油'].includes(item.name)) {
-                              yearFuelPower += (unitPrice * quantity / 10000) * productionRate;
+                              yearFuelPower += (price * consumption / 10000) * productionRate;
                             } else {
-                              yearFuelPower += quantity * unitPrice * productionRate;
+                              yearFuelPower += consumption * price * productionRate;
                             }
                           });
                           total += yearFuelPower;
@@ -2156,13 +2157,13 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       // 1.2 外购燃料及动力费
                       let fuelPowerTotal = 0;
                       (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
-                        const quantity = Number(item.quantity) || 0;
-                        const unitPrice = Number(item.unitPrice) || 0;
+                        const consumption = Number(item.consumption) || 0;
+                        const price = Number(item.price) || 0;
                         // 对汽油和柴油进行特殊处理：单价×数量/10000
                         if (['汽油', '柴油'].includes(item.name)) {
-                          fuelPowerTotal += (unitPrice * quantity / 10000) * productionRate;
+                          fuelPowerTotal += (price * consumption / 10000) * productionRate;
                         } else {
-                          fuelPowerTotal += quantity * unitPrice * productionRate;
+                          fuelPowerTotal += consumption * price * productionRate;
                         }
                       });
                       total += fuelPowerTotal;
@@ -2786,13 +2787,13 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             // 1.2 外购燃料及动力费
                             let yearFuelPower = 0;
                             (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
-                              const quantity = Number(item.quantity) || 0;
-                              const unitPrice = Number(item.unitPrice) || 0;
+                              const consumption = Number(item.consumption) || 0;
+                              const price = Number(item.price) || 0;
                               // 对汽油和柴油进行特殊处理：单价×数量/10000
                               if (['汽油', '柴油'].includes(item.name)) {
-                                yearFuelPower += (unitPrice * quantity / 10000) * productionRate;
+                                yearFuelPower += (price * consumption / 10000) * productionRate;
                               } else {
-                                yearFuelPower += quantity * unitPrice * productionRate;
+                                yearFuelPower += consumption * price * productionRate;
                               }
                             });
                             yearTotal += yearFuelPower;
@@ -2900,7 +2901,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         opened={showWagesModal}
         onClose={() => setShowWagesModal(false)}
         costConfig={costConfig}
-        setCostConfig={updateCostConfig}
+        updateCostConfig={updateCostConfig}
       />
     </>
   )

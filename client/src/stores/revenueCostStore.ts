@@ -16,7 +16,13 @@ const getDefaultCostConfig = (): CostConfig => ({
   },
   fuelPower: {
     applyProductionRate: true,
-    items: []
+    items: [
+      { id: 1, name: '水费', specification: '', unit: 'm³', price: 2.99, consumption: 0, totalCost: 0, applyProductionRate: true },
+      { id: 2, name: '电费', specification: '', unit: 'kWh', price: 0.65, consumption: 0, totalCost: 0, applyProductionRate: true },
+      { id: 3, name: '汽油', specification: '', unit: 'L', price: 9453, consumption: 1000, totalCost: 9453000, applyProductionRate: true },
+      { id: 4, name: '柴油', specification: '', unit: 'L', price: 7783, consumption: 1000, totalCost: 7783000, applyProductionRate: true },
+      { id: 5, name: '天然气', specification: '', unit: 'm³', price: 3.75, consumption: 0, totalCost: 0, applyProductionRate: true },
+    ]
   },
   wages: {
     employees: 0,
@@ -64,10 +70,12 @@ interface WageItem {
 interface FuelPowerItem {
   id: number;
   name: string;
-  type: 'water' | 'electricity' | 'gasoline' | 'diesel' | 'naturalGas';
-  quantity?: number;
-  unitPrice?: number;
-  taxRate?: number;
+  specification: string;
+  unit: string;
+  price: number;
+  consumption: number;
+  totalCost: number;
+  applyProductionRate: boolean;
 }
 
 export interface CostConfig {
