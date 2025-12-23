@@ -211,7 +211,7 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
                   <Table.Tr key={item.yearIndex}>
                     <Table.Td>
                       <Text size="sm" fw={500}>
-                        第 {item.yearIndex} 年
+                        {item.yearIndex}
                       </Text>
                     </Table.Td>
                     <Table.Td>
@@ -256,7 +256,7 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
             
             {editedRates.length > getDisplayRates(editedRates).length && (
               <Text size="xs" c="#86909C" style={{ marginTop: '8px' }}>
-                💡 第{getDisplayRates(editedRates).length + 1}年及以后年份自动按100%达产率计算，无需手动配置
+                💡 {getDisplayRates(editedRates).length + 1}及以后年份自动按100%达产率计算，无需手动配置
               </Text>
             )}
           </>

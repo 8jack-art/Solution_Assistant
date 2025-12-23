@@ -103,7 +103,7 @@ const PeriodConfirmation: React.FC = () => {
               </Table.Td>
               <Table.Td>
                 <Badge color="violet" variant="light" size="lg">
-                  第 {baseYear} 年
+                  {baseYear}
                 </Badge>
               </Table.Td>
               <Table.Td>

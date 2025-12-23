@@ -1206,6 +1206,48 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     setShowFuelPowerEditModal(false);
   };
 
+  // 计算工资及福利费合计的函数
+  const calculateWagesTotal = useCallback((targetYear?: number, yearsArray?: number[]) => {
+    if (targetYear !== undefined) {
+      // 计算指定年份的工资及福利费
+      let yearWages = 0;
+      
+      // 如果有工资明细数据，使用明细数据计算
+      if (costConfig.wages.items && costConfig.wages.items.length > 0) {
+        costConfig.wages.items.forEach((item: any) => {
+          // 计算该年的工资总额（考虑工资调整）
+          let currentSalary = item.salaryPerEmployee || 0;
+          
+          // 根据调整周期和幅度计算第targetYear年的工资
+          if (item.changeInterval && item.changePercentage) {
+            const adjustmentTimes = Math.floor((targetYear - 1) / item.changeInterval);
+            currentSalary = currentSalary * Math.pow(1 + item.changePercentage / 100, adjustmentTimes);
+          }
+          
+          // 计算工资总额
+          const yearlySubtotal = item.employees * currentSalary;
+          // 计算福利费
+          const yearlyWelfare = yearlySubtotal * (item.welfareRate || 0) / 100;
+          // 合计
+          yearWages += yearlySubtotal + yearlyWelfare;
+        });
+      } else {
+        // 如果没有明细数据，使用directAmount
+        yearWages = costConfig.wages.directAmount || 0;
+      }
+      
+      return yearWages;
+    } else {
+      // 计算所有年份的工资及福利费合计
+      if (!yearsArray) return 0;
+      let totalSum = 0;
+      yearsArray.forEach((year: number) => {
+        totalSum += calculateWagesTotal(year, yearsArray);
+      });
+      return totalSum;
+    }
+  }, [costConfig.wages]);
+
   // 计算外购燃料及动力（除税）的函数
   const calculateFuelPowerExcludingTax = useCallback((targetYear?: number, yearsArray?: number[]) => {
     if (targetYear !== undefined) {
@@ -2036,7 +2078,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           
                           // 1.3 工资及福利费
                           let yearWages = 0;
-                          yearWages += costConfig.wages.directAmount || 0;
+                          
+                          // 直接引用工资及福利明细表对应年份的数据
+                          yearWages = calculateWagesTotal(year, years);
                           total += yearWages; // 工资通常不受达产率影响
                           
                           // 1.4 修理费
@@ -2145,7 +2189,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                                         
                       // 1.3 工资及福利费
                       let wagesTotal = 0;
-                      wagesTotal += costConfig.wages.directAmount || 0;
+                      
+                      // 直接引用工资及福利明细表对应年份的数据
+                      wagesTotal = calculateWagesTotal(year, years);
                       total += wagesTotal; // 工资通常不受达产率影响
                                         
                       // 1.4 修理费
@@ -2321,18 +2367,15 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>工资及福利费</Table.Td>
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
-                        // 工资及福利费合计 = 工资及福利明细表合计 × 运营期年数（通常不受达产率影响）
-                        const yearlyWages = costConfig.wages.directAmount || 0;
-                        const totalWages = yearlyWages * years.length;
-                        return totalWages.toFixed(2);
+                        // 工资及福利费合计 = 直接引用工资及福利明细表合计列数据
+                        return calculateWagesTotal(undefined, years).toFixed(2);
                       })()}
                     </Table.Td>
                     {years.map((year) => (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {(() => {
-                          // 工资及福利费 = 直接引用工资及福利明细表合计（通常不受达产率影响）
-                          const wages = costConfig.wages.directAmount || 0;
-                          return wages.toFixed(2);
+                          // 工资及福利费 = 直接引用工资及福利明细表对应年份的数据
+                          return calculateWagesTotal(year, years).toFixed(2);
                         })()}
                       </Table.Td>
                     ))}
@@ -2642,7 +2685,31 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           
                           // 1.3 工资及福利费
                           let yearWages = 0;
-                          yearWages += costConfig.wages.directAmount || 0;
+                          
+                          // 如果有工资明细数据，使用明细数据计算
+                          if (costConfig.wages.items && costConfig.wages.items.length > 0) {
+                            costConfig.wages.items.forEach((item: any) => {
+                              // 计算该年的工资总额（考虑工资调整）
+                              let currentSalary = item.salaryPerEmployee || 0;
+                              
+                              // 根据调整周期和幅度计算第year年的工资
+                              if (item.changeInterval && item.changePercentage) {
+                                const adjustmentTimes = Math.floor((year - 1) / item.changeInterval);
+                                currentSalary = currentSalary * Math.pow(1 + item.changePercentage / 100, adjustmentTimes);
+                              }
+                              
+                              // 计算工资总额
+                              const yearlySubtotal = item.employees * currentSalary;
+                              // 计算福利费
+                              const yearlyWelfare = yearlySubtotal * (item.welfareRate || 0) / 100;
+                              // 合计
+                              yearWages += yearlySubtotal + yearlyWelfare;
+                            });
+                          } else {
+                            // 如果没有明细数据，使用directAmount
+                            yearWages = costConfig.wages.directAmount || 0;
+                          }
+                          
                           row1Total += yearWages; // 工资通常不受达产率影响
                           
                           // 1.4 修理费
@@ -2774,7 +2841,32 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             yearTotal += yearFuelPower;
                             
                             // 1.3 工资及福利费
-                            const yearWages = costConfig.wages.directAmount || 0;
+                            let yearWages = 0;
+                            
+                            // 如果有工资明细数据，使用明细数据计算
+                            if (costConfig.wages.items && costConfig.wages.items.length > 0) {
+                              costConfig.wages.items.forEach((item: any) => {
+                                // 计算该年的工资总额（考虑工资调整）
+                                let currentSalary = item.salaryPerEmployee || 0;
+                                
+                                // 根据调整周期和幅度计算第year年的工资
+                                if (item.changeInterval && item.changePercentage) {
+                                  const adjustmentTimes = Math.floor((year - 1) / item.changeInterval);
+                                  currentSalary = currentSalary * Math.pow(1 + item.changePercentage / 100, adjustmentTimes);
+                                }
+                                
+                                // 计算工资总额
+                                const yearlySubtotal = item.employees * currentSalary;
+                                // 计算福利费
+                                const yearlyWelfare = yearlySubtotal * (item.welfareRate || 0) / 100;
+                                // 合计
+                                yearWages += yearlySubtotal + yearlyWelfare;
+                              });
+                            } else {
+                              // 如果没有明细数据，使用directAmount
+                              yearWages = costConfig.wages.directAmount || 0;
+                            }
+                            
                             yearTotal += yearWages; // 工资通常不受达产率影响
                             
                             // 1.4 修理费

@@ -886,8 +886,8 @@ const DynamicRevenueTable: React.FC = () => {
           }}>
             <Text size="xs" c="#FF7D00" fw={500}>
               💡 涨价规则：每{formData.priceIncreaseInterval}年涨价{formData.priceIncreaseRate}%，
-              第1-{formData.priceIncreaseInterval}年收入{calculatePreviewTotal().toFixed(2)}万元，
-              第{formData.priceIncreaseInterval + 1}-{formData.priceIncreaseInterval * 2}年收入{(calculatePreviewTotal() * (1 + (formData.priceIncreaseRate || 0) / 100)).toFixed(2)}万元
+              1-{formData.priceIncreaseInterval}年收入{calculatePreviewTotal().toFixed(2)}万元，
+              {formData.priceIncreaseInterval + 1}-{formData.priceIncreaseInterval * 2}年收入{(calculatePreviewTotal() * (1 + (formData.priceIncreaseRate || 0) / 100)).toFixed(2)}万元
             </Text>
           </div>
         )}

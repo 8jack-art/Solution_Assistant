@@ -669,21 +669,21 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                       border: '1px solid #dee2e6', 
                       fontSize: '10px'
                     }}>合计（万元）</Table.Th>
-                    <Table.Th colSpan={operationYears} style={{ 
-                      textAlign: 'center', 
+                    <Table.Th colSpan={operationYears} style={{
+                      textAlign: 'center',
                       border: '1px solid #dee2e6',
                       fontSize: '10px'
-                    }}>运营期（万元）</Table.Th>
+                    }}>运营期</Table.Th>
                   </Table.Tr>
                   <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
                     {years.map((year) => (
-                      <Table.Th key={year} style={{ 
-                        textAlign: 'center', 
-                        border: '1px solid #dee2e6', 
+                      <Table.Th key={year} style={{
+                        textAlign: 'center',
+                        border: '1px solid #dee2e6',
                         fontSize: '9px',
                         padding: '4px 2px'
                       }}>
-                        第{year}年
+                        {year}
                       </Table.Th>
                     ))}
                   </Table.Tr>
