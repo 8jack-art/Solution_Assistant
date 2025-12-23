@@ -199,8 +199,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   const [showFuelPowerModal, setShowFuelPowerModal] = useState(false)
   // 修理费配置弹窗状态
   const [showRepairModal, setShowRepairModal] = useState(false)
+  // 修理费临时配置状态（用于存储未保存的修改）
+  const [tempRepairConfig, setTempRepairConfig] = useState<any>(null)
   // 其他费用配置弹窗状态
   const [showOtherModal, setShowOtherModal] = useState(false)
+  // 其他费用临时配置状态（用于存储未保存的修改）
+  const [tempOtherConfig, setTempOtherConfig] = useState<any>(null)
   
   // 工资及福利费配置弹窗状态
   const [showWagesModal, setShowWagesModal] = useState(false)
@@ -750,7 +754,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearTotal;
                       });
                       
-                      return totalSum.toFixed(2);
+                      return totalSum;
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -786,7 +790,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearTotal.toFixed(2)}
+                        {yearTotal}
                       </Table.Td>
                     );
                   })}
@@ -841,7 +845,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           totalSum += yearAmount;
                         });
                         
-                        return totalSum.toFixed(2);
+                        return totalSum;
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -875,7 +879,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {yearTotal.toFixed(2)}
+                          {yearTotal}
                         </Table.Td>
                       );
                     })}
@@ -996,7 +1000,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearInputTax;
                       });
                       
-                      return totalSum.toFixed(2);
+                      return totalSum;
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -1016,7 +1020,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearInputTax.toFixed(2)}
+                        {yearInputTax}
                       </Table.Td>
                     );
                   })}
@@ -1030,7 +1034,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>5</Table.Td>
                   <Table.Td style={{ border: '1px solid #dee2e6' }}>外购原材料（除税）</Table.Td>
                   <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {calculateRawMaterialsExcludingTax(undefined, years).toFixed(2)}
+                    {calculateRawMaterialsExcludingTax(undefined, years)}
                   </Table.Td>
                   {years.map((year) => {
                     // 计算该年的外购原材料（除税）
@@ -1063,7 +1067,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {excludingTax.toFixed(2)}
+                        {excludingTax}
                       </Table.Td>
                     );
                   })}
@@ -1174,19 +1178,60 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     
     // 渲染修理费配置弹窗
     const renderRepairModal = () => {
-      // 计算修理费金额
+      // 初始化临时配置（当弹窗打开时）
+      React.useEffect(() => {
+        if (showRepairModal && !tempRepairConfig) {
+          setTempRepairConfig({...costConfig.repair});
+        }
+      }, [showRepairModal, costConfig.repair, tempRepairConfig]);
+      
+      // 计算修理费金额（使用临时配置）
       const calculateRepairAmount = () => {
-        if (costConfig.repair.type === 'percentage') {
-          return fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+        const config = tempRepairConfig || costConfig.repair;
+        if (config.type === 'percentage') {
+          return fixedAssetsInvestment * (config.percentageOfFixedAssets || 0) / 100;
         } else {
-          return costConfig.repair.directAmount || 0;
+          return config.directAmount || 0;
         }
       };
+      
+      // 保存修理费配置
+      const handleSaveRepairConfig = () => {
+        if (tempRepairConfig) {
+          // 将临时配置更新到全局状态
+          updateCostConfig({
+            repair: tempRepairConfig
+          });
+          
+          // 清除临时配置
+          setTempRepairConfig(null);
+          
+          // 关闭弹窗
+          setShowRepairModal(false);
+          
+          // 显示成功通知
+          notifications.show({
+            title: '保存成功',
+            message: '修理费配置已保存',
+            color: 'green',
+          });
+        }
+      };
+      
+      // 取消编辑
+      const handleCancelRepairConfig = () => {
+        // 清除临时配置
+        setTempRepairConfig(null);
+        // 关闭弹窗
+        setShowRepairModal(false);
+      };
+      
+      const currentConfig = tempRepairConfig || costConfig.repair;
     
       return (
         <Modal
           opened={showRepairModal}
-          onClose={() => setShowRepairModal(false)}
+          onClose={handleCancelRepairConfig}
           title="修理费配置"
           size="md"
         >
@@ -1200,19 +1245,21 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 },
                 { value: 'directAmount', label: '直接填金额' },
               ]}
-              value={costConfig.repair.type}
-              onChange={(value) => updateCostConfig({
-                repair: { ...costConfig.repair, type: value as any }
+              value={currentConfig.type}
+              onChange={(value) => setTempRepairConfig({
+                ...currentConfig,
+                type: value as any
               })}
             />
             
-            {costConfig.repair.type === 'percentage' && (
+            {currentConfig.type === 'percentage' && (
               <>
                 <NumberInput
                   label="固定资产投资的百分比 (%)"
-                  value={costConfig.repair.percentageOfFixedAssets}
-                  onChange={(value) => updateCostConfig({
-                    repair: { ...costConfig.repair, percentageOfFixedAssets: Number(value) }
+                  value={currentConfig.percentageOfFixedAssets}
+                  onChange={(value) => setTempRepairConfig({
+                    ...currentConfig,
+                    percentageOfFixedAssets: Number(value)
                   })}
                   min={0}
                   max={100}
@@ -1232,12 +1279,13 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
               </>
             )}
             
-            {costConfig.repair.type === 'directAmount' && (
+            {currentConfig.type === 'directAmount' && (
               <NumberInput
                 label="直接金额（万元）"
-                value={costConfig.repair.directAmount}
-                onChange={(value) => updateCostConfig({
-                  repair: { ...costConfig.repair, directAmount: Number(value) }
+                value={currentConfig.directAmount}
+                onChange={(value) => setTempRepairConfig({
+                  ...currentConfig,
+                  directAmount: Number(value)
                 })}
                 min={0}
                 decimalScale={2}
@@ -1245,20 +1293,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             )}
             
             <Group justify="flex-end" mt="xl">
-              <Button variant="default" onClick={() => setShowRepairModal(false)}>
+              <Button variant="default" onClick={handleCancelRepairConfig}>
                 取消
               </Button>
               <Button
-                onClick={() => {
-                  // 数据已经在onChange事件中通过updateCostConfig保存了
-                  // 这里只需要关闭弹窗
-                  setShowRepairModal(false);
-                  notifications.show({
-                    title: '保存成功',
-                    message: '修理费配置已保存',
-                    color: 'green',
-                  });
-                }}
+                onClick={handleSaveRepairConfig}
                 style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
               >
                 保存
@@ -1966,7 +2005,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearTotal;
                       });
                       
-                      return totalSum.toFixed(2);
+                      return totalSum;
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -1987,7 +2026,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearTotal.toFixed(2)}
+                        {yearTotal}
                       </Table.Td>
                     );
                   })}
@@ -2021,7 +2060,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           }
                         });
                         
-                        return totalSum.toFixed(2);
+                        return totalSum;
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -2039,7 +2078,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {yearTotal.toFixed(2)}
+                          {yearTotal}
                         </Table.Td>
                       );
                     })}
@@ -2114,7 +2153,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearInputTax;
                       });
                       
-                      return totalSum.toFixed(2);
+                      return totalSum;
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -2139,7 +2178,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearInputTax.toFixed(2)}
+                        {yearInputTax}
                       </Table.Td>
                     );
                   })}
@@ -2186,7 +2225,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += (yearFuelPowerTotal - yearInputTaxTotal);
                       });
                       
-                      return totalSum.toFixed(2);
+                      return totalSum;
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -2218,7 +2257,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearTotal.toFixed(2)}
+                        {yearTotal}
                       </Table.Td>
                     );
                   })}
@@ -2328,66 +2367,99 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   );
 
   // 渲染其他费用配置弹窗
-  const renderOtherModal = () => (
-    <Modal
-      opened={showOtherModal}
-      onClose={() => setShowOtherModal(false)}
-      title="其他费用配置"
-      size="md"
-    >
-      <Stack gap="md">
-        <TextInput
-          label="费用类型"
-          value="直接填金额"
-          disabled
-          styles={{
-            input: { backgroundColor: '#f8f9fa' }
-          }}
-        />
+  const renderOtherModal = () => {
+    // 初始化临时配置（当弹窗打开时）
+    React.useEffect(() => {
+      if (showOtherModal && !tempOtherConfig) {
+        setTempOtherConfig({...costConfig.otherExpenses});
+      }
+    }, [showOtherModal, costConfig.otherExpenses, tempOtherConfig]);
+    
+    // 保存其他费用配置
+    const handleSaveOtherConfig = () => {
+      if (tempOtherConfig) {
+        // 将临时配置更新到全局状态
+        updateCostConfig({
+          otherExpenses: tempOtherConfig
+        });
         
-        <NumberInput
-          label="直接金额（万元）"
-          value={costConfig.otherExpenses.directAmount || 0}
-          onChange={(value) => updateCostConfig({
-            ...costConfig,
-            otherExpenses: { ...costConfig.otherExpenses, directAmount: Number(value) }
-          })}
-          min={0}
-          decimalScale={2}
-        />
+        // 清除临时配置
+        setTempOtherConfig(null);
         
-        <Checkbox
-          label="应用达产率"
-          checked={costConfig.otherExpenses.applyProductionRate}
-          onChange={(event) => updateCostConfig({
-            ...costConfig,
-            otherExpenses: { ...costConfig.otherExpenses, applyProductionRate: event.currentTarget.checked }
-          })}
-        />
+        // 关闭弹窗
+        setShowOtherModal(false);
         
-        <Group justify="flex-end" mt="xl">
-          <Button variant="default" onClick={() => setShowOtherModal(false)}>
-            取消
-          </Button>
-          <Button
-            onClick={() => {
-              // 数据已经在onChange事件中通过updateCostConfig保存了
-              // 这里只需要关闭弹窗
-              setShowOtherModal(false);
-              notifications.show({
-                title: '保存成功',
-                message: '其他费用配置已保存',
-                color: 'green',
-              });
+        // 显示成功通知
+        notifications.show({
+          title: '保存成功',
+          message: '其他费用配置已保存',
+          color: 'green',
+        });
+      }
+    };
+    
+    // 取消编辑
+    const handleCancelOtherConfig = () => {
+      // 清除临时配置
+      setTempOtherConfig(null);
+      // 关闭弹窗
+      setShowOtherModal(false);
+    };
+    
+    const currentConfig = tempOtherConfig || costConfig.otherExpenses;
+    
+    return (
+      <Modal
+        opened={showOtherModal}
+        onClose={handleCancelOtherConfig}
+        title="其他费用配置"
+        size="md"
+      >
+        <Stack gap="md">
+          <TextInput
+            label="费用类型"
+            value="直接填金额"
+            disabled
+            styles={{
+              input: { backgroundColor: '#f8f9fa' }
             }}
-            style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
-          >
-            保存
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
-  );
+          />
+          
+          <NumberInput
+            label="直接金额（万元）"
+            value={currentConfig.directAmount || 0}
+            onChange={(value) => setTempOtherConfig({
+              ...currentConfig,
+              directAmount: Number(value)
+            })}
+            min={0}
+            decimalScale={2}
+          />
+          
+          <Checkbox
+            label="应用达产率"
+            checked={currentConfig.applyProductionRate}
+            onChange={(event) => setTempOtherConfig({
+              ...currentConfig,
+              applyProductionRate: event.currentTarget.checked
+            })}
+          />
+          
+          <Group justify="flex-end" mt="xl">
+            <Button variant="default" onClick={handleCancelOtherConfig}>
+              取消
+            </Button>
+            <Button
+              onClick={handleSaveOtherConfig}
+              style={{ backgroundColor: '#165DFF', color: '#FFFFFF' }}
+            >
+              保存
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    );
+  };
   
   return (
     <>
@@ -3045,75 +3117,37 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>总成本费用合计</Table.Td>
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
-                        // 总成本费用合计列 = 自然数列1到6行的合计列数值的总和
+                        // 总成本费用合计列 = 运营期各年数值的总和
                         let total = 0;
-                        
-                        // 行1: 营业成本合计列
-                        let row1Total = 0;
                         years.forEach((year) => {
-                          const productionRate = costConfig.rawMaterials.applyProductionRate || costConfig.fuelPower.applyProductionRate || costConfig.repair.applyProductionRate || costConfig.otherExpenses.applyProductionRate
-                            ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
-                            : 1;
+                          const yearIndex = year - 1;
+                          let yearTotal = 0;
                           
-                          // 1.1 外购原材料费（使用除税金额）
-                          let yearRawMaterialsWithTax = 0;
-                          let yearRawMaterialsInputTax = 0;
-                          costConfig.rawMaterials.items.forEach((item: CostItem) => {
-                            const baseAmount = calculateBaseAmount(item, revenueItems || []);
-                            const taxRate = Number(item.taxRate) || 0;
-                            const taxRateDecimal = taxRate / PERCENTAGE_MULTIPLIER;
-                            // 正确的计算公式：
-                            // 含税金额 = 不含税金额 × (1 + 税率)
-                            yearRawMaterialsWithTax += baseAmount * productionRate * (1 + taxRateDecimal);
-                            // 进项税额 = 不含税金额 × 税率
-                            yearRawMaterialsInputTax += baseAmount * productionRate * taxRateDecimal;
-                          });
-                          row1Total += yearRawMaterialsWithTax - yearRawMaterialsInputTax;
+                          // 行1: 营业成本对应年份列
+                          let yearRow1 = 0;
                           
-                          // 1.2 外购燃料及动力费（使用除税金额）
-                          const yearFuelPower = calculateFuelPowerExcludingTax(year, years);
-                          row1Total += yearFuelPower;
+                          // 1.1 外购原材料费（除税）对应年份列
+                          yearRow1 += calculateRawMaterialsExcludingTax(year, years);
                           
-                          // 1.3 工资及福利费
-                          let yearWages = 0;
+                          // 1.2 外购燃料及动力费（除税）对应年份列
+                          yearRow1 += calculateFuelPowerExcludingTax(year, years);
                           
-                          // 如果有工资明细数据，使用明细数据计算
-                          if (costConfig.wages.items && costConfig.wages.items.length > 0) {
-                            costConfig.wages.items.forEach((item: any) => {
-                              // 计算该年的工资总额（考虑工资调整）
-                              let currentSalary = item.salaryPerEmployee || 0;
-                              
-                              // 根据调整周期和幅度计算第year年的工资
-                              if (item.changeInterval && item.changePercentage) {
-                                const adjustmentTimes = Math.floor((year - 1) / item.changeInterval);
-                                currentSalary = currentSalary * Math.pow(1 + item.changePercentage / 100, adjustmentTimes);
-                              }
-                              
-                              // 计算工资总额
-                              const yearlySubtotal = item.employees * currentSalary;
-                              // 计算福利费
-                              const yearlyWelfare = yearlySubtotal * (item.welfareRate || 0) / 100;
-                              // 合计
-                              yearWages += yearlySubtotal + yearlyWelfare;
-                            });
-                          } else {
-                            // 如果没有明细数据，使用directAmount
-                            yearWages = costConfig.wages.directAmount || 0;
-                          }
+                          // 1.3 工资及福利费对应年份列
+                          yearRow1 += calculateWagesTotal(year, years);
                           
-                          row1Total += yearWages; // 工资通常不受达产率影响
-                          
-                          // 1.4 修理费（不应用达产率）
+                          // 1.4 修理费对应年份列
                           let yearRepair = 0;
                           if (costConfig.repair.type === 'percentage') {
-                            // 使用与修理费配置弹窗相同的计算基数
                             yearRepair += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
                           } else {
                             yearRepair += costConfig.repair.directAmount || 0;
                           }
-                          row1Total += yearRepair;
+                          yearRow1 += yearRepair;
                           
-                          // 1.5 其他费用
+                          // 1.5 其他费用对应年份列
+                          const productionRate = costConfig.otherExpenses.applyProductionRate
+                            ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                            : 1;
                           let yearOtherExpenses = 0;
                           if (costConfig.otherExpenses.type === 'percentage') {
                             const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
@@ -3124,51 +3158,38 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           } else {
                             yearOtherExpenses += (costConfig.otherExpenses.directAmount || 0) * productionRate;
                           }
-                          // 应用其他费用的达产率
-                          if (costConfig.otherExpenses.applyProductionRate) {
-                            yearOtherExpenses *= productionRate;
-                          }
-                          row1Total += yearOtherExpenses;
-                        });
-                        total += row1Total;
-                        
-                        // 行2: 管理费用合计列（暂时为0）
-                        // 暂时为0，待后续实现
-                        
-                        // 行3: 利息支出合计列
-                        let row3Total = 0;
-                        years.forEach((year) => {
+                          yearRow1 += yearOtherExpenses;
+                          
+                          yearTotal += yearRow1;
+                          
+                          // 行2: 管理费用对应年份列（暂时为0）
+                          
+                          // 行3: 利息支出对应年份列
+                          let yearInterest = 0;
                           const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
                           if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
-                            row3Total += interestRow.分年数据[year - 1];
+                            yearInterest = interestRow.分年数据[year - 1];
                           }
-                        });
-                        total += row3Total;
-                        
-                        // 行4: 折旧费合计列
-                        let row4Total = 0;
-                        years.forEach((year) => {
-                          const yearIndex = year - 1;
+                          yearTotal += yearInterest;
+                          
+                          // 行4: 折旧费对应年份列
                           const rowA = depreciationData.find(row => row.序号 === 'A');
                           const rowD = depreciationData.find(row => row.序号 === 'D');
                           const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
-                          row4Total += yearDepreciation;
-                        });
-                        total += row4Total;
-                        
-                        // 行5: 摊销费合计列
-                        let row5Total = 0;
-                        years.forEach((year) => {
-                          const yearIndex = year - 1;
+                          yearTotal += yearDepreciation;
+                          
+                          // 行5: 摊销费对应年份列
                           const rowE = depreciationData.find(row => row.序号 === 'E');
                           const yearAmortization = rowE?.分年数据[yearIndex] || 0;
-                          row5Total += yearAmortization;
+                          yearTotal += yearAmortization;
+                          
+                          // 行6: 开发成本对应年份列（暂时为0）
+                          
+                          // 累加原始数值（不四舍五入）
+                          total += yearTotal;
                         });
-                        total += row5Total;
                         
-                        // 行6: 开发成本合计列（暂时为0）
-                        // 暂时为0，待后续实现
-                        
+                        // 只在显示时才四舍五入到2位小数
                         return total.toFixed(2);
                       })()}
                     </Table.Td>
