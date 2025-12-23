@@ -6,6 +6,11 @@ import { InvestmentProjectModel } from '../models/InvestmentProject.js'
 import { LLMService, analyzeRevenueStructurePrompt, analyzePricingPrompt, generateRevenueItemsPrompt, estimateSingleRevenueItemPrompt } from '../lib/llm.js'
 import { LLMConfigModel } from '../models/LLMConfig.js'
 
+// 扩展AuthRequest接口以包含body属性
+interface ExtendedAuthRequest extends AuthRequest {
+  body: any
+}
+
 /**
  * 保存请求的验证Schema
  */

@@ -232,8 +232,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
     }
 
     notifications.show({
-      title: '应用成功',
-      message: '工资及福利费配置已更新',
+      title: '保存成功',
+      message: `工资及福利费配置已保存（${wageItems.length}个岗位）`,
       color: 'green',
     })
     onClose()

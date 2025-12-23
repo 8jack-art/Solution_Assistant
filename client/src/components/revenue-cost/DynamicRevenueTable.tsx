@@ -17,7 +17,7 @@ import {
 
 SegmentedControl,
   } from '@mantine/core'
-import { IconEdit, IconTrash, IconPlus, IconChartLine, IconSparkles, IconTable } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconPlus, IconChartLine, IconSparkles, IconTable, IconTrashX } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import ProductionRateModal from './ProductionRateModal'
 import { revenueCostApi } from '@/lib/api'
@@ -60,13 +60,14 @@ const TEMPLATE_LABELS: Record<FieldTemplate, string> = {
  * 动态收入表格组件
  */
 const DynamicRevenueTable: React.FC = () => {
-  const { 
+  const {
     context,
     aiAnalysisResult,
-    revenueItems, 
-    addRevenueItem, 
-    updateRevenueItem, 
-    deleteRevenueItem
+    revenueItems,
+    addRevenueItem,
+    updateRevenueItem,
+    deleteRevenueItem,
+    clearAllRevenueItems
   } = useRevenueCostStore()
   
   const [showEditModal, setShowEditModal] = useState(false)
@@ -164,6 +165,31 @@ const DynamicRevenueTable: React.FC = () => {
   }
 
   /**
+   * 删除全部收入项
+   */
+  const handleDeleteAll = () => {
+    modals.openConfirmModal({
+      title: '确认删除全部',
+      centered: true,
+      children: (
+        <Text size="sm">
+          确定要删除所有收入项吗？此操作不可恢复
+        </Text>
+      ),
+      labels: { confirm: '确定删除', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        clearAllRevenueItems()
+        notifications.show({
+          title: '成功',
+          message: '所有收入项已删除',
+          color: 'green',
+        })
+      },
+    })
+  }
+
+  /**
    * AI测算收入项
    */
   const handleAiEstimate = async () => {
@@ -249,20 +275,29 @@ const DynamicRevenueTable: React.FC = () => {
     console.log('🔍 最终保存到数据库的数据(万元单位):', dataToSave)
 
     // 先更新本地状态
-    if (isNewItem) {
-      addRevenueItem(dataToSave)
+    try {
+      if (isNewItem) {
+        addRevenueItem(dataToSave)
+        notifications.show({
+          title: '成功',
+          message: '收入项已添加',
+          color: 'green',
+        })
+      } else if (editingItem) {
+        updateRevenueItem(editingItem.id, dataToSave)
+        notifications.show({
+          title: '成功',
+          message: '收入项已更新',
+          color: 'green',
+        })
+      }
+    } catch (error: any) {
       notifications.show({
-        title: '成功',
-        message: '收入项已添加',
-        color: 'green',
+        title: '错误',
+        message: error.message || '保存失败',
+        color: 'red',
       })
-    } else if (editingItem) {
-      updateRevenueItem(editingItem.id, dataToSave)
-      notifications.show({
-        title: '成功',
-        message: '收入项已更新',
-        color: 'green',
-      })
+      return
     }
 
     // 等待状态更新后再保存到后端
@@ -349,13 +384,9 @@ const DynamicRevenueTable: React.FC = () => {
         // 先记录当前收入项数量
         console.log(`🗑️ 准备清空现有 ${revenueItems.length} 个收入项`)
         
-        // 清空现有收入项 - 注意：要在添加新项之前完成
-        const itemsToDelete = [...revenueItems]
-        console.log(`🗑️ 开始删除收入项:`, itemsToDelete.map(i => i.name).join(', '))
-        itemsToDelete.forEach(item => {
-          console.log(`  ❌ 删除: ${item.name} (ID: ${item.id})`)
-          deleteRevenueItem(item.id)
-        })
+        // 使用一键清空所有收入项的方法
+        console.log(`🗑️ 开始一键清空所有收入项`)
+        clearAllRevenueItems()
 
         // 等待一个微任务周期，确保删除操作完成
         await new Promise(resolve => setTimeout(resolve, 0))
@@ -363,23 +394,36 @@ const DynamicRevenueTable: React.FC = () => {
         console.log(`✅ 清空完成，当前剩余收入项: ${revenueItems.length} 个`)
         console.log(`➕ 开始添加 ${itemCount} 个新收入项`)
 
-        // 添加AI生成的收入项
+        // 添加AI生成的收入项，并进行严格的重复项检测
+        let addedCount = 0
+        let skippedCount = 0
+        
         generatedItems.forEach((item: any, index: number) => {
-          console.log(`  ➕ [${index + 1}/${itemCount}] 添加: ${item.name}`)
-          addRevenueItem({
-            name: item.name,
-            category: item.category || 'other',
-            fieldTemplate: item.field_template || 'quantity-price',
-            quantity: item.quantity || 0,
-            unitPrice: item.unit_price || 0,
-            area: item.area || 0,
-            yieldPerArea: item.yield_per_area || 0,
-            capacity: item.capacity || 0,
-            utilizationRate: item.utilization_rate || 0,
-            subscriptions: item.subscriptions || 0,
-            directAmount: item.direct_amount || 0,
-          })
+          console.log(`  ➕ [${index + 1}/${itemCount}] 处理: ${item.name}`)
+          
+          try {
+            addRevenueItem({
+              name: item.name,
+              category: item.category || 'other',
+              fieldTemplate: item.field_template || 'quantity-price',
+              quantity: item.quantity || 0,
+              unitPrice: item.unit_price || 0,
+              area: item.area || 0,
+              yieldPerArea: item.yield_per_area || 0,
+              capacity: item.capacity || 0,
+              utilizationRate: item.utilization_rate || 0,
+              subscriptions: item.subscriptions || 0,
+              directAmount: item.direct_amount || 0,
+            })
+            addedCount++
+            console.log(`    ✅ 成功添加: ${item.name}`)
+          } catch (error: any) {
+            skippedCount++
+            console.log(`    ⚠️ 跳过重复项: ${item.name} - ${error.message}`)
+          }
         })
+        
+        console.log(`📊 生成统计: 成功添加 ${addedCount} 项，跳过重复 ${skippedCount} 项`)
 
         console.log(`✅ AI生成完成：添加了 ${itemCount} 个收入项`)
         notifications.show({
@@ -903,6 +947,17 @@ const DynamicRevenueTable: React.FC = () => {
             营业收入配置
           </Text>
           <Group gap="xs">
+            <Tooltip label="删除全部">
+              <ActionIcon
+                variant="filled"
+                color="red"
+                size="lg"
+                onClick={handleDeleteAll}
+                disabled={revenueItems.length === 0}
+              >
+                <IconTrashX size={20} />
+              </ActionIcon>
+            </Tooltip>
             <Tooltip label="配置达产率">
               <ActionIcon
                 variant="light"
