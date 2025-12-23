@@ -285,8 +285,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       items: [
         { id: 1, name: '水费', specification: '', unit: 'm³', price: 2.99, consumption: 0, totalCost: 0, applyProductionRate: true },
         { id: 2, name: '电费', specification: '', unit: 'kWh', price: 0.65, consumption: 0, totalCost: 0, applyProductionRate: true },
-        { id: 3, name: '汽油', specification: '', unit: 'L', price: 9453, consumption: 1000, totalCost: 9453000, applyProductionRate: true },
-        { id: 4, name: '柴油', specification: '', unit: 'L', price: 7783, consumption: 1000, totalCost: 7783000, applyProductionRate: true },
+        { id: 3, name: '汽油', specification: '', unit: 'L', price: 9453, consumption: 0, totalCost: 0, applyProductionRate: true },
+        { id: 4, name: '柴油', specification: '', unit: 'L', price: 7783, consumption: 0, totalCost: 0, applyProductionRate: true },
         { id: 5, name: '天然气', specification: '', unit: 'm³', price: 3.75, consumption: 0, totalCost: 0, applyProductionRate: true },
       ]
     },
