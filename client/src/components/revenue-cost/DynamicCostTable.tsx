@@ -250,7 +250,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     // 修理费配置
     repair: {
       type: 'percentage', // percentage, directAmount
-      percentageOfFixedAssets: 2, // 固定资产投资的百分比
+      percentageOfFixedAssets: 0.5, // 固定资产投资的百分比
       directAmount: 0, // 直接金额
       taxRate: 13, // 进项税率
       applyProductionRate: false,
@@ -1122,17 +1122,30 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   const renderRepairModal = () => {
     // 计算固定资产投资金额：折旧与摊销估算表中A与D原值的合减去投资估算简表中"建设期利息"的数值
     const calculateFixedAssetsInvestment = async () => {
+      console.log('🔍 开始计算固定资产投资金额...');
+      console.log('📊 折旧数据:', depreciationData);
+      console.log('📋 项目上下文:', context);
+      
       let fixedAssetsValue = 0;
       
       // 获取折旧与摊销估算表中A和D的原值
       if (depreciationData.length > 0) {
+        console.log('✅ 找到折旧数据，行数:', depreciationData.length);
         const rowA = depreciationData.find(row => row.序号 === 'A');
         const rowD = depreciationData.find(row => row.序号 === 'D');
+        
+        console.log('🔍 折旧行A:', rowA);
+        console.log('🔍 折旧行D:', rowD);
         
         if (rowA && rowD) {
           // 使用原值字段计算固定资产投资
           fixedAssetsValue = (rowA.原值 || 0) + (rowD.原值 || 0);
+          console.log('💰 计算固定资产原值:', rowA.原值, '+', rowD.原值, '=', fixedAssetsValue);
+        } else {
+          console.warn('⚠️ 未找到折旧行A或D');
         }
+      } else {
+        console.warn('⚠️ 折旧数据为空');
       }
       
       // 减去建设期利息
@@ -1143,14 +1156,29 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       // 尝试从投资估算API获取建设期利息
       try {
         if (context?.projectId) {
+          console.log('🌐 尝试从API获取投资估算数据，项目ID:', context.projectId);
           const investmentResponse = await investmentApi.getByProjectId(context.projectId);
-          if (investmentResponse.success && investmentResponse.data?.estimate?.estimate_data?.constructionInterest) {
-            constructionInterest = investmentResponse.data.estimate.estimate_data.constructionInterest;
-            interestSource = "投资估算数据";
+          
+          if (investmentResponse.success) {
+            console.log('✅ API请求成功，开始解析数据结构...');
+            
+            // 根据用户提供的数据结构，construction_interest在data.estimate层级
+            if (investmentResponse.data?.estimate?.construction_interest !== undefined) {
+              constructionInterest = parseFloat(investmentResponse.data.estimate.construction_interest);
+              interestSource = "投资估算数据(data.estimate.construction_interest)";
+              console.log('✅ 从投资估算数据获取建设期利息:', constructionInterest);
+            } else {
+              console.warn('⚠️ 投资估算数据中没有找到construction_interest字段');
+              console.log('📋 data.estimate的可用字段:', Object.keys(investmentResponse.data?.estimate || {}));
+            }
+          } else {
+            console.warn('⚠️ 投资估算API请求失败');
           }
+        } else {
+          console.warn('⚠️ 项目上下文或项目ID为空');
         }
       } catch (error) {
-        console.error('获取投资估算数据失败:', error);
+        console.error('❌ 获取投资估算数据失败:', error);
       }
       
       // 如果投资估算数据中没有找到，设置默认值为0
@@ -1159,16 +1187,19 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       }
       
       // 调试日志
-      console.log('固定资产投资计算调试信息:', {
+      const finalInvestment = fixedAssetsValue - constructionInterest;
+      console.log('📋 固定资产投资计算调试信息:', {
         折旧A原值: depreciationData.find(row => row.序号 === 'A')?.原值 || 0,
         折旧D原值: depreciationData.find(row => row.序号 === 'D')?.原值 || 0,
         固定资产原值合计: fixedAssetsValue,
         建设期利息: constructionInterest,
         建设期利息来源: interestSource,
-        最终固定资产投资: fixedAssetsValue - constructionInterest
+        最终固定资产投资: finalInvestment
       });
       
-      return fixedAssetsValue - constructionInterest;
+      console.log('🎯 最终固定资产投资金额:', finalInvestment);
+      
+      return finalInvestment;
     };
     
     const [fixedAssetsInvestment, setFixedAssetsInvestment] = useState(0);
