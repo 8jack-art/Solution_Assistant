@@ -67,6 +67,8 @@ interface WageItem {
   employees: number
   salaryPerEmployee: number // 万元/年
   welfareRate: number // 福利费率 %
+  changeInterval?: number // 变化（年）- 工资调整的时间间隔
+  changePercentage?: number // 幅度（%）- 每次调整时工资上涨的百分比
 }
 
 
