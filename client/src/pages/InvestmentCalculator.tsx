@@ -11,7 +11,6 @@ import {
   Card,
   Group,
   Stack,
-  Table,
   Grid,
   Loader,
   Center,
@@ -19,6 +18,9 @@ import {
 import { notifications } from '@mantine/notifications'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { useMediaQuery } from '@mantine/hooks'
+import { CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table'
 
 const InvestmentCalculator: React.FC = () => {
   const [project, setProject] = useState<InvestmentProject | null>(null)
@@ -226,7 +228,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.construction_cost}
-                      onChange={(e) => setFormData({ ...formData, construction_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, construction_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div>
@@ -237,7 +239,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.equipment_cost}
-                      onChange={(e) => setFormData({ ...formData, equipment_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, equipment_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -251,7 +253,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.installation_cost}
-                      onChange={(e) => setFormData({ ...formData, installation_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, installation_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div>
@@ -262,7 +264,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.other_cost}
-                      onChange={(e) => setFormData({ ...formData, other_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, other_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -275,7 +277,7 @@ const InvestmentCalculator: React.FC = () => {
                     type="number"
                     step="0.01"
                     value={formData.land_cost}
-                    onChange={(e) => setFormData({ ...formData, land_cost: parseFloat(e.target.value) || 0 })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, land_cost: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
 
@@ -288,7 +290,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.basic_reserve_rate}
-                      onChange={(e) => setFormData({ ...formData, basic_reserve_rate: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, basic_reserve_rate: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div>
@@ -299,7 +301,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.price_reserve_rate}
-                      onChange={(e) => setFormData({ ...formData, price_reserve_rate: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price_reserve_rate: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -314,7 +316,7 @@ const InvestmentCalculator: React.FC = () => {
                       min="1"
                       max="10"
                       value={formData.construction_period}
-                      onChange={(e) => setFormData({ ...formData, construction_period: parseInt(e.target.value) || 1 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, construction_period: parseInt(e.target.value) || 1 })}
                     />
                   </div>
                   <div>
@@ -327,7 +329,7 @@ const InvestmentCalculator: React.FC = () => {
                       min="0"
                       max="1"
                       value={formData.loan_rate}
-                      onChange={(e) => setFormData({ ...formData, loan_rate: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, loan_rate: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -340,7 +342,7 @@ const InvestmentCalculator: React.FC = () => {
                     type="number"
                     step="0.01"
                     value={formData.custom_loan_amount}
-                    onChange={(e) => setFormData({ ...formData, custom_loan_amount: parseFloat(e.target.value) || 0 })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, custom_loan_amount: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
 
