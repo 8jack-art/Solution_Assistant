@@ -368,6 +368,7 @@ interface RevenueCostState {
   addRevenueItem: (item: Partial<RevenueItem>) => void
   updateRevenueItem: (id: string, updates: Partial<RevenueItem>) => void
   deleteRevenueItem: (id: string) => void
+  clearAllRevenueItems: () => void
   
   // 成本项管理
   addCostItem: (item: Partial<CostItem>) => void
@@ -587,6 +588,10 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         // 重新计算索引
         const reindexed = newItems.map((item, idx) => ({ ...item, index: idx + 1 }))
         set({ revenueItems: reindexed })
+      },
+      
+      clearAllRevenueItems: () => {
+        set({ revenueItems: [] })
       },
       
       addCostItem: (item) => {

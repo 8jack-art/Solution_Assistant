@@ -391,7 +391,9 @@ const DynamicRevenueTable: React.FC = () => {
         // 等待一个微任务周期，确保删除操作完成
         await new Promise(resolve => setTimeout(resolve, 0))
         
-        console.log(`✅ 清空完成，当前剩余收入项: ${revenueItems.length} 个`)
+        // 获取最新的状态
+        const currentState = useRevenueCostStore.getState()
+        console.log(`✅ 清空完成，当前剩余收入项: ${currentState.revenueItems.length} 个`)
         console.log(`➕ 开始添加 ${itemCount} 个新收入项`)
 
         // 添加AI生成的收入项，并进行严格的重复项检测

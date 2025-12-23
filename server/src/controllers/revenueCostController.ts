@@ -5,6 +5,7 @@ import { ApiResponse, AuthRequest } from '../types/index.js'
 import { InvestmentProjectModel } from '../models/InvestmentProject.js'
 import { LLMService, analyzeRevenueStructurePrompt, analyzePricingPrompt, generateRevenueItemsPrompt, estimateSingleRevenueItemPrompt } from '../lib/llm.js'
 import { LLMConfigModel } from '../models/LLMConfig.js'
+import mysql from 'mysql2/promise'
 
 // 扩展AuthRequest接口以包含body属性
 interface ExtendedAuthRequest extends AuthRequest {
@@ -42,7 +43,7 @@ export class RevenueCostController {
   /**
    * 保存收入成本建模数据
    */
-  static async save(req: AuthRequest, res: Response<ApiResponse>) {
+  static async save(req: AuthRequest, res: Response) {
     try {
       console.log('🔹 [save] 请求开始')
       const userId = req.user?.userId
@@ -87,7 +88,7 @@ export class RevenueCostController {
       }
 
       // 检查是否已存在记录
-      const [existing] = await pool.query(
+      const [existing] = await (pool as any).execute(
         'SELECT id FROM revenue_cost_estimates WHERE project_id = ?',
         [project_id]
       ) as any[]
@@ -140,7 +141,7 @@ export class RevenueCostController {
         updateValues.push(existing[0].id)
 
         try {
-          await pool.query(
+          await (pool as any).execute(
             `UPDATE revenue_cost_estimates SET ${updateFields.join(', ')} WHERE id = ?`,
             updateValues
           )
@@ -155,7 +156,7 @@ export class RevenueCostController {
             const aiIndex = updateFields.findIndex(f => f.includes('ai_analysis_result'))
             if (aiIndex >= 0) retryValues.splice(aiIndex, 1)
             
-            await pool.query(
+            await (pool as any).execute(
               `UPDATE revenue_cost_estimates SET ${retryFields.join(', ')} WHERE id = ?`,
               retryValues
             )
@@ -169,7 +170,7 @@ export class RevenueCostController {
       } else {
         // 创建新记录
         try {
-          const [insertResult] = await pool.query(
+          const [insertResult] = await (pool as any).execute(
             `INSERT INTO revenue_cost_estimates 
              (project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -190,7 +191,7 @@ export class RevenueCostController {
           // 如果是ai_analysis_result字段不存在，不包含该字段后重试
           if (insertError.code === 'ER_BAD_FIELD_ERROR') {
             console.log('🔄 不包含ai_analysis_result字段后重试...')
-            const [retryResult] = await pool.query(
+            const [retryResult] = await (pool as any).execute(
               `INSERT INTO revenue_cost_estimates 
                (project_id, calculation_period, operation_period, workflow_step, model_data, is_completed) 
                VALUES (?, ?, ?, ?, ?, ?)`,
@@ -237,7 +238,7 @@ export class RevenueCostController {
   /**
    * 根据项目ID获取收入成本建模数据
    */
-  static async getByProjectId(req: AuthRequest, res: Response<ApiResponse>) {
+  static async getByProjectId(req: AuthRequest, res: Response) {
     try {
       const userId = req.user?.userId
       const isAdmin = req.user?.isAdmin
@@ -267,7 +268,7 @@ export class RevenueCostController {
       }
 
       // 查询收入成本估算数据
-      const [estimates] = await pool.query(
+      const [estimates] = await (pool as any).execute(
         'SELECT * FROM revenue_cost_estimates WHERE project_id = ?',
         [projectId]
       ) as any[]
@@ -308,7 +309,7 @@ export class RevenueCostController {
 /**
  * AI推荐营收结构
  */
-static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
+static async aiRecommend(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.userId
     const isAdmin = req.user?.isAdmin
@@ -349,7 +350,12 @@ static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
     }
 
     // 准备工程项数据（如果有）
-    const engineeringItems = params.engineeringItems || []
+    const engineeringItems = (params.engineeringItems || [])
+      .filter(item => item.name !== undefined && item.amount !== undefined)
+      .map(item => ({
+        name: item.name,
+        amount: item.amount
+      }))
 
     // 构建LLM提示
     const messages = analyzeRevenueStructurePrompt(
@@ -443,7 +449,7 @@ static async aiRecommend(req: AuthRequest, res: Response<ApiResponse>) {
 /**
  * AI分析税率和计费模式
  */
-static async analyzePricing(req: AuthRequest, res: Response<ApiResponse>) {
+static async analyzePricing(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.userId
 
@@ -528,7 +534,7 @@ static async analyzePricing(req: AuthRequest, res: Response<ApiResponse>) {
 /**
  * AI生成收入项目表
  */
-static async generateItems(req: AuthRequest, res: Response<ApiResponse>) {
+static async generateItems(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.userId
     const isAdmin = req.user?.isAdmin
@@ -665,7 +671,7 @@ static async generateItems(req: AuthRequest, res: Response<ApiResponse>) {
 /**
  * 估算单个收入项
  */
-static async estimateItem(req: AuthRequest, res: Response<ApiResponse>) {
+static async estimateItem(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.userId
     const isAdmin = req.user?.isAdmin
@@ -782,7 +788,7 @@ static async estimateItem(req: AuthRequest, res: Response<ApiResponse>) {
   /**
    * 更新工作流步骤
    */
-  static async updateWorkflowStep(req: AuthRequest, res: Response<ApiResponse>) {
+  static async updateWorkflowStep(req: AuthRequest, res: Response) {
     try {
       const userId = req.user?.userId
       const { projectId } = req.params
@@ -803,7 +809,7 @@ static async estimateItem(req: AuthRequest, res: Response<ApiResponse>) {
         })
       }
 
-      await pool.query(
+      await (pool as any).execute(
         'UPDATE revenue_cost_estimates SET workflow_step = ?, updated_at = NOW() WHERE project_id = ?',
         [step, projectId]
       )
@@ -824,7 +830,7 @@ static async estimateItem(req: AuthRequest, res: Response<ApiResponse>) {
   /**
    * 删除收入成本建模数据
    */
-  static async delete(req: AuthRequest, res: Response<ApiResponse>) {
+  static async delete(req: AuthRequest, res: Response) {
     try {
       const userId = req.user?.userId
       const isAdmin = req.user?.isAdmin
@@ -838,7 +844,7 @@ static async estimateItem(req: AuthRequest, res: Response<ApiResponse>) {
       }
 
       // 查询估算记录
-      const [estimates] = await pool.query(
+      const [estimates] = await (pool as any).execute(
         'SELECT project_id FROM revenue_cost_estimates WHERE id = ?',
         [id]
       ) as any[]
@@ -869,7 +875,7 @@ static async estimateItem(req: AuthRequest, res: Response<ApiResponse>) {
       }
 
       // 删除记录（会级联删除相关的revenue_items, cost_items, production_rates）
-      await pool.query('DELETE FROM revenue_cost_estimates WHERE id = ?', [id])
+      await (pool as any).execute('DELETE FROM revenue_cost_estimates WHERE id = ?', [id])
 
       res.json({
         success: true,
