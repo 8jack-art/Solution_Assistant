@@ -9,7 +9,7 @@ const createConfigSchema = z.object({
     api_key: z.string().min(1, 'API密钥不能为空'),
     base_url: z.string().min(1, '基础URL不能为空'),
     model: z.string().min(1, '模型名称不能为空'),
-    is_default: z.boolean().optional(),
+    is_default: z.union([z.boolean(), z.number()]).transform(val => Boolean(val)).optional(),
 });
 const updateConfigSchema = createConfigSchema.partial();
 const setDefaultSchema = z.object({

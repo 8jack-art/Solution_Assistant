@@ -32,6 +32,7 @@ export interface InvestmentProject {
     land_purchase_area?: number;
     land_purchase_unit_price?: number;
     seedling_compensation?: number;
+    lease_seedling_compensation?: number;
     created_at: string;
     updated_at: string;
 }

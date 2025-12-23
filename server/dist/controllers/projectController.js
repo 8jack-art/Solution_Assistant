@@ -20,6 +20,7 @@ const createProjectSchema = z.object({
     land_cost: z.coerce.number().optional(),
     land_remark: z.string().optional(),
     seedling_compensation: z.coerce.number().optional(),
+    lease_seedling_compensation: z.coerce.number().optional(),
 });
 const updateProjectSchema = createProjectSchema.partial();
 const updateStatusSchema = z.object({

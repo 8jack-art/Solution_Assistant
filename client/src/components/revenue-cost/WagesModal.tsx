@@ -174,12 +174,12 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
   /**
    * 应用配置
    */
-  const handleApply = async () => {
+  const handleApply = () => {
     // 计算总人数和平均工资
     const totalEmployees = wageItems.reduce((sum, item) => sum + item.employees, 0)
     const totalSalary = wageItems.reduce((sum, item) => sum + (item.employees * item.salaryPerEmployee), 0)
     const averageSalary = totalEmployees > 0 ? totalSalary / totalEmployees : 0
-
+ 
     // 计算第一年的工资及福利费合计（工资+福利费）
     let firstYearTotal = 0;
     wageItems.forEach((item) => {
@@ -187,7 +187,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
       const yearlyWelfare = yearlySubtotal * (item.welfareRate / 100)
       firstYearTotal += yearlySubtotal + yearlyWelfare
     })
-
+ 
     // 更新costConfig，保存详细的工资项数据
     const updatedWagesConfig = {
       employees: totalEmployees,
@@ -195,42 +195,13 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
       directAmount: firstYearTotal, // 存储第一年的工资及福利费合计
       items: wageItems // 保存完整的工资项数据
     }
-
+ 
     updateCostConfig({
       ...costConfig,
       wages: updatedWagesConfig
     })
-
-    // 保存到后端
-    try {
-      const state = useRevenueCostStore.getState();
-      if (state.context?.projectId) {
-        // 获取当前的model_data
-        const currentModelData = {
-          revenueItems: state.revenueItems,
-          costItems: state.costItems,
-          productionRates: state.productionRates,
-          aiAnalysisResult: state.aiAnalysisResult,
-          costConfig: {
-            ...state.costConfig,
-            wages: updatedWagesConfig
-          },
-          workflow_step: state.currentStep
-        };
-        
-        await revenueCostApi.save({
-          project_id: state.context.projectId,
-          model_data: currentModelData
-        });
-      }
-    } catch (error) {
-      notifications.show({
-        title: '保存失败',
-        message: '数据未保存到数据库，请稍后重试',
-        color: 'red',
-      });
-    }
-
+    // 自动保存已由 Store 处理
+ 
     notifications.show({
       title: '保存成功',
       message: `工资及福利费配置已保存（${wageItems.length}个岗位）`,
@@ -395,6 +366,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                         fontWeight: 500,
                         color: '#1D2129',
                         fontSize: rem(windowSize.width < 768 ? 11 : 13),
+                        paddingLeft: '8px',
+                        paddingRight: '8px',
                       }
                     }}
                   />
@@ -412,6 +385,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                         fontWeight: 500,
                         color: '#1D2129',
                         fontSize: rem(windowSize.width < 768 ? 11 : 13),
+                        paddingLeft: '8px',
+                        paddingRight: '8px',
                       }
                     }}
                   />
@@ -430,6 +405,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                         fontWeight: 500,
                         color: '#1D2129',
                         fontSize: rem(windowSize.width < 768 ? 11 : 13),
+                        paddingLeft: '8px',
+                        paddingRight: '8px',
                       }
                     }}
                   />
@@ -453,6 +430,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                         fontWeight: 500,
                         color: '#1D2129',
                         fontSize: rem(windowSize.width < 768 ? 12 : 14),
+                        paddingLeft: '8px',
+                        paddingRight: '8px',
                       }
                     }}
                   />
@@ -481,6 +460,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                         fontWeight: 500,
                         color: '#1D2129',
                         fontSize: rem(windowSize.width < 768 ? 11 : 13),
+                        paddingLeft: '8px',
+                        paddingRight: '8px',
                       }
                     }}
                   />
@@ -500,6 +481,8 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                         fontWeight: 500,
                         color: '#1D2129',
                         fontSize: rem(windowSize.width < 768 ? 11 : 13),
+                        paddingLeft: '8px',
+                        paddingRight: '8px',
                       }
                     }}
                   />

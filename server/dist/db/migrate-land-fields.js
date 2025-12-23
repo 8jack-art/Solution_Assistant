@@ -13,7 +13,8 @@ async function migrate() {
             "ALTER TABLE investment_projects ADD COLUMN IF NOT EXISTS land_purchase_unit_price DECIMAL(15,4) DEFAULT 0",
             "ALTER TABLE investment_projects ADD COLUMN IF NOT EXISTS land_cost DECIMAL(15,4) DEFAULT 0",
             "ALTER TABLE investment_projects ADD COLUMN IF NOT EXISTS land_remark TEXT",
-            "ALTER TABLE investment_projects ADD COLUMN IF NOT EXISTS seedling_compensation DECIMAL(15,4) DEFAULT 0"
+            "ALTER TABLE investment_projects ADD COLUMN IF NOT EXISTS seedling_compensation DECIMAL(15,4) DEFAULT 0",
+            "ALTER TABLE investment_projects ADD COLUMN IF NOT EXISTS lease_seedling_compensation DECIMAL(15,4) DEFAULT 0"
         ];
         for (const query of alterQueries) {
             try {

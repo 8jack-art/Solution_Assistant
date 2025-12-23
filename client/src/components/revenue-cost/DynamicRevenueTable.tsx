@@ -300,34 +300,8 @@ const DynamicRevenueTable: React.FC = () => {
       return
     }
 
-    // 等待状态更新后再保存到后端
-    setTimeout(async () => {
-      try {
-        const state = useRevenueCostStore.getState();
-        if (state.context?.projectId) {
-          // 使用最新的状态数据
-          await revenueCostApi.save({
-            project_id: state.context.projectId,
-            model_data: {
-              revenueItems: state.revenueItems,
-              productionRates: state.productionRates,
-              aiAnalysisResult: state.aiAnalysisResult,
-              workflow_step: state.currentStep
-            },
-            workflow_step: state.currentStep
-          });
-          console.log('✅ 收入项已保存到数据库');
-        }
-      } catch (error) {
-        console.error('❌ 保存到数据库失败:', error);
-        notifications.show({
-          title: '保存失败',
-          message: '数据未保存到数据库，请稍后重试',
-          color: 'red',
-        });
-      }
-    }, 100); // 给状态更新一点时间
-
+    // 自动保存已由 Store 处理
+    
     setShowEditModal(false)
     setFormData({})
   }

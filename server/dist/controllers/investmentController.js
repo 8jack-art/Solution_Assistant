@@ -5,12 +5,11 @@ import { estimateInvestment } from '../lib/investmentEstimator.js';
 import { calculateInvestmentEstimate } from '../lib/investmentCalculator.js';
 const saveEstimateSchema = z.object({
     project_id: z.string(),
-    estimate_data: z.any().optional(), // 允许直接保存estimate_data
-    construction_cost: z.number().min(0).optional(),
-    equipment_cost: z.number().min(0).optional(),
-    installation_cost: z.number().min(0).optional(),
-    other_cost: z.number().min(0).optional(),
-    land_cost: z.number().min(0).optional(),
+    construction_cost: z.number().min(0),
+    equipment_cost: z.number().min(0),
+    installation_cost: z.number().min(0),
+    other_cost: z.number().min(0),
+    land_cost: z.number().min(0),
     basic_reserve_rate: z.number().min(0).max(1).default(0.05),
     price_reserve_rate: z.number().min(0).max(1).default(0.03),
     construction_period: z.number().int().min(1).max(10).default(3),
@@ -23,11 +22,11 @@ export class InvestmentController {
         try {
             const params = calculateEstimateSchema.parse(req.body);
             const estimateParams = {
-                constructionCost: params.construction_cost || 0,
-                equipmentCost: params.equipment_cost || 0,
-                installationCost: params.installation_cost || 0,
-                otherCost: params.other_cost || 0,
-                landCost: params.land_cost || 0,
+                constructionCost: params.construction_cost,
+                equipmentCost: params.equipment_cost,
+                installationCost: params.installation_cost,
+                otherCost: params.other_cost,
+                landCost: params.land_cost,
                 basicReserveRate: params.basic_reserve_rate,
                 priceReserveRate: params.price_reserve_rate,
                 constructionPeriod: params.construction_period,
@@ -65,8 +64,7 @@ export class InvestmentController {
                     error: '用户未认证'
                 });
             }
-            const parsedBody = saveEstimateSchema.parse(req.body);
-            const { project_id, estimate_data, construction_cost, equipment_cost, installation_cost, other_cost, land_cost, basic_reserve_rate, price_reserve_rate, construction_period, loan_rate, custom_loan_amount } = parsedBody;
+            const { project_id, construction_cost, equipment_cost, installation_cost, other_cost, land_cost, basic_reserve_rate, price_reserve_rate, construction_period, loan_rate, custom_loan_amount } = saveEstimateSchema.parse(req.body);
             const project = await InvestmentProjectModel.findById(project_id);
             if (!project) {
                 return res.status(404).json({
@@ -86,48 +84,12 @@ export class InvestmentController {
                     error: '项目已锁定，无法保存估算'
                 });
             }
-            // 检查是否存在现有估算
-            const existingEstimate = await InvestmentEstimateModel.findByProjectId(project_id);
-            // 模式1：如果直接传入estimate_data，则直接更新
-            if (estimate_data) {
-                console.log('直接保存estimate_data模式');
-                console.log('传入的estimate_data:', estimate_data);
-                console.log('是否包含thirdLevelItems:', !!estimate_data.thirdLevelItems);
-                if (!existingEstimate) {
-                    return res.status(404).json({
-                        success: false,
-                        error: '请先生成投资估算'
-                    });
-                }
-                // 直接更新estimate_data字段
-                const savedEstimate = await InvestmentEstimateModel.update(existingEstimate.id, {
-                    estimate_data: estimate_data
-                });
-                if (!savedEstimate) {
-                    return res.status(500).json({
-                        success: false,
-                        error: '保存投资估算失败'
-                    });
-                }
-                console.log('✅ estimate_data已更新');
-                return res.json({
-                    success: true,
-                    data: { estimate: savedEstimate }
-                });
-            }
-            // 模式2：传统模式，根据费用参数计算
-            if (!construction_cost && !equipment_cost && !installation_cost && !other_cost && !land_cost) {
-                return res.status(400).json({
-                    success: false,
-                    error: '请传入estimate_data或费用参数'
-                });
-            }
             const estimateParams = {
-                constructionCost: construction_cost || 0,
-                equipmentCost: equipment_cost || 0,
-                installationCost: installation_cost || 0,
-                otherCost: other_cost || 0,
-                landCost: land_cost || 0,
+                constructionCost: construction_cost,
+                equipmentCost: equipment_cost,
+                installationCost: installation_cost,
+                otherCost: other_cost,
+                landCost: land_cost,
                 basicReserveRate: basic_reserve_rate,
                 priceReserveRate: price_reserve_rate,
                 constructionPeriod: construction_period,
@@ -135,19 +97,13 @@ export class InvestmentController {
                 customLoanAmount: custom_loan_amount
             };
             const estimateResult = estimateInvestment(estimateParams);
-            // 保留原有的三级子项数据
-            let existingThirdLevelItems = {};
-            if (existingEstimate && existingEstimate.estimate_data && existingEstimate.estimate_data.thirdLevelItems) {
-                existingThirdLevelItems = existingEstimate.estimate_data.thirdLevelItems;
-                console.log('保存时保留原有三级子项数据:', existingThirdLevelItems);
-            }
-            const estimateDataToSave = {
+            const estimateData = {
                 project_id,
-                construction_cost: construction_cost || 0,
-                equipment_cost: equipment_cost || 0,
-                installation_cost: installation_cost || 0,
-                other_cost: other_cost || 0,
-                land_cost: land_cost || 0,
+                construction_cost,
+                equipment_cost,
+                installation_cost,
+                other_cost,
+                land_cost,
                 basic_reserve: estimateResult.basicReserve,
                 price_reserve: estimateResult.priceReserve,
                 construction_period,
@@ -156,21 +112,19 @@ export class InvestmentController {
                 loan_amount: estimateResult.loanAmount,
                 loan_rate: loan_rate,
                 custom_loan_amount: custom_loan_amount || undefined,
-                estimate_data: {
-                    ...estimateResult,
-                    thirdLevelItems: existingThirdLevelItems
-                },
+                estimate_data: estimateResult,
                 total_investment: estimateResult.totalInvestment,
                 building_investment: estimateResult.buildingInvestment,
                 construction_interest: estimateResult.constructionInterest,
                 gap_rate: estimateResult.gapRate
             };
+            const existingEstimate = await InvestmentEstimateModel.findByProjectId(project_id);
             let savedEstimate;
             if (existingEstimate) {
-                savedEstimate = await InvestmentEstimateModel.update(existingEstimate.id, estimateDataToSave);
+                savedEstimate = await InvestmentEstimateModel.update(existingEstimate.id, estimateData);
             }
             else {
-                savedEstimate = await InvestmentEstimateModel.create(estimateDataToSave);
+                savedEstimate = await InvestmentEstimateModel.create(estimateData);
             }
             if (!savedEstimate) {
                 return res.status(500).json({
@@ -314,19 +268,15 @@ export class InvestmentController {
             // 保存到数据库
             const estimateData = {
                 project_id: projectId,
-                estimate_data: {
-                    ...result,
-                    thirdLevelItems: existingThirdLevelItems // 保留原有的三级子项数据
-                },
+                estimate_data: result,
                 total_investment: toDecimal(result.partG.合计),
                 building_investment: toDecimal(result.partE.合计),
                 construction_interest: toDecimal(result.partF.合计),
                 gap_rate: toDecimal(result.gapRate / 100), // 数据库存储小数形式
-                // 从 partA.children 汇总提取各项费用
-                construction_cost: toDecimal(result.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0),
-                equipment_cost: toDecimal(result.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0),
-                installation_cost: toDecimal(result.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0),
-                other_cost: toDecimal(result.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0),
+                construction_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.建设工程费 || 0),
+                equipment_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.设备购置费 || 0),
+                installation_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.安装工程费 || 0),
+                other_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.其它费用 || 0),
                 land_cost: toDecimal(landCost),
                 basic_reserve: toDecimal(result.partD.合计),
                 price_reserve: 0,

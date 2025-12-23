@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { revenueCostApi } from '@/lib/api'
+import { notifications } from '@mantine/notifications'
 
 // 默认成本配置
 const getDefaultCostConfig = (): CostConfig => ({
@@ -41,10 +42,9 @@ const getDefaultCostConfig = (): CostConfig => ({
     applyProductionRate: true
   },
   otherExpenses: {
-    type: 'percentage',
-    percentage: 3,
-    taxRate: 6,
-    applyProductionRate: true
+    type: 'directAmount',
+    directAmount: 0,
+    applyProductionRate: false
   },
   depreciation: {
     type: 'percentage',
@@ -503,6 +503,41 @@ export const calculateYearlyRevenue = (item: RevenueItem, year: number, producti
 }
 
 /**
+ * 防抖自动保存函数
+ */
+let saveTimeout: NodeJS.Timeout | null = null
+
+const debouncedSave = async (showNotification: boolean = false) => {
+  if (saveTimeout) clearTimeout(saveTimeout)
+  saveTimeout = setTimeout(async () => {
+    const state = useRevenueCostStore.getState()
+    if (state.context?.projectId) {
+      try {
+        const success = await state.saveToBackend()
+        if (showNotification && success) {
+          notifications.show({
+            title: '✅ 自动保存成功',
+            message: '数据已保存到数据库',
+            color: 'green',
+            autoClose: 2000,
+          })
+        }
+      } catch (error) {
+        console.error('自动保存失败:', error)
+        if (showNotification) {
+          notifications.show({
+            title: '❌ 自动保存失败',
+            message: '数据未保存，请稍后重试',
+            color: 'red',
+            autoClose: 3000,
+          })
+        }
+      }
+    }
+  }, 1000) // 1秒防抖
+}
+
+/**
  * 创建收入成本建模状态管理
  */
 export const useRevenueCostStore = create<RevenueCostState>()(
@@ -536,15 +571,21 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       
       setAiAnalysisResult: (result) => {
         set({ aiAnalysisResult: result })
+        // 触发自动保存
+        debouncedSave()
       },
       
       // 兼容性别名
       setAIAnalysisResult: (result) => {
         set({ aiAnalysisResult: result })
+        // 触发自动保存
+        debouncedSave()
       },
       
       setRevenueStructureLocked: (locked) => {
         set({ revenueStructureLocked: locked })
+        // 触发自动保存
+        debouncedSave()
       },
       
       updateCalculationPeriod: (calculationPeriod, baseYear) => {
@@ -571,6 +612,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           ...item
         }
         set({ revenueItems: [...state.revenueItems, newItem] })
+        // 触发自动保存
+        debouncedSave()
       },
       
       updateRevenueItem: (id, updates) => {
@@ -580,6 +623,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             item.id === id ? { ...item, ...updates } : item
           )
         })
+        // 触发自动保存
+        debouncedSave()
       },
       
       deleteRevenueItem: (id) => {
@@ -588,10 +633,14 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         // 重新计算索引
         const reindexed = newItems.map((item, idx) => ({ ...item, index: idx + 1 }))
         set({ revenueItems: reindexed })
+        // 触发自动保存
+        debouncedSave()
       },
       
       clearAllRevenueItems: () => {
         set({ revenueItems: [] })
+        // 触发自动保存
+        debouncedSave()
       },
       
       addCostItem: (item) => {
@@ -605,6 +654,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           ...item
         }
         set({ costItems: [...state.costItems, newItem] })
+        // 触发自动保存
+        debouncedSave()
       },
       
       updateCostItem: (id, updates) => {
@@ -614,6 +665,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             item.id === id ? { ...item, ...updates } : item
           )
         })
+        // 触发自动保存
+        debouncedSave()
       },
       
       deleteCostItem: (id) => {
@@ -621,10 +674,14 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         const newItems = state.costItems.filter(item => item.id !== id)
         const reindexed = newItems.map((item, idx) => ({ ...item, index: idx + 1 }))
         set({ costItems: reindexed })
+        // 触发自动保存
+        debouncedSave()
       },
       
       setProductionRates: (rates) => {
         set({ productionRates: rates })
+        // 触发自动保存
+        debouncedSave()
       },
       
       updateProductionRate: (yearIndex, rate) => {
@@ -633,21 +690,29 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             item.yearIndex === yearIndex ? { ...item, rate } : item
           )
         }))
+        // 触发自动保存
+        debouncedSave()
       },
       
       // 成本配置管理
       setCostConfig: (config) => {
         set({ costConfig: config })
+        // 触发自动保存
+        debouncedSave()
       },
       
       updateCostConfig: (updates) => {
         set((state) => ({
           costConfig: { ...state.costConfig, ...updates }
         }))
+        // 触发自动保存
+        debouncedSave()
       },
       
       setCurrentStep: (step) => {
         set({ currentStep: step })
+        // 触发自动保存
+        debouncedSave()
       },
       
       nextStep: () => {
@@ -656,6 +721,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         const currentIndex = steps.indexOf(state.currentStep)
         if (currentIndex < steps.length - 1) {
           set({ currentStep: steps[currentIndex + 1] })
+          // 触发自动保存
+          debouncedSave()
         }
       },
       
@@ -665,6 +732,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         const currentIndex = steps.indexOf(state.currentStep)
         if (currentIndex > 0) {
           set({ currentStep: steps[currentIndex - 1] })
+          // 触发自动保存
+          debouncedSave()
         }
       },
       
@@ -728,6 +797,7 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             costItems: state.costItems,
             productionRates: state.productionRates,
             aiAnalysisResult: state.aiAnalysisResult,
+            costConfig: state.costConfig,
             workflow_step: state.currentStep
           };
           
@@ -780,6 +850,7 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               costItems: modelData?.costItems || [],
               productionRates: modelData?.productionRates || [],
               aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || null,
+              costConfig: modelData?.costConfig || getDefaultCostConfig(),
               currentStep: estimate.workflow_step || 'period'
             })
           }

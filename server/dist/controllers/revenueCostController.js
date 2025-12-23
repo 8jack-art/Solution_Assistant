@@ -12,6 +12,7 @@ const saveRevenueCostSchema = z.object({
     operation_period: z.number().int().min(1).optional(),
     workflow_step: z.enum(['period', 'suggest', 'revenue', 'cost', 'profit', 'validate', 'done']).optional(),
     model_data: z.any().optional(), // 完整的建模数据
+    ai_analysis_result: z.any().optional(), // AI分析结果
     is_completed: z.boolean().optional()
 });
 /**
@@ -33,6 +34,7 @@ export class RevenueCostController {
      */
     static async save(req, res) {
         try {
+            console.log('🔹 [save] 请求开始');
             const userId = req.user?.userId;
             const isAdmin = req.user?.isAdmin;
             if (!userId) {
@@ -41,8 +43,18 @@ export class RevenueCostController {
                     error: '用户未认证'
                 });
             }
-            const params = saveRevenueCostSchema.parse(req.body);
-            const { project_id, calculation_period, operation_period, workflow_step, model_data, is_completed } = params;
+            // 先提取原始数据，避免Zod验证失败
+            const { project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed } = req.body;
+            console.log('🔹 [save] project_id:', project_id);
+            console.log('🔹 [save] workflow_step:', workflow_step);
+            console.log('🔹 [save] ai_analysis_result 存在:', !!ai_analysis_result);
+            // 验证必填字段
+            if (!project_id) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'project_id 为必填字段'
+                });
+            }
             // 验证项目存在且有权限
             const project = await InvestmentProjectModel.findById(project_id);
             if (!project) {
@@ -58,7 +70,7 @@ export class RevenueCostController {
                 });
             }
             // 检查是否已存在记录
-            const [existing] = await pool.query('SELECT id FROM revenue_cost_estimates WHERE project_id = ?', [project_id]);
+            const [existing] = await pool.execute('SELECT id FROM revenue_cost_estimates WHERE project_id = ?', [project_id]);
             let result;
             if (existing && existing.length > 0) {
                 // 更新现有记录
@@ -80,28 +92,91 @@ export class RevenueCostController {
                     updateFields.push('model_data = ?');
                     updateValues.push(JSON.stringify(model_data));
                 }
+                if (ai_analysis_result !== undefined) {
+                    try {
+                        // 尝试更新ai_analysis_result，如果字段不存在则跳过
+                        updateFields.push('ai_analysis_result = ?');
+                        updateValues.push(JSON.stringify(ai_analysis_result));
+                    }
+                    catch (err) {
+                        console.warn('⚠️ ai_analysis_result字段可能不存在，跳过保存');
+                    }
+                }
                 if (is_completed !== undefined) {
                     updateFields.push('is_completed = ?');
                     updateValues.push(is_completed);
                 }
+                if (updateFields.length === 0) {
+                    // 没有需要更新的字段
+                    return res.json({
+                        success: true,
+                        data: { estimate: existing[0] }
+                    });
+                }
                 updateFields.push('updated_at = NOW()');
                 updateValues.push(existing[0].id);
-                await pool.query(`UPDATE revenue_cost_estimates SET ${updateFields.join(', ')} WHERE id = ?`, updateValues);
+                try {
+                    await pool.execute(`UPDATE revenue_cost_estimates SET ${updateFields.join(', ')} WHERE id = ?`, updateValues);
+                    console.log('✅ 数据更新成功');
+                }
+                catch (updateError) {
+                    console.error('❌ UPDATE失败:', updateError.message);
+                    // 如果是ai_analysis_result字段不存在，移除它后重试
+                    if (updateError.code === 'ER_BAD_FIELD_ERROR' && ai_analysis_result !== undefined) {
+                        console.log('🔄 移除ai_analysis_result后重试...');
+                        const retryFields = updateFields.filter(f => !f.includes('ai_analysis_result'));
+                        const retryValues = updateValues.slice();
+                        const aiIndex = updateFields.findIndex(f => f.includes('ai_analysis_result'));
+                        if (aiIndex >= 0)
+                            retryValues.splice(aiIndex, 1);
+                        await pool.execute(`UPDATE revenue_cost_estimates SET ${retryFields.join(', ')} WHERE id = ?`, retryValues);
+                        console.log('✅ 重试成功（跳过ai_analysis_result）');
+                    }
+                    else {
+                        throw updateError;
+                    }
+                }
                 result = existing[0];
             }
             else {
                 // 创建新记录
-                const [insertResult] = await pool.query(`INSERT INTO revenue_cost_estimates 
-           (project_id, calculation_period, operation_period, workflow_step, model_data, is_completed) 
-           VALUES (?, ?, ?, ?, ?, ?)`, [
-                    project_id,
-                    calculation_period || project.construction_years + project.operation_years,
-                    operation_period || project.operation_years,
-                    workflow_step || 'period',
-                    model_data ? JSON.stringify(model_data) : null,
-                    is_completed || false
-                ]);
-                result = { id: insertResult.insertId };
+                try {
+                    const [insertResult] = await pool.execute(`INSERT INTO revenue_cost_estimates 
+             (project_id, calculation_period, operation_period, workflow_step, model_data, ai_analysis_result, is_completed) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+                        project_id,
+                        calculation_period || project.construction_years + project.operation_years,
+                        operation_period || project.operation_years,
+                        workflow_step || 'period',
+                        model_data ? JSON.stringify(model_data) : null,
+                        ai_analysis_result ? JSON.stringify(ai_analysis_result) : null,
+                        is_completed || false
+                    ]);
+                    result = { id: insertResult.insertId };
+                    console.log('✅ 创建新记录成功');
+                }
+                catch (insertError) {
+                    console.error('❌ INSERT失败:', insertError.message);
+                    // 如果是ai_analysis_result字段不存在，不包含该字段后重试
+                    if (insertError.code === 'ER_BAD_FIELD_ERROR') {
+                        console.log('🔄 不包含ai_analysis_result字段后重试...');
+                        const [retryResult] = await pool.execute(`INSERT INTO revenue_cost_estimates 
+               (project_id, calculation_period, operation_period, workflow_step, model_data, is_completed) 
+               VALUES (?, ?, ?, ?, ?, ?)`, [
+                            project_id,
+                            calculation_period || project.construction_years + project.operation_years,
+                            operation_period || project.operation_years,
+                            workflow_step || 'period',
+                            model_data ? JSON.stringify(model_data) : null,
+                            is_completed || false
+                        ]);
+                        result = { id: retryResult.insertId };
+                        console.log('✅ 重试成功（跳过ai_analysis_result）');
+                    }
+                    else {
+                        throw insertError;
+                    }
+                }
             }
             res.json({
                 success: true,
@@ -109,8 +184,11 @@ export class RevenueCostController {
             });
         }
         catch (error) {
-            console.error('保存收入成本建模数据失败:', error);
+            console.error('❌ 保存收入成本建模数据失败:', error);
+            console.error('❌ 错误详情:', error.message);
+            console.error('❌ 错误堆栈:', error.stack);
             if (error instanceof z.ZodError) {
+                console.error('❌ Zod验证错误:', error.errors);
                 return res.status(400).json({
                     success: false,
                     error: '输入验证失败',
@@ -152,7 +230,7 @@ export class RevenueCostController {
                 });
             }
             // 查询收入成本估算数据
-            const [estimates] = await pool.query('SELECT * FROM revenue_cost_estimates WHERE project_id = ?', [projectId]);
+            const [estimates] = await pool.execute('SELECT * FROM revenue_cost_estimates WHERE project_id = ?', [projectId]);
             if (!estimates || estimates.length === 0) {
                 return res.json({
                     success: true,
@@ -163,6 +241,9 @@ export class RevenueCostController {
             // 解析JSON字段
             if (estimate.model_data && typeof estimate.model_data === 'string') {
                 estimate.model_data = JSON.parse(estimate.model_data);
+            }
+            if (estimate.ai_analysis_result && typeof estimate.ai_analysis_result === 'string') {
+                estimate.ai_analysis_result = JSON.parse(estimate.ai_analysis_result);
             }
             if (estimate.validation_errors && typeof estimate.validation_errors === 'string') {
                 estimate.validation_errors = JSON.parse(estimate.validation_errors);
@@ -620,7 +701,7 @@ export class RevenueCostController {
                     error: '无效的工作流步骤'
                 });
             }
-            await pool.query('UPDATE revenue_cost_estimates SET workflow_step = ?, updated_at = NOW() WHERE project_id = ?', [step, projectId]);
+            await pool.execute('UPDATE revenue_cost_estimates SET workflow_step = ?, updated_at = NOW() WHERE project_id = ?', [step, projectId]);
             res.json({
                 success: true,
                 data: { step }
@@ -649,7 +730,7 @@ export class RevenueCostController {
                 });
             }
             // 查询估算记录
-            const [estimates] = await pool.query('SELECT project_id FROM revenue_cost_estimates WHERE id = ?', [id]);
+            const [estimates] = await pool.execute('SELECT project_id FROM revenue_cost_estimates WHERE id = ?', [id]);
             if (!estimates || estimates.length === 0) {
                 return res.status(404).json({
                     success: false,
@@ -672,7 +753,7 @@ export class RevenueCostController {
                 });
             }
             // 删除记录（会级联删除相关的revenue_items, cost_items, production_rates）
-            await pool.query('DELETE FROM revenue_cost_estimates WHERE id = ?', [id]);
+            await pool.execute('DELETE FROM revenue_cost_estimates WHERE id = ?', [id]);
             res.json({
                 success: true,
                 data: { id }

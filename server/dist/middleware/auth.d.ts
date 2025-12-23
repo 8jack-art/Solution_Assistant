@@ -7,6 +7,6 @@ export interface AuthRequest extends Request {
         isAdmin: boolean;
     };
 }
-export declare function authenticateToken(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction): Response<ApiResponse<any>, Record<string, any>> | undefined;
-export declare function requireAdmin(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction): Response<ApiResponse<any>, Record<string, any>> | undefined;
+export declare function authenticateToken(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction): any;
+export declare function requireAdmin(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction): any;
 //# sourceMappingURL=auth.d.ts.map

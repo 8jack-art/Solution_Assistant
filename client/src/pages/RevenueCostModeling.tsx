@@ -524,47 +524,9 @@ const RevenueCostModeling: React.FC = () => {
     intangibleAmortizationYears,
     intangibleResidualRate
   ])
-
-  // 自动保存数据到后端
-  useEffect(() => {
-    const saveData = async () => {
-      if (!project?.id) return;
-      
-      try {
-        // 获取最新的store状态
-        const currentState = useRevenueCostStore.getState();
-        
-        console.log('💾 自动保存数据到后端:', {
-          project_id: project.id,
-          model_data: {
-            revenueItems: currentState.revenueItems,
-            productionRates: currentState.productionRates,
-            aiAnalysisResult: currentState.aiAnalysisResult,
-            workflow_step: currentState.currentStep
-          },
-          workflow_step: currentState.currentStep
-        });
-        
-        await revenueCostApi.save({
-          project_id: project.id,
-          model_data: {
-            revenueItems: currentState.revenueItems,
-            productionRates: currentState.productionRates,
-            aiAnalysisResult: currentState.aiAnalysisResult,
-            workflow_step: currentState.currentStep
-          },
-          workflow_step: currentState.currentStep
-        });
-        console.log('✅ 数据已自动保存到数据库');
-      } catch (error) {
-        console.error('❌ 自动保存失败:', error);
-      }
-    };
-
-    // 延迟保存，避免频繁请求
-    const timer = setTimeout(saveData, 2000);
-    return () => clearTimeout(timer);
-  }, [currentStep, revenueItems, productionRates, aiAnalysisResult, project?.id]);
+  
+  // 注意：自动保存已移至 revenueCostStore.ts 中的防抖机制
+  // 所有数据修改都会自动保存到数据库
 
   // 打开编辑弹窗（年限和残值率同时编辑）
   const openEditModal = (
