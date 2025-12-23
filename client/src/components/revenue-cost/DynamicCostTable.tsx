@@ -36,6 +36,47 @@ import { revenueCostApi, investmentApi } from '@/lib/api'
 import WagesModal from './WagesModal'
 import * as XLSX from 'xlsx'
 
+// 格式化数字显示为2位小数，无千分号（不修改实际值，只用于显示）
+const formatNumber = (value: number): string => {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false
+  })
+}
+
+// 格式化数字显示为2位小数，不四舍五入，无千分号（不修改实际值，只用于显示）
+const formatNumberNoRounding = (value: number): string => {
+  // 处理负数
+  const isNegative = value < 0;
+  const absValue = Math.abs(value);
+  
+  // 将数字乘以100，截断整数部分，再除以100，实现不四舍五入保留2位小数
+  const truncated = Math.trunc(absValue * 100) / 100;
+  
+  // 转换为字符串，确保有2位小数
+  let result = truncated.toString();
+  
+  // 如果没有小数点或只有1位小数，补齐到2位
+  if (!result.includes('.')) {
+    result += '.00';
+  } else {
+    const decimalPart = result.split('.')[1];
+    if (decimalPart.length === 1) {
+      result += '0';
+    } else if (decimalPart.length > 2) {
+      result = result.split('.')[0] + '.' + decimalPart.substring(0, 2);
+    }
+  }
+  
+  // 添加负号
+  if (isNegative) {
+    result = '-' + result;
+  }
+  
+  return result;
+}
+
 // 类型定义
 interface CostItem {
   id: number;
@@ -754,7 +795,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearTotal;
                       });
                       
-                      return totalSum;
+                      return formatNumberNoRounding(totalSum);
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -790,7 +831,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearTotal}
+                        {formatNumberNoRounding(yearTotal)}
                       </Table.Td>
                     );
                   })}
@@ -845,7 +886,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           totalSum += yearAmount;
                         });
                         
-                        return totalSum;
+                        return formatNumberNoRounding(totalSum);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -879,7 +920,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {yearTotal}
+                          {formatNumberNoRounding(yearTotal)}
                         </Table.Td>
                       );
                     })}
@@ -937,7 +978,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += 0.00;
                       });
                       
-                      return totalSum.toFixed(2);
+                      return formatNumberNoRounding(totalSum);
                     })()}
                   </Table.Td>
                   {years.map((year) => (
@@ -960,7 +1001,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += 0.00;
                       });
                       
-                      return totalSum.toFixed(2);
+                      return formatNumberNoRounding(totalSum);
                     })()}
                   </Table.Td>
                   {years.map((year) => (
@@ -1000,7 +1041,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearInputTax;
                       });
                       
-                      return totalSum;
+                      return formatNumberNoRounding(totalSum);
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -1020,7 +1061,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearInputTax}
+                        {formatNumberNoRounding(yearInputTax)}
                       </Table.Td>
                     );
                   })}
@@ -1034,7 +1075,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                   <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>5</Table.Td>
                   <Table.Td style={{ border: '1px solid #dee2e6' }}>外购原材料（除税）</Table.Td>
                   <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {calculateRawMaterialsExcludingTax(undefined, years)}
+                    {formatNumberNoRounding(calculateRawMaterialsExcludingTax(undefined, years))}
                   </Table.Td>
                   {years.map((year) => {
                     // 计算该年的外购原材料（除税）
@@ -1067,7 +1108,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {excludingTax}
+                        {formatNumberNoRounding(excludingTax)}
                       </Table.Td>
                     );
                   })}
@@ -1452,10 +1493,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         
         console.log(`🔍 Excel导出营业成本年份${year} - 总计:`, total);
         
-        row1[year.toString()] = total.toFixed(2);
+        row1[year.toString()] = total;
       });
       
-      row1['合计'] = totalRow1.toFixed(2);
+      row1['合计'] = totalRow1;
       excelData.push(row1);
 
       // 1.1 外购原材料费
@@ -1463,10 +1504,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       let totalRow1_1 = 0;
       years.forEach((year) => {
         const value = calculateRawMaterialsExcludingTax(year, years);
-        row1_1[year.toString()] = value.toFixed(2);
+        row1_1[year.toString()] = value;
         totalRow1_1 += value;
       });
-      row1_1['合计'] = totalRow1_1.toFixed(2);
+      row1_1['合计'] = totalRow1_1;
       excelData.push(row1_1);
 
       // 1.2 外购燃料及动力费
@@ -1474,10 +1515,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       let totalRow1_2 = 0;
       years.forEach((year) => {
         const value = calculateFuelPowerExcludingTax(year, years);
-        row1_2[year.toString()] = value.toFixed(2);
+        row1_2[year.toString()] = value;
         totalRow1_2 += value;
       });
-      row1_2['合计'] = totalRow1_2.toFixed(2);
+      row1_2['合计'] = totalRow1_2;
       excelData.push(row1_2);
 
       // 1.3 工资及福利费
@@ -1485,10 +1526,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       let totalRow1_3 = 0;
       years.forEach((year) => {
         const value = calculateWagesTotal(year, years);
-        row1_3[year.toString()] = value.toFixed(2);
+        row1_3[year.toString()] = value;
         totalRow1_3 += value;
       });
-      row1_3['合计'] = totalRow1_3.toFixed(2);
+      row1_3['合计'] = totalRow1_3;
       excelData.push(row1_3);
 
       // 1.4 修理费
@@ -1501,10 +1542,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         } else {
           yearTotal += costConfig.repair.directAmount || 0;
         }
-        row1_4[year.toString()] = yearTotal.toFixed(2);
+        row1_4[year.toString()] = yearTotal;
         totalRow1_4 += yearTotal;
       });
-      row1_4['合计'] = totalRow1_4.toFixed(2);
+      row1_4['合计'] = totalRow1_4;
       excelData.push(row1_4);
 
       // 1.5 其他费用
@@ -1525,10 +1566,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         } else {
           yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
         }
-        row1_5[year.toString()] = yearTotal.toFixed(2);
+        row1_5[year.toString()] = yearTotal;
         totalRow1_5 += yearTotal;
       });
-      row1_5['合计'] = totalRow1_5.toFixed(2);
+      row1_5['合计'] = totalRow1_5;
       excelData.push(row1_5);
 
       // 2. 管理费用
@@ -1548,10 +1589,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
           yearInterest = interestRow.分年数据[year - 1];
         }
-        row3[year.toString()] = yearInterest.toFixed(2);
+        row3[year.toString()] = yearInterest;
         totalRow3 += yearInterest;
       });
-      row3['合计'] = totalRow3.toFixed(2);
+      row3['合计'] = totalRow3;
       excelData.push(row3);
 
       // 4. 折旧费
@@ -1562,10 +1603,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         const rowA = depreciationData.find(row => row.序号 === 'A');
         const rowD = depreciationData.find(row => row.序号 === 'D');
         const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
-        row4[year.toString()] = yearDepreciation.toFixed(2);
+        row4[year.toString()] = yearDepreciation;
         totalRow4 += yearDepreciation;
       });
-      row4['合计'] = totalRow4.toFixed(2);
+      row4['合计'] = totalRow4;
       excelData.push(row4);
 
       // 5. 摊销费
@@ -1575,10 +1616,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         const yearIndex = year - 1;
         const rowE = depreciationData.find(row => row.序号 === 'E');
         const yearAmortization = rowE?.分年数据[yearIndex] || 0;
-        row5[year.toString()] = yearAmortization.toFixed(2);
+        row5[year.toString()] = yearAmortization;
         totalRow5 += yearAmortization;
       });
-      row5['合计'] = totalRow5.toFixed(2);
+      row5['合计'] = totalRow5;
       excelData.push(row5);
 
       // 6. 开发成本
@@ -1716,10 +1757,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         
         console.log(`🔍 Excel导出总成本费用年份${year} - 总计:`, yearTotal);
         
-        row7[year.toString()] = yearTotal.toFixed(2);
+        row7[year.toString()] = yearTotal;
       });
       
-      row7['合计'] = totalRow7.toFixed(2);
+      row7['合计'] = totalRow7;
       excelData.push(row7);
 
       // 创建工作簿和工作表
@@ -2005,7 +2046,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearTotal;
                       });
                       
-                      return totalSum;
+                      return formatNumberNoRounding(totalSum);
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -2026,7 +2067,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearTotal}
+                        {formatNumberNoRounding(yearTotal)}
                       </Table.Td>
                     );
                   })}
@@ -2060,7 +2101,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           }
                         });
                         
-                        return totalSum;
+                        return formatNumberNoRounding(totalSum);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -2078,7 +2119,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {yearTotal}
+                          {formatNumberNoRounding(yearTotal)}
                         </Table.Td>
                       );
                     })}
@@ -2153,7 +2194,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += yearInputTax;
                       });
                       
-                      return totalSum;
+                      return formatNumberNoRounding(totalSum);
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -2178,7 +2219,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearInputTax}
+                        {formatNumberNoRounding(yearInputTax)}
                       </Table.Td>
                     );
                   })}
@@ -2225,7 +2266,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         totalSum += (yearFuelPowerTotal - yearInputTaxTotal);
                       });
                       
-                      return totalSum;
+                      return formatNumberNoRounding(totalSum);
                     })()}
                   </Table.Td>
                   {years.map((year) => {
@@ -2257,7 +2298,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     
                     return (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                        {yearTotal}
+                        {formatNumberNoRounding(yearTotal)}
                       </Table.Td>
                     );
                   })}
@@ -2687,7 +2728,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             context
                           });
                         }
-                        return total.toFixed(2);
+                        return formatNumber(total);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -2742,7 +2783,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {total.toFixed(2)}
+                          {formatNumber(total)}
                         </Table.Td>
                       );
                     })}
@@ -2758,14 +2799,14 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
                         // 外购原材料费（除税）合计 = 直接引用计算函数
-                        return calculateRawMaterialsExcludingTax(undefined, years).toFixed(2);
+                        return formatNumber(calculateRawMaterialsExcludingTax(undefined, years));
                       })()}
                     </Table.Td>
                     {years.map((year) => (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {(() => {
                           // 外购原材料费（除税） = 直接引用计算函数
-                          return calculateRawMaterialsExcludingTax(year, years).toFixed(2);
+                          return formatNumber(calculateRawMaterialsExcludingTax(year, years));
                         })()}
                       </Table.Td>
                     ))}
@@ -2794,7 +2835,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
                         // 外购燃料及动力费合计列引用外购燃料及动力（除税）的合计
-                        return calculateFuelPowerExcludingTax(undefined, years).toFixed(2);
+                        return formatNumber(calculateFuelPowerExcludingTax(undefined, years));
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -2803,7 +2844,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {yearTotal.toFixed(2)}
+                          {formatNumber(yearTotal)}
                         </Table.Td>
                       );
                     })}
@@ -2830,14 +2871,14 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
                         // 工资及福利费合计 = 直接引用工资及福利明细表合计列数据
-                        return calculateWagesTotal(undefined, years).toFixed(2);
+                        return formatNumber(calculateWagesTotal(undefined, years));
                       })()}
                     </Table.Td>
                     {years.map((year) => (
                       <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                         {(() => {
                           // 工资及福利费 = 直接引用工资及福利明细表对应年份的数据
-                          return calculateWagesTotal(year, years).toFixed(2);
+                          return formatNumber(calculateWagesTotal(year, years));
                         })()}
                       </Table.Td>
                     ))}
@@ -2876,7 +2917,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           // 修理费不应用达产率
                           total += yearTotal;
                         });
-                        return total.toFixed(2);
+                        return formatNumber(total);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -2891,7 +2932,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {yearTotal.toFixed(2)}
+                          {formatNumber(yearTotal)}
                         </Table.Td>
                       );
                     })}
@@ -2936,7 +2977,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           }
                           total += yearTotal;
                         });
-                        return total.toFixed(2);
+                        return formatNumber(total);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -2957,7 +2998,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                          {yearTotal.toFixed(2)}
+                          {formatNumber(yearTotal)}
                         </Table.Td>
                       );
                     })}
@@ -3005,7 +3046,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             totalInterest += interestRow.分年数据[year - 1];
                           }
                         });
-                        return totalInterest.toFixed(2);
+                        return formatNumber(totalInterest);
                       })()}
                     </Table.Td>
                     {years.map((year) => (
@@ -3020,7 +3061,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             yearInterest = interestRow.分年数据[year - 1];
                           }
                           
-                          return yearInterest.toFixed(2);
+                          return formatNumber(yearInterest);
                         })()}
                       </Table.Td>
                     ))}
@@ -3045,7 +3086,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
                           totalDepreciation += yearDepreciation;
                         });
-                        return totalDepreciation.toFixed(2);
+                        return formatNumber(totalDepreciation);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -3057,7 +3098,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             const rowA = depreciationData.find(row => row.序号 === 'A');
                             const rowD = depreciationData.find(row => row.序号 === 'D');
                             const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
-                            return yearDepreciation.toFixed(2);
+                            return formatNumber(yearDepreciation);
                           })()}
                         </Table.Td>
                       );
@@ -3080,7 +3121,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           const yearAmortization = rowE?.分年数据[yearIndex] || 0;
                           totalAmortization += yearAmortization;
                         });
-                        return totalAmortization.toFixed(2);
+                        return formatNumber(totalAmortization);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -3090,7 +3131,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                           {(() => {
                             // 引用折旧与摊销估算表中序号E的当年值
                             const rowE = depreciationData.find(row => row.序号 === 'E');
-                            return (rowE?.分年数据[yearIndex] || 0).toFixed(2);
+                            return formatNumber(rowE?.分年数据[yearIndex] || 0);
                           })()}
                         </Table.Td>
                       );
@@ -3190,7 +3231,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         });
                         
                         // 只在显示时才四舍五入到2位小数
-                        return total.toFixed(2);
+                        return formatNumber(total);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -3271,7 +3312,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             
                             console.log(`🔍 总成本费用年份${year} - 总计:`, yearTotal);
                             
-                            return yearTotal.toFixed(2);
+                            return formatNumber(yearTotal);
                           })()}
                         </Table.Td>
                       );

@@ -20,6 +20,15 @@ import { CostConfig } from '@/stores/revenueCostStore'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
 import { revenueCostApi } from '@/lib/api'
 
+// 格式化数字显示为2位小数，无千分号（不修改实际值，只用于显示）
+const formatNumber = (value: number): string => {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false
+  })
+}
+
 // 工资项接口定义
 interface WageItem {
   id: string
@@ -413,7 +422,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <Text size="sm" ta="center" fw={500}>
-                    {calculateSubtotal(item).toFixed(2)}
+                    {formatNumber(calculateSubtotal(item))}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
@@ -438,12 +447,12 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <Text size="sm" ta="center" fw={500}>
-                    {calculateWelfare(item).toFixed(2)}
+                    {formatNumber(calculateWelfare(item))}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
                   <Text size="sm" ta="center" fw={600} c="#165DFF">
-                    {calculateTotal(item).toFixed(2)}
+                    {formatNumber(calculateTotal(item))}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>
@@ -506,18 +515,18 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
               </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                 <Text size="sm" ta="center" fw={600}>
-                  {wageItems.reduce((sum, item) => sum + calculateSubtotal(item), 0).toFixed(2)}
+                  {formatNumber(wageItems.reduce((sum, item) => sum + calculateSubtotal(item), 0))}
                 </Text>
               </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}></Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                 <Text size="sm" ta="center" fw={600}>
-                  {wageItems.reduce((sum, item) => sum + calculateWelfare(item), 0).toFixed(2)}
+                  {formatNumber(wageItems.reduce((sum, item) => sum + calculateWelfare(item), 0))}
                 </Text>
               </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                 <Text size="sm" ta="center" fw={700} c="#F53F3F">
-                  {grandTotal.toFixed(2)}
+                  {formatNumber(grandTotal)}
                 </Text>
               </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}></Table.Td>
@@ -562,12 +571,12 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
             </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text size="xs" style={{ fontSize: rem(windowSize.width < 768 ? 11 : 13) }}>
-                    {calculateTotal(item).toFixed(2)}
+                    {formatNumber(calculateTotal(item))}
                   </Text>
                 </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text size="xs" style={{ fontSize: rem(windowSize.width < 768 ? 11 : 13) }}>
-                    {calculateMultiYearTotal(item).toFixed(2)}
+                    {formatNumber(calculateMultiYearTotal(item))}
                   </Text>
                 </Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
@@ -589,12 +598,12 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text size="xs" fw={600} style={{ fontSize: rem(windowSize.width < 768 ? 12 : 14) }}>
-                    {grandTotal.toFixed(2)}
+                    {formatNumber(grandTotal)}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}>
                   <Text size="xs" fw={700} c="#F53F3F" style={{ fontSize: rem(windowSize.width < 768 ? 12 : 14) }}>
-                    {wageItems.reduce((sum, item) => sum + calculateMultiYearTotal(item), 0).toFixed(2)}
+                    {formatNumber(wageItems.reduce((sum, item) => sum + calculateMultiYearTotal(item), 0))}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', verticalAlign: 'middle' }}></Table.Td>
@@ -738,7 +747,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                                const yearlySubtotal = calculateYearlySalary(item, year)
                                totalSum += yearlySubtotal
                              });
-                             return totalSum.toFixed(2);
+                             return formatNumber(totalSum);
                            })()}
                          </Table.Td>
                          {years.map((year) => {
@@ -751,7 +760,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                                fontSize: '10px',
                                padding: '6px 2px'
                              }}>
-                               {yearlySubtotal.toFixed(2)}
+                               {formatNumber(yearlySubtotal)}
                              </Table.Td>
                            );
                          })}
@@ -774,7 +783,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                           });
                           totalSum += yearTotal;
                         });
-                        return totalSum.toFixed(2);
+                        return formatNumber(totalSum);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -787,7 +796,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
-                          {yearTotal.toFixed(2)}
+                          {formatNumber(yearTotal)}
                         </Table.Td>
                       );
                     })}
@@ -806,7 +815,10 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                           return sum + yearlyWelfare
                         }, 0);
                         const avgRate = totalSalary > 0 ? (totalWelfare / totalSalary * 100) : 0;
-                        return avgRate.toFixed(1);
+                        return avgRate.toLocaleString('zh-CN', {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        });
                       })()}%）
                     </Table.Td>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
@@ -822,7 +834,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                           });
                           totalSum += yearTotal;
                         });
-                        return totalSum.toFixed(2);
+                        return formatNumber(totalSum);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -836,7 +848,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6', fontWeight: 'bold' }}>
-                          {yearTotal.toFixed(2)}
+                          {formatNumber(yearTotal)}
                         </Table.Td>
                       );
                     })}
@@ -859,7 +871,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                           });
                           grandTotal += yearTotal;
                         });
-                        return grandTotal.toFixed(2);
+                        return formatNumber(grandTotal);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
@@ -873,7 +885,7 @@ const WagesModal: React.FC<WagesModalProps> = ({ opened, onClose, costConfig, up
                       
                       return (
                         <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                          {yearTotal.toFixed(2)}
+                          {formatNumber(yearTotal)}
                         </Table.Td>
                       );
                     })}

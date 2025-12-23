@@ -486,6 +486,123 @@ const DynamicRevenueTable: React.FC = () => {
   }
 
   /**
+   * 格式化数字显示为2位小数，不四舍五入，无千分号（不修改实际值，只用于显示）
+   */
+  const formatNumberNoRounding = (value: number): string => {
+    // 处理负数
+    const isNegative = value < 0;
+    const absValue = Math.abs(value);
+    
+    // 将数字乘以100，截断整数部分，再除以100，实现不四舍五入保留2位小数
+    const truncated = Math.trunc(absValue * 100) / 100;
+    
+    // 转换为字符串，确保有2位小数
+    let result = truncated.toString();
+    
+    // 如果没有小数点或只有1位小数，补齐到2位
+    if (!result.includes('.')) {
+      result += '.00';
+    } else {
+      const decimalPart = result.split('.')[1];
+      if (decimalPart.length === 1) {
+        result += '0';
+      } else if (decimalPart.length > 2) {
+        result = result.split('.')[0] + '.' + decimalPart.substring(0, 2);
+      }
+    }
+    
+    // 添加负号
+    if (isNegative) {
+      result = '-' + result;
+    }
+    
+    return result;
+  }
+
+  /**
+   * 计算外购原材料费估算表中进项税额的运营期列值
+   */
+  const calculateRawMaterialsInputTaxForYear = (year: number): number => {
+    const { costConfig, productionRates } = useRevenueCostStore.getState();
+    if (!costConfig.rawMaterials.items || costConfig.rawMaterials.items.length === 0) {
+      return 0;
+    }
+
+    const productionRate = costConfig.rawMaterials.applyProductionRate
+      ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+      : 1;
+
+    let yearInputTax = 0;
+    costConfig.rawMaterials.items.forEach((item: any) => {
+      const baseAmount = (() => {
+        if (item.sourceType === 'percentage') {
+          let revenueBase = 0;
+          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+            revenueBase = (useRevenueCostStore.getState().revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
+          } else {
+            const revItem = (useRevenueCostStore.getState().revenueItems || []).find(r => r.id === item.linkedRevenueId);
+            if (revItem) {
+              revenueBase = calculateTaxableIncome(revItem);
+            }
+          }
+          return revenueBase * (item.percentage || 0) / 100;
+        } else if (item.sourceType === 'quantityPrice') {
+          return (item.quantity || 0) * (item.unitPrice || 0);
+        } else if (item.sourceType === 'directAmount') {
+          return item.directAmount || 0;
+        }
+        return 0;
+      })();
+
+      const taxRate = Number(item.taxRate) || 0;
+      const taxRateDecimal = taxRate / 100;
+      // 正确的进项税计算公式：含税金额 / (1 + 税率) × 税率
+      yearInputTax += baseAmount * productionRate * taxRateDecimal / (1 + taxRateDecimal);
+    });
+
+    return yearInputTax;
+  };
+
+  /**
+   * 计算外购燃料及动力费估算表中进项税额的运营期列值
+   */
+  const calculateFuelPowerInputTaxForYear = (year: number): number => {
+    const { costConfig, productionRates } = useRevenueCostStore.getState();
+    if (!costConfig.fuelPower.items || costConfig.fuelPower.items.length === 0) {
+      return 0;
+    }
+
+    const productionRate = costConfig.fuelPower.applyProductionRate
+      ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+      : 1;
+
+    let yearInputTax = 0;
+    costConfig.fuelPower.items.forEach((item: any) => {
+      let consumption = item.consumption || 0;
+      let amount = 0;
+      // 对汽油和柴油进行特殊处理：单价×数量/10000
+      if (['汽油', '柴油'].includes(item.name)) {
+        amount = (item.price || 0) * consumption / 10000 * productionRate;
+      } else {
+        amount = consumption * (item.price || 0) * productionRate;
+      }
+      
+      const taxRate = (item.taxRate || 13) / 100;
+      // 根据用户反馈：燃料动力费金额均为含税收入，使用正确公式：含税金额 / (1 + 税率) × 税率
+      yearInputTax += amount * taxRate / (1 + taxRate);
+    });
+
+    return yearInputTax;
+  };
+
+  /**
+   * 计算总进项税额（外购原材料费 + 外购燃料及动力费）
+   */
+  const calculateTotalInputTaxForYear = (year: number): number => {
+    return calculateRawMaterialsInputTaxForYear(year) + calculateFuelPowerInputTaxForYear(year);
+  };
+
+  /**
    * 渲染字段值（统一以万元显示）
    */
   const renderFieldValue = (item: RevenueItem): string => {
@@ -1327,12 +1444,24 @@ const DynamicRevenueTable: React.FC = () => {
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.2</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>进项税额</Table.Td>
-                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>0.00</Table.Td>
-                    {years.map((year) => (
-                      <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                        0.00
-                      </Table.Td>
-                    ))}
+                    <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {(() => {
+                        // 计算所有年份进项税额的合计
+                        let totalInputTax = 0;
+                        years.forEach((year) => {
+                          totalInputTax += calculateTotalInputTaxForYear(year);
+                        });
+                        return formatNumberNoRounding(totalInputTax);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
+                      const totalInputTax = calculateTotalInputTaxForYear(year);
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                          {formatNumberNoRounding(totalInputTax)}
+                        </Table.Td>
+                      );
+                    })}
                   </Table.Tr>
                   
                   {/* 2.3 进项税额（固定资产待抵扣） */}
