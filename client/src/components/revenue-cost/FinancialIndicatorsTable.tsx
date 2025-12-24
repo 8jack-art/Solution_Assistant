@@ -821,6 +821,466 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     });
   };
 
+  // ==================== 利润与利润分配表相关函数 ====================
+
+  // 计算利息支出（从借款还本付息计划表获取）
+  const calculateInterestExpense = (year?: number): number => {
+    if (!context || !repaymentTableData) return 0;
+    
+    if (year !== undefined) {
+      // 计算指定年份的利息支出
+      const yearIndex = year - 1;
+      const interestRow = repaymentTableData.find(row => row.项目 === '本年应计利息');
+      return interestRow?.分年数据[yearIndex] || 0;
+    } else {
+      // 计算所有年份的利息支出合计
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateInterestExpense(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算折旧费（从折旧数据获取）
+  const calculateDepreciation = (year?: number): number => {
+    if (!context || !depreciationData) return 0;
+    
+    if (year !== undefined) {
+      const yearIndex = year - 1;
+      const rowA = depreciationData.find(row => row.序号 === 'A');
+      const rowD = depreciationData.find(row => row.序号 === 'D');
+      return (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
+    } else {
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateDepreciation(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算摊销费（从折旧数据获取）
+  const calculateAmortization = (year?: number): number => {
+    if (!context || !depreciationData) return 0;
+    
+    if (year !== undefined) {
+      const yearIndex = year - 1;
+      const rowE = depreciationData.find(row => row.序号 === 'E');
+      return rowE?.分年数据[yearIndex] || 0;
+    } else {
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateAmortization(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算税金及附加
+  const calculateTaxAndSurcharges = (year?: number): number => {
+    // 目前返回0，实际应该根据增值税等计算
+    return 0;
+  };
+
+  // 计算总成本费用
+  const calculateTotalCost = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateOperatingCost(year) + calculateDepreciation(year) + calculateAmortization(year) + calculateInterestExpense(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateTotalCost(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算利润总额
+  const calculateTotalProfit = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateOperatingRevenue(year) - calculateTaxAndSurcharges(year) - calculateTotalCost(year) + calculateSubsidyIncome(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateTotalProfit(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算弥补以前年度亏损（累计）
+  const calculateCumulativeLoss = (year: number): number => {
+    if (!context) return 0;
+    let cumulativeLoss = 0;
+    for (let y = 1; y < year; y++) {
+      const profit = calculateTotalProfit(y);
+      if (profit < 0) {
+        cumulativeLoss += Math.abs(profit);
+      } else {
+        cumulativeLoss = Math.max(0, cumulativeLoss - profit);
+      }
+    }
+    return cumulativeLoss;
+  };
+
+  // 计算应纳税所得额
+  const calculateTaxableIncome = (year?: number): number => {
+    if (year !== undefined) {
+      const profit = calculateTotalProfit(year);
+      const cumulativeLoss = calculateCumulativeLoss(year);
+      return Math.max(0, profit - cumulativeLoss);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateTaxableIncome(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算所得税（25%）
+  const calculateIncomeTax = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateTaxableIncome(year) * 0.25;
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateIncomeTax(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算净利润
+  const calculateNetProfit = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateTotalProfit(year) - calculateIncomeTax(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateNetProfit(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算期初未分配利润
+  const calculateInitialUndistributedProfit = (year: number): number => {
+    if (year === 1) return 0;
+    let total = 0;
+    for (let y = 1; y < year; y++) {
+      total += calculateNetProfit(y) * 0.9; // 减去法定盈余公积金10%
+    }
+    return total;
+  };
+
+  // 计算可供分配利润
+  const calculateDistributableProfit = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateNetProfit(year) + calculateInitialUndistributedProfit(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateDistributableProfit(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算提取法定盈余公积金（10%）
+  const calculateStatutorySurplus = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateNetProfit(year) * 0.1;
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateStatutorySurplus(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算可供投资者分配的利润
+  const calculateInvestorDistributableProfit = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateDistributableProfit(year) - calculateStatutorySurplus(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateInvestorDistributableProfit(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 应付优先股股利（暂为0）
+  const calculatePreferredStockDividend = (year?: number): number => {
+    return 0;
+  };
+
+  // 提取任意盈余公积金（暂为0）
+  const calculateArbitrarySurplus = (year?: number): number => {
+    return 0;
+  };
+
+  // 计算应付普通股股利
+  const calculateCommonStockDividend = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateInvestorDistributableProfit(year) - calculatePreferredStockDividend(year) - calculateArbitrarySurplus(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateCommonStockDividend(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 各投资方利润分配（暂为0）
+  const calculateInvestorProfitDistribution = (year?: number): number => {
+    return 0;
+  };
+
+  // 计算未分配利润
+  const calculateUndistributedProfit = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateInvestorDistributableProfit(year) -
+             calculatePreferredStockDividend(year) -
+             calculateArbitrarySurplus(year) -
+             calculateInvestorProfitDistribution(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateUndistributedProfit(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算息税前利润
+  const calculateEBIT = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateTotalProfit(year) + calculateInterestExpense(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateEBIT(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 计算息税折旧摊销前利润
+  const calculateEBITDA = (year?: number): number => {
+    if (year !== undefined) {
+      return calculateEBIT(year) + calculateDepreciation(year) + calculateAmortization(year);
+    } else {
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateEBITDA(year);
+      });
+      return totalSum;
+    }
+  };
+
+  // 导出利润与利润分配表为Excel
+  const handleExportProfitDistributionTable = () => {
+    if (!context) {
+      notifications.show({
+        title: '导出失败',
+        message: '项目上下文未加载',
+        color: 'red',
+      });
+      return;
+    }
+
+    const constructionYears = context.constructionYears;
+    const operationYears = context.operationYears;
+    const totalYears = constructionYears + operationYears;
+    const years = Array.from({ length: totalYears }, (_, i) => i + 1);
+
+    // 准备Excel数据
+    const excelData: any[] = [];
+    
+    // 添加表头（两行）
+    // 第一行表头
+    const headerRow1: any = { '序号': '', '项目': '', '合计': '' };
+    for (let i = 0; i < constructionYears; i++) {
+      headerRow1[`建设期${i + 1}`] = '';
+    }
+    for (let i = 0; i < operationYears; i++) {
+      headerRow1[`运营期${i + 1}`] = '';
+    }
+    excelData.push(headerRow1);
+    
+    // 第二行表头
+    const headerRow2: any = { '序号': '', '项目': '', '合计': '' };
+    years.forEach((year) => {
+      headerRow2[`${year}`] = year;
+    });
+    excelData.push(headerRow2);
+
+    // 定义表格行数据
+    const tableRows = [
+      { id: '1', name: '营业收入', calc: (y?: number) => calculateOperatingRevenue(y) },
+      { id: '2', name: '税金附加等', calc: (y?: number) => calculateTaxAndSurcharges(y) },
+      { id: '3', name: '总成本费用', calc: (y?: number) => calculateTotalCost(y) },
+      { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
+      { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
+      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
+      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateTaxableIncome(y) },
+      { id: '8', name: '所得税(25%)', calc: (y?: number) => calculateIncomeTax(y) },
+      { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
+      { id: '10', name: '期初未分配利润', calc: (y?: number) => y !== undefined ? calculateInitialUndistributedProfit(y) : 0 },
+      { id: '11', name: '可供分配利润（9+10）', calc: (y?: number) => calculateDistributableProfit(y) },
+      { id: '12', name: '提取法定盈余公积金(10%)', calc: (y?: number) => calculateStatutorySurplus(y) },
+      { id: '13', name: '可供投资者分配的利润（11-12）', calc: (y?: number) => calculateInvestorDistributableProfit(y) },
+      { id: '14', name: '应付优先股股利', calc: (y?: number) => calculatePreferredStockDividend(y) },
+      { id: '15', name: '提取任意盈余公积金', calc: (y?: number) => calculateArbitrarySurplus(y) },
+      { id: '16', name: '应付普通股股利（13-14-15）', calc: (y?: number) => calculateCommonStockDividend(y) },
+      { id: '17', name: '各投资方利润分配', calc: (y?: number) => calculateInvestorProfitDistribution(y) },
+      { id: '18', name: '未分配利润（13-14-15-17）', calc: (y?: number) => calculateUndistributedProfit(y) },
+      { id: '19', name: '息税前利润（利润总额+利息支出）', calc: (y?: number) => calculateEBIT(y) },
+      { id: '20', name: '息税折旧摊销前利润（19+折旧+摊销）', calc: (y?: number) => calculateEBITDA(y) },
+    ];
+
+    // 添加数据行
+    tableRows.forEach((row) => {
+      const dataRow: any = { '序号': row.id, '项目': row.name };
+      
+      // 计算合计
+      dataRow['合计'] = row.calc(undefined);
+      
+      // 计算各年数据
+      years.forEach((year) => {
+        // 建设期显示0，运营期显示计算值
+        const yearValue = year <= constructionYears ? 0 : row.calc(year - constructionYears);
+        dataRow[`${year}`] = yearValue;
+      });
+      
+      excelData.push(dataRow);
+    });
+
+    // 创建工作簿和工作表
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '利润与利润分配表');
+
+    // 导出文件
+    XLSX.writeFile(wb, `利润与利润分配表_${context.projectName || '项目'}.xlsx`);
+
+    notifications.show({
+      title: '导出成功',
+      message: '利润与利润分配表已导出为Excel文件',
+      color: 'green',
+    });
+  };
+
+  // 渲染利润与利润分配表格
+  const renderProfitDistributionModal = () => {
+    if (!context) return <Text c="red">项目上下文未加载</Text>
+
+    const constructionYears = context.constructionYears;
+    const operationYears = context.operationYears;
+    const totalYears = constructionYears + operationYears;
+    const years = Array.from({ length: totalYears }, (_, i) => i + 1);
+
+    // 定义表格行数据
+    const tableRows = [
+      { id: '1', name: '营业收入', calc: (y?: number) => calculateOperatingRevenue(y) },
+      { id: '2', name: '税金附加等', calc: (y?: number) => calculateTaxAndSurcharges(y) },
+      { id: '3', name: '总成本费用', calc: (y?: number) => calculateTotalCost(y) },
+      { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
+      { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
+      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
+      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateTaxableIncome(y) },
+      { id: '8', name: '所得税(25%)', calc: (y?: number) => calculateIncomeTax(y) },
+      { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
+      { id: '10', name: '期初未分配利润', calc: (y?: number) => y !== undefined ? calculateInitialUndistributedProfit(y) : 0 },
+      { id: '11', name: '可供分配利润（9+10）', calc: (y?: number) => calculateDistributableProfit(y) },
+      { id: '12', name: '提取法定盈余公积金(10%)', calc: (y?: number) => calculateStatutorySurplus(y) },
+      { id: '13', name: '可供投资者分配的利润（11-12）', calc: (y?: number) => calculateInvestorDistributableProfit(y) },
+      { id: '14', name: '应付优先股股利', calc: (y?: number) => calculatePreferredStockDividend(y) },
+      { id: '15', name: '提取任意盈余公积金', calc: (y?: number) => calculateArbitrarySurplus(y) },
+      { id: '16', name: '应付普通股股利（13-14-15）', calc: (y?: number) => calculateCommonStockDividend(y) },
+      { id: '17', name: '各投资方利润分配', calc: (y?: number) => calculateInvestorProfitDistribution(y) },
+      { id: '18', name: '未分配利润（13-14-15-17）', calc: (y?: number) => calculateUndistributedProfit(y) },
+      { id: '19', name: '息税前利润（利润总额+利息支出）', calc: (y?: number) => calculateEBIT(y) },
+      { id: '20', name: '息税折旧摊销前利润（19+折旧+摊销）', calc: (y?: number) => calculateEBITDA(y) },
+    ];
+
+    return (
+      <>
+        <Table striped withTableBorder style={{ fontSize: '11px', tableLayout: 'auto' }}>
+          <Table.Thead>
+            <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+              <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '40px' }}>序号</Table.Th>
+              <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>项目</Table.Th>
+              <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '50px' }}>合计</Table.Th>
+              <Table.Th colSpan={constructionYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>建设期</Table.Th>
+              <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>运营期</Table.Th>
+            </Table.Tr>
+            <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+              {years.map((year) => (
+                <Table.Th key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                  {year}
+                </Table.Th>
+              ))}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {tableRows.map((row, idx) => (
+              <Table.Tr key={idx}>
+                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{row.id}</Table.Td>
+                <Table.Td style={{ border: '1px solid #dee2e6' }}>{row.name}</Table.Td>
+                <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+                  {formatNumberNoRounding(row.calc(undefined))}
+                </Table.Td>
+                {years.map((year) => {
+                  // 建设期显示空值，运营期显示计算值
+                  const yearValue = year <= constructionYears ? 0 : row.calc(year - constructionYears);
+                  return (
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(yearValue)}
+                    </Table.Td>
+                  );
+                })}
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </>
+    );
+  };
+
   // 渲染项目投资现金流量表格
   const renderProfitTaxModal = () => {
     if (!context) return <Text c="red">项目上下文未加载</Text>
@@ -835,11 +1295,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         <Table striped withTableBorder style={{ fontSize: '11px' }}>
           <Table.Thead>
             <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
-              <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>序号</Table.Th>
-              <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>项目</Table.Th>
+              <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '40px' }}>序号</Table.Th>
+              <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '220px' }}>项目</Table.Th>
               <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>合计</Table.Th>
-              <Table.Th colSpan={constructionYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>建设期</Table.Th>
-              <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>运营期</Table.Th>
+              <Table.Th colSpan={constructionYears} style={{ textAlign: 'center', border: '1px solid #dee2e6', width: `${constructionYears * 80}px` }}>建设期</Table.Th>
+              <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6', width: `${operationYears * 80}px` }}>运营期</Table.Th>
             </Table.Tr>
             <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
               {years.map((year) => (
@@ -1504,6 +1964,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       <Modal
         opened={showProfitTaxModal}
         onClose={() => setShowProfitTaxModal(false)}
+        centered
         title={
           <Group justify="space-between" w="100%">
             <Text size="md">
@@ -1521,10 +1982,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             </Tooltip>
           </Group>
         }
-        size="calc(100vw - 100px)"
+        size="2000px"
         styles={{
           body: {
-            maxHeight: 'calc(100vh - 200px)',
+            maxHeight: '900px',
             overflowY: 'auto',
           },
         }}
@@ -1557,35 +2018,33 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       <Modal
         opened={showProfitDistributionModal}
         onClose={() => setShowProfitDistributionModal(false)}
+        centered
         title={
-          <Text size="md">
-            📊 利润与利润分配表
-          </Text>
+          <Group justify="space-between" w="100%">
+            <Text size="md">
+              📊 利润与利润分配表
+            </Text>
+            <Tooltip label="导出Excel">
+              <ActionIcon
+                variant="light"
+                color="green"
+                size={16}
+                onClick={handleExportProfitDistributionTable}
+              >
+                <IconDownload size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         }
-        size="calc(100vw - 100px)"
+        size="2000px"
         styles={{
           body: {
-            maxHeight: 'calc(100vh - 200px)',
+            maxHeight: '900px',
             overflowY: 'auto',
           },
         }}
       >
-        <Stack gap="md" align="center">
-          <div style={{
-            padding: '60px 40px',
-            textAlign: 'center',
-            backgroundColor: '#F7F8FA',
-            borderRadius: '8px'
-          }}>
-            <IconChartLine size={48} color="#00C48C" />
-            <Text size="sm" c="#86909C" mt="md">
-              利润与利润分配表功能开发中
-            </Text>
-          </div>
-          <Button onClick={() => setShowProfitDistributionModal(false)}>
-            关闭
-          </Button>
-        </Stack>
+        {renderProfitDistributionModal()}
       </Modal>
 
       {/* 财务计算指标表弹窗 */}
