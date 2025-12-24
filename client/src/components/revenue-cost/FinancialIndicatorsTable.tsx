@@ -11,6 +11,7 @@ import {
   Tooltip,
   SimpleGrid,
   UnstyledButton,
+  SegmentedControl,
 } from '@mantine/core'
 import {
   IconTable,
@@ -22,7 +23,7 @@ import {
   IconFileText
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { useRevenueCostStore, calculateYearlyRevenue, getProductionRateForYear } from '@/stores/revenueCostStore'
+import { useRevenueCostStore, calculateYearlyRevenue, getProductionRateForYear, calculateOtherTaxesAndSurcharges } from '@/stores/revenueCostStore'
 import * as XLSX from 'xlsx'
 import AnnualInvestmentTable from './AnnualInvestmentTable'
 
@@ -468,16 +469,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     return yearOutputTax - yearInputTax;
   };
 
-  // 计算其他税费及附加的函数
-  const calculateOtherTaxesAndSurcharges = (year: number): number => {
-    // 使用增值税计算其他税费及附加
-    const vatAmount = calculateVatForYear(year);
-    // 城市建设维护税税率（默认7%，市区）
-    const urbanTaxRate = 0.07;
-    // 教育费附加税率（3%+地方2%=5%）
-    const educationTaxRate = 0.05;
-    // 其他税费及附加 = 增值税 × (城市建设维护税税率 + 教育费附加税率)
-    return vatAmount * (urbanTaxRate + educationTaxRate);
+  // 使用revenueCostStore中的共享函数计算其他税费及附加
+  const calculateOtherTaxesAndSurchargesLocal = (year: number): number => {
+    return calculateOtherTaxesAndSurcharges(revenueItems, productionRates, costConfig, year);
   };
 
   // 计算增值税、房产税等及附加的函数
@@ -971,7 +965,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const calculateTaxAndSurcharges = (year?: number): number => {
     if (year !== undefined) {
       // 利润与利润分配表的税金附加等 = 营业收入估算表的其他税费及附加
-      return calculateOtherTaxesAndSurcharges(year);
+      return calculateOtherTaxesAndSurchargesLocal(year);
     } else {
       // 计算所有年份的税金及附加合计
       if (!context) return 0;
@@ -984,13 +978,144 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     }
   };
 
-  // 计算总成本费用
+  // 计算总成本费用（直接引用营业成本估算表中的总成本费用合计数据）
   const calculateTotalCost = (year?: number): number => {
+    if (!context) return 0;
+    const operationYears = context.operationYears;
+    const years = Array.from({ length: operationYears }, (_, i) => i + 1);
+    
     if (year !== undefined) {
-      return calculateOperatingCost(year) + calculateDepreciation(year) + calculateAmortization(year) + calculateInterestExpense(year);
+      // 计算指定年份的总成本费用
+      let yearTotal = 0;
+      
+      // 1. 营业成本对应年份列 (第1.1行至第1.5行对应年份列数据的求和)
+      // 1.1 外购原材料费（除税）对应年份列
+      const productionRate = costConfig.rawMaterials.applyProductionRate
+        ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+        : 1;
+      
+      let rawMaterialsCost = 0;
+      (costConfig.rawMaterials.items || []).forEach((item: any) => {
+        let baseAmount = 0;
+        if (item.sourceType === 'percentage') {
+          let revenueBase = 0;
+          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+            revenueBase = revenueItems.reduce((sum, revItem) => sum + (revItem.unitPrice || 0) * (revItem.quantity || 0), 0);
+          } else {
+            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+            if (revItem) {
+              revenueBase = (revItem.unitPrice || 0) * (revItem.quantity || 0);
+            }
+          }
+          baseAmount = revenueBase * (item.percentage || 0) / 100;
+        } else if (item.sourceType === 'quantityPrice') {
+          baseAmount = (item.quantity || 0) * (item.unitPrice || 0);
+        } else if (item.sourceType === 'directAmount') {
+          baseAmount = item.directAmount || 0;
+        }
+        
+        // 计算进项税额
+        const taxRate = Number(item.taxRate) || 0;
+        const taxRateDecimal = taxRate / 100;
+        const inputTax = baseAmount * taxRateDecimal / (1 + taxRateDecimal);
+        
+        // 外购原材料（除税）= 含税金额 - 进项税额
+        rawMaterialsCost += (baseAmount - inputTax) * productionRate;
+      });
+      
+      // 1.2 外购燃料及动力费（除税）
+      let fuelPowerCost = 0;
+      (costConfig.fuelPower.items || []).forEach((item: any) => {
+        let consumption = item.consumption || 0;
+        let amount = 0;
+        // 对汽油和柴油进行特殊处理：单价×数量/10000
+        if (['汽油', '柴油'].includes(item.name)) {
+          amount = (item.price || 0) * consumption / 10000 * productionRate;
+        } else {
+          amount = consumption * (item.price || 0) * productionRate;
+        }
+        
+        // 计算进项税额
+        const taxRate = (item.taxRate || 13) / 100;
+        const inputTax = amount * taxRate / (1 + taxRate);
+        
+        // 外购燃料及动力（除税）= 含税金额 - 进项税额
+        fuelPowerCost += amount - inputTax;
+      });
+      
+      // 1.3 工资及福利费
+      let wagesCost = 0;
+      if (costConfig.wages.items && costConfig.wages.items.length > 0) {
+        costConfig.wages.items.forEach((item: any) => {
+          let currentSalary = item.salaryPerEmployee || 0;
+          
+          // 根据调整周期和幅度计算第year年的工资
+          if (item.changeInterval && item.changePercentage) {
+            const adjustmentTimes = Math.floor((year - 1) / item.changeInterval);
+            currentSalary = currentSalary * Math.pow(1 + item.changePercentage / 100, adjustmentTimes);
+          }
+          
+          // 计算工资总额
+          const yearlySubtotal = item.employees * currentSalary;
+          // 计算福利费
+          const yearlyWelfare = yearlySubtotal * (item.welfareRate || 0) / 100;
+          // 合计
+          wagesCost += yearlySubtotal + yearlyWelfare;
+        });
+      } else {
+        wagesCost = costConfig.wages.directAmount || 0;
+      }
+      
+      // 1.4 修理费
+      let repairCost = 0;
+      // 这里需要获取固定资产投资，目前使用0
+      const fixedAssetsInvestment = 0;
+      if (costConfig.repair.type === 'percentage') {
+        repairCost = fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+      } else {
+        repairCost = costConfig.repair.directAmount || 0;
+      }
+      
+      // 1.5 其他费用
+      let otherExpensesCost = 0;
+      if (costConfig.otherExpenses.type === 'percentage') {
+        const revenueBase = revenueItems.reduce((sum, revItem) => {
+          return sum + (revItem.unitPrice || 0) * (revItem.quantity || 0);
+        }, 0);
+        otherExpensesCost = revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+      } else {
+        otherExpensesCost = (costConfig.otherExpenses.directAmount || 0) * productionRate;
+      }
+      
+      // 营业成本 = 1.1 + 1.2 + 1.3 + 1.4 + 1.5
+      const operatingCost = rawMaterialsCost + fuelPowerCost + wagesCost + repairCost + otherExpensesCost;
+      
+      // 2. 管理费用（暂时为0）
+      const managementCost = 0;
+      
+      // 3. 利息支出
+      const yearIndex = year - 1;
+      const interestRow = repaymentTableData.find(row => row.项目 === '本年应计利息');
+      const interestCost = interestRow?.分年数据[yearIndex] || 0;
+      
+      // 4. 折旧费
+      const rowA = depreciationData.find(row => row.序号 === 'A');
+      const rowD = depreciationData.find(row => row.序号 === 'D');
+      const depreciationCost = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
+      
+      // 5. 摊销费
+      const rowE = depreciationData.find(row => row.序号 === 'E');
+      const amortizationCost = rowE?.分年数据[yearIndex] || 0;
+      
+      // 6. 开发成本（暂时为0）
+      const developmentCost = 0;
+      
+      // 总成本费用 = 营业成本 + 管理费用 + 利息支出 + 折旧费 + 摊销费 + 开发成本
+      yearTotal = operatingCost + managementCost + interestCost + depreciationCost + amortizationCost + developmentCost;
+      
+      return yearTotal;
     } else {
-      if (!context) return 0;
-      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      // 计算所有年份的总成本费用合计
       let totalSum = 0;
       years.forEach((year) => {
         totalSum += calculateTotalCost(year);
@@ -1220,24 +1345,18 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       return;
     }
 
-    const constructionYears = context.constructionYears;
     const operationYears = context.operationYears;
-    const totalYears = constructionYears + operationYears;
-    const years = Array.from({ length: totalYears }, (_, i) => i + 1);
+    const years = Array.from({ length: operationYears }, (_, i) => i + 1);
 
     // 准备Excel数据
     const excelData: any[] = [];
     
-    // 添加表头（两行）
-    // 第一行表头
-    const headerRow1: any = { '序号': '', '项目': '', '合计': '' };
-    for (let i = 0; i < constructionYears; i++) {
-      headerRow1[`建设期${i + 1}`] = '';
-    }
+    // 添加表头
+    const headerRow: any = { '序号': '', '项目': '', '合计': '' };
     for (let i = 0; i < operationYears; i++) {
-      headerRow1[`运营期${i + 1}`] = '';
+      headerRow[`运营期${i + 1}`] = '';
     }
-    excelData.push(headerRow1);
+    excelData.push(headerRow);
     
     // 第二行表头
     const headerRow2: any = { '序号': '', '项目': '', '合计': '' };
@@ -1279,8 +1398,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       
       // 计算各年数据
       years.forEach((year) => {
-        // 建设期显示0，运营期显示计算值
-        const yearValue = year <= constructionYears ? 0 : row.calc(year - constructionYears);
+        // 直接显示运营期的计算值
+        const yearValue = row.calc(year);
         dataRow[`${year}`] = yearValue;
       });
       
@@ -1306,10 +1425,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const renderProfitDistributionModal = () => {
     if (!context) return <Text c="red">项目上下文未加载</Text>
 
-    const constructionYears = context.constructionYears;
     const operationYears = context.operationYears;
-    const totalYears = constructionYears + operationYears;
-    const years = Array.from({ length: totalYears }, (_, i) => i + 1);
+    const years = Array.from({ length: operationYears }, (_, i) => i + 1);
 
     // 定义表格行数据
     const tableRows = [
@@ -1343,7 +1460,6 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '40px' }}>序号</Table.Th>
               <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6' }}>项目</Table.Th>
               <Table.Th rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid #dee2e6', width: '50px' }}>合计</Table.Th>
-              <Table.Th colSpan={constructionYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>建设期</Table.Th>
               <Table.Th colSpan={operationYears} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>运营期</Table.Th>
             </Table.Tr>
             <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
@@ -1363,8 +1479,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   {formatNumberNoRounding(row.calc(undefined))}
                 </Table.Td>
                 {years.map((year) => {
-                  // 建设期显示空值，运营期显示计算值
-                  const yearValue = year <= constructionYears ? 0 : row.calc(year - constructionYears);
+                  // 直接显示运营期的计算值
+                  const yearValue = row.calc(year);
                   return (
                     <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                       {formatNumberWithZeroBlank(yearValue)}

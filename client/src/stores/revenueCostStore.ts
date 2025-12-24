@@ -884,3 +884,204 @@ export const useRevenueCostStore = create<RevenueCostState>()(
     { name: 'RevenueCostStore' }
   )
 )
+
+// 计算其他税费及附加的共享函数（供DynamicRevenueTable和FinancialIndicatorsTable共同使用）
+export const calculateOtherTaxesAndSurcharges = (
+  revenueItems: RevenueItem[],
+  productionRates: ProductionRateConfig[],
+  costConfig: CostConfig,
+  year: number,
+  deductibleInputTax: number = 0
+): number => {
+  // 计算增值税
+  const vatAmount = (() => {
+    // 计算销项税额
+    const yearOutputTax = revenueItems.reduce((sum, item) => {
+      const productionRate = getProductionRateForYear(productionRates, year)
+      const revenue = calculateYearlyRevenue(item, year, productionRate)
+      // 销项税额 = 含税收入 - 不含税收入
+      return sum + (revenue - revenue / (1 + item.vatRate))
+    }, 0);
+    
+    // 计算进项税额
+    let yearInputTax = 0;
+    
+    // 外购原材料费进项税额
+    if (costConfig.rawMaterials.items && costConfig.rawMaterials.items.length > 0) {
+      const productionRate = costConfig.rawMaterials.applyProductionRate
+        ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+        : 1;
+
+      costConfig.rawMaterials.items.forEach((item: any) => {
+        const baseAmount = (() => {
+          if (item.sourceType === 'percentage') {
+            let revenueBase = 0;
+            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+              revenueBase = revenueItems.reduce((sum, revItem) => {
+                const productionRate = getProductionRateForYear(productionRates, year);
+                return sum + calculateYearlyRevenue(revItem, year, productionRate);
+              }, 0);
+            } else {
+              const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+              if (revItem) {
+                const productionRate = getProductionRateForYear(productionRates, year);
+                revenueBase = calculateYearlyRevenue(revItem, year, productionRate);
+              }
+            }
+            return revenueBase * (item.percentage || 0) / 100;
+          } else if (item.sourceType === 'quantityPrice') {
+            return (item.quantity || 0) * (item.unitPrice || 0);
+          } else if (item.sourceType === 'directAmount') {
+            return item.directAmount || 0;
+          }
+          return 0;
+        })();
+
+        const taxRate = Number(item.taxRate) || 0;
+        const taxRateDecimal = taxRate / 100;
+        // 进项税额 = 含税金额 / (1 + 税率) × 税率
+        yearInputTax += baseAmount * productionRate * taxRateDecimal / (1 + taxRateDecimal);
+      });
+    }
+
+    // 外购燃料及动力费进项税额
+    if (costConfig.fuelPower.items && costConfig.fuelPower.items.length > 0) {
+      const productionRate = costConfig.fuelPower.applyProductionRate
+        ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+        : 1;
+
+      costConfig.fuelPower.items.forEach((item: any) => {
+        let consumption = item.consumption || 0;
+        let amount = 0;
+        // 对汽油和柴油进行特殊处理：单价×数量/10000
+        if (['汽油', '柴油'].includes(item.name)) {
+          amount = (item.price || 0) * consumption / 10000 * productionRate;
+        } else {
+          amount = consumption * (item.price || 0) * productionRate;
+        }
+        
+        const taxRate = (item.taxRate || 13) / 100;
+        // 进项税额 = 含税金额 / (1 + 税率) × 税率
+        yearInputTax += amount * taxRate / (1 + taxRate);
+      });
+    }
+
+    // 计算进项税额（固定资产待抵扣）
+    let yearFixedAssetInputTax = 0;
+    if (deductibleInputTax > 0) {
+      const operationYears = productionRates.length;
+      const years = Array.from({ length: operationYears }, (_, i) => i + 1);
+      
+      // 计算每年的销项税额和进项税额
+      const yearlyData = years.map((y) => {
+        // 计算销项税额
+        const yearOutputTax = revenueItems.reduce((sum, item) => {
+          const productionRate = getProductionRateForYear(productionRates, y);
+          const revenue = calculateYearlyRevenue(item, y, productionRate);
+          // 销项税额 = 含税收入 - 不含税收入
+          return sum + (revenue - revenue / (1 + item.vatRate));
+        }, 0);
+        
+        // 计算进项税额
+        const yearInputTax = (() => {
+          // 外购原材料费进项税额
+          let rawMaterialsInputTax = 0;
+          if (costConfig.rawMaterials.items && costConfig.rawMaterials.items.length > 0) {
+            const prodRate = costConfig.rawMaterials.applyProductionRate
+              ? (productionRates?.find(p => p.yearIndex === y)?.rate || 1)
+              : 1;
+
+            costConfig.rawMaterials.items.forEach((item: any) => {
+              const baseAmount = (() => {
+                if (item.sourceType === 'percentage') {
+                  let revenueBase = 0;
+                  if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+                    revenueBase = revenueItems.reduce((sum, revItem) => {
+                      const prodRate = getProductionRateForYear(productionRates, y);
+                      return sum + calculateYearlyRevenue(revItem, y, prodRate);
+                    }, 0);
+                  } else {
+                    const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+                    if (revItem) {
+                      const prodRate = getProductionRateForYear(productionRates, y);
+                      revenueBase = calculateYearlyRevenue(revItem, y, prodRate);
+                    }
+                  }
+                  return revenueBase * (item.percentage || 0) / 100;
+                } else if (item.sourceType === 'quantityPrice') {
+                  return (item.quantity || 0) * (item.unitPrice || 0);
+                } else if (item.sourceType === 'directAmount') {
+                  return item.directAmount || 0;
+                }
+                return 0;
+              })();
+
+              const taxRate = Number(item.taxRate) || 0;
+              const taxRateDecimal = taxRate / 100;
+              // 进项税额 = 含税金额 / (1 + 税率) × 税率
+              rawMaterialsInputTax += baseAmount * prodRate * taxRateDecimal / (1 + taxRateDecimal);
+            });
+          }
+
+          // 外购燃料及动力费进项税额
+          let fuelPowerInputTax = 0;
+          if (costConfig.fuelPower.items && costConfig.fuelPower.items.length > 0) {
+            const prodRate = costConfig.fuelPower.applyProductionRate
+              ? (productionRates?.find(p => p.yearIndex === y)?.rate || 1)
+              : 1;
+
+            costConfig.fuelPower.items.forEach((item: any) => {
+              let consumption = item.consumption || 0;
+              let amount = 0;
+              // 对汽油和柴油进行特殊处理：单价×数量/10000
+              if (['汽油', '柴油'].includes(item.name)) {
+                amount = (item.price || 0) * consumption / 10000 * prodRate;
+              } else {
+                amount = consumption * (item.price || 0) * prodRate;
+              }
+              
+              const taxRate = (item.taxRate || 13) / 100;
+              // 进项税额 = 含税金额 / (1 + 税率) × 税率
+              fuelPowerInputTax += amount * taxRate / (1 + taxRate);
+            });
+          }
+
+          return rawMaterialsInputTax + fuelPowerInputTax;
+        })();
+        
+        return {
+          year: y,
+          outputTax: yearOutputTax,
+          inputTax: yearInputTax
+        };
+      });
+      
+      // 计算每年的进项税额（固定资产待抵扣）
+      let remainingDeductibleTax = deductibleInputTax;
+      const fixedAssetInputTaxes: number[] = [];
+      
+      for (const data of yearlyData) {
+        // 计算使增值税等于0所需的进项税额（固定资产待抵扣）
+        const neededFixedAssetInputTax = data.outputTax - data.inputTax;
+        
+        // 如果还有剩余的待抵扣进项税，则使用需要的值，否则使用剩余值
+        const actualFixedAssetInputTax = Math.min(neededFixedAssetInputTax, remainingDeductibleTax);
+        
+        fixedAssetInputTaxes.push(actualFixedAssetInputTax);
+        remainingDeductibleTax -= actualFixedAssetInputTax;
+      }
+      
+      // 返回指定年份的进项税额（固定资产待抵扣）
+      yearFixedAssetInputTax = fixedAssetInputTaxes[year - 1] || 0;
+    }
+    
+    // 增值税 = 销项税额 - 进项税额 - 进项税额（固定资产待抵扣）
+    const vatAmount = yearOutputTax - yearInputTax - yearFixedAssetInputTax;
+    
+    // 城市建设维护税税率（默认7%，市区）
+    const urbanTaxRate = 0.07;
+    // 教育费附加税率（3%+地方2%=5%）
+    const educationTaxRate = 0.05;
+    // 其他税费及附加 = 增值税 × (城市建设维护税税率 + 教育费附加税率)
+    return vatAmount * (urbanTaxRate + educationTaxRate);
+  };
