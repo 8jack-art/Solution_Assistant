@@ -1536,12 +1536,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       <Modal
         opened={showAnnualInvestmentModal}
         onClose={() => setShowAnnualInvestmentModal(false)}
-        title={
-          <Text size="md">
-            📊 分年度投资估算表
-          </Text>
-        }
-        size="calc(100vw - 100px)"
+        title="📊 分年度投资估算表"
+        size="calc(55vw - 50px)"
+        centered
         styles={{
           body: {
             maxHeight: 'calc(100vh - 200px)',
@@ -1552,6 +1549,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         <AnnualInvestmentTable
           investmentEstimate={investmentEstimate}
           constructionYears={context?.constructionYears}
+          showCard={false}
         />
       </Modal>
 
