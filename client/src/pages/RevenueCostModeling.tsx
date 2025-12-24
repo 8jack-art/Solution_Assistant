@@ -37,7 +37,7 @@ import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
 import DynamicRevenueTable from '@/components/revenue-cost/DynamicRevenueTable'
 import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
 import ProductionRateModal from '@/components/revenue-cost/ProductionRateModal'
-import ProfitTaxTable from '@/components/revenue-cost/ProfitTaxTable'
+import FinancialIndicatorsTable from '@/components/revenue-cost/FinancialIndicatorsTable'
 
 // 步骤定义
 const STEPS = [
@@ -652,10 +652,10 @@ const RevenueCostModeling: React.FC = () => {
                       </Text>
                     </Group>
                     <Group gap="xs">
-                      <Tooltip label="查看还本付息计划表">
-                        <ActionIcon 
-                          variant="light" 
-                          color="green" 
+                      <Tooltip label="查看还本付息计划简表">
+                        <ActionIcon
+                          variant="light"
+                          color="green"
                           size="lg"
                           onClick={() => setRepaymentPlanOpened(true)}
                           disabled={!investmentEstimate || repaymentPeriod === 0}
@@ -1314,7 +1314,7 @@ const RevenueCostModeling: React.FC = () => {
               title={
                 <Group gap="xs">
                   <IconCurrencyDollar size={20} color="#00C48C" />
-                  <Text fw={600} c="#1D2129">还本付息计划表（等额本金还款）</Text>
+                  <Text fw={600} c="#1D2129">还本付息计划简表（等额本金还款）</Text>
                 </Group>
               }
               size="1400px"
@@ -1480,10 +1480,10 @@ const RevenueCostModeling: React.FC = () => {
 
       case 4:
         return (
-          <ProfitTaxTable
+          <FinancialIndicatorsTable
             repaymentTableData={repaymentTableData}
             depreciationData={depreciationData}
-            deductibleInputTax={deductibleInputTax}
+            investmentEstimate={investmentEstimate}
           />
         )
 

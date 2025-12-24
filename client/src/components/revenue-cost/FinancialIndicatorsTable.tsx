@@ -9,11 +9,22 @@ import {
   Modal,
   ActionIcon,
   Tooltip,
+  SimpleGrid,
+  UnstyledButton,
 } from '@mantine/core'
-import { IconTable, IconDownload } from '@tabler/icons-react'
+import {
+  IconTable,
+  IconDownload,
+  IconBuilding,
+  IconChartLine,
+  IconCoin,
+  IconCalculator,
+  IconFileText
+} from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
 import * as XLSX from 'xlsx'
+import AnnualInvestmentTable from './AnnualInvestmentTable'
 
 // 格式化数字显示为2位小数，不四舍五入，无千分号（不修改实际值，只用于显示）
 const formatNumberNoRounding = (value: number): string => {
@@ -47,10 +58,18 @@ const formatNumberNoRounding = (value: number): string => {
   return result;
 }
 
+// 格式化数字显示，若为0则显示空白
+const formatNumberWithZeroBlank = (value: number): string => {
+  if (value === 0) {
+    return '';
+  }
+  return formatNumberNoRounding(value);
+}
+
 /**
  * 项目投资现金流量表格组件
  */
-interface ProfitTaxTableProps {
+interface FinancialIndicatorsTableProps {
   repaymentTableData?: Array<{
     序号: string
     项目: string
@@ -64,14 +83,55 @@ interface ProfitTaxTableProps {
     年折旧摊销额: number
     分年数据: number[]
   }>
+  investmentEstimate?: any
 }
 
-const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
+const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   repaymentTableData = [],
-  depreciationData = []
+  depreciationData = [],
+  investmentEstimate
 }) => {
   const { context, revenueItems, productionRates, costConfig } = useRevenueCostStore()
   const [showProfitTaxModal, setShowProfitTaxModal] = useState(false)
+  
+  // 表格弹窗状态
+  const [showAnnualInvestmentModal, setShowAnnualInvestmentModal] = useState(false)
+  const [showProfitDistributionModal, setShowProfitDistributionModal] = useState(false)
+  const [showFinancialIndicatorsModal, setShowFinancialIndicatorsModal] = useState(false)
+  
+  // 配置按钮数据
+  const investmentConfigItems = [
+    {
+      title: '分年度投资估算表',
+      icon: IconBuilding,
+      color: 'blue',
+      onClick: () => setShowAnnualInvestmentModal(true)
+    },
+    {
+      title: '利润与利润分配表',
+      icon: IconChartLine,
+      color: 'green',
+      onClick: () => setShowProfitDistributionModal(true)
+    },
+    {
+      title: '项目投资现金流量表',
+      icon: IconCoin,
+      color: 'orange',
+      onClick: () => setShowProfitTaxModal(true)
+    },
+    {
+      title: '财务计算指标表',
+      icon: IconCalculator,
+      color: 'purple',
+      onClick: () => setShowFinancialIndicatorsModal(true)
+    },
+    {
+      title: '借款还本付息计划表',
+      icon: IconFileText,
+      color: 'cyan',
+      onClick: () => {/* TODO: 实现还本付息计划表 */ }
+    },
+  ]
   
   // 计算营业收入的函数
   const calculateOperatingRevenue = (year?: number): number => {
@@ -397,11 +457,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
     // 添加表头
     const headerRow: any = { '序号': '', '项目': '', '合计': '' };
     years.forEach((year) => {
-      if (year <= constructionYears) {
-        headerRow[`建设期${year}`] = year;
-      } else {
-        headerRow[`运营期${year - constructionYears}`] = year - constructionYears;
-      }
+      headerRow[`${year}`] = year;
     });
     excelData.push(headerRow);
 
@@ -417,13 +473,13 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        yearTotal = calculateOperatingRevenue(operationYear) + 
-                   calculateSubsidyIncome(operationYear) + 
-                   calculateFixedAssetResidual(operationYear) + 
+        yearTotal = calculateOperatingRevenue(operationYear) +
+                   calculateSubsidyIncome(operationYear) +
+                   calculateFixedAssetResidual(operationYear) +
                    calculateWorkingCapitalRecovery(operationYear);
       }
       
-      row1[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row1[`${year}`] = yearTotal;
       totalRow1 += yearTotal;
     });
     row1['合计'] = totalRow1;
@@ -441,7 +497,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateOperatingRevenue(operationYear);
       }
       
-      row1_1[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row1_1[`${year}`] = yearTotal;
       totalRow1_1 += yearTotal;
     });
     row1_1['合计'] = totalRow1_1;
@@ -459,7 +515,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateSubsidyIncome(operationYear);
       }
       
-      row1_2[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row1_2[`${year}`] = yearTotal;
       totalRow1_2 += yearTotal;
     });
     row1_2['合计'] = totalRow1_2;
@@ -477,7 +533,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateFixedAssetResidual(operationYear);
       }
       
-      row1_3[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row1_3[`${year}`] = yearTotal;
       totalRow1_3 += yearTotal;
     });
     row1_3['合计'] = totalRow1_3;
@@ -495,7 +551,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateWorkingCapitalRecovery(operationYear);
       }
       
-      row1_4[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row1_4[`${year}`] = yearTotal;
       totalRow1_4 += yearTotal;
     });
     row1_4['合计'] = totalRow1_4;
@@ -513,14 +569,14 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        yearTotal = calculateConstructionInvestment(year) + 
-                   calculateWorkingCapital(year) + 
-                   calculateOperatingCost(operationYear) + 
-                   calculateVatAndTaxes(operationYear) + 
+        yearTotal = calculateConstructionInvestment(year) +
+                   calculateWorkingCapital(year) +
+                   calculateOperatingCost(operationYear) +
+                   calculateVatAndTaxes(operationYear) +
                    calculateMaintenanceInvestment(operationYear);
       }
       
-      row2[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row2[`${year}`] = yearTotal;
       totalRow2 += yearTotal;
     });
     row2['合计'] = totalRow2;
@@ -531,7 +587,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
     let totalRow2_1 = 0;
     years.forEach((year) => {
       const yearTotal = calculateConstructionInvestment(year);
-      row2_1[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row2_1[`${year}`] = yearTotal;
       totalRow2_1 += yearTotal;
     });
     row2_1['合计'] = totalRow2_1;
@@ -542,7 +598,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
     let totalRow2_2 = 0;
     years.forEach((year) => {
       const yearTotal = calculateWorkingCapital(year);
-      row2_2[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row2_2[`${year}`] = yearTotal;
       totalRow2_2 += yearTotal;
     });
     row2_2['合计'] = totalRow2_2;
@@ -560,7 +616,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateOperatingCost(operationYear);
       }
       
-      row2_3[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row2_3[`${year}`] = yearTotal;
       totalRow2_3 += yearTotal;
     });
     row2_3['合计'] = totalRow2_3;
@@ -578,7 +634,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateVatAndTaxes(operationYear);
       }
       
-      row2_4[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row2_4[`${year}`] = yearTotal;
       totalRow2_4 += yearTotal;
     });
     row2_4['合计'] = totalRow2_4;
@@ -596,7 +652,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateMaintenanceInvestment(operationYear);
       }
       
-      row2_5[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row2_5[`${year}`] = yearTotal;
       totalRow2_5 += yearTotal;
     });
     row2_5['合计'] = totalRow2_5;
@@ -616,19 +672,19 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) + 
-                          calculateSubsidyIncome(operationYear) + 
-                          calculateFixedAssetResidual(operationYear) + 
+        const yearInflow = calculateOperatingRevenue(operationYear) +
+                          calculateSubsidyIncome(operationYear) +
+                          calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
-        const yearOutflow = calculateConstructionInvestment(year) + 
-                          calculateWorkingCapital(year) + 
-                          calculateOperatingCost(operationYear) + 
-                          calculateVatAndTaxes(operationYear) + 
+        const yearOutflow = calculateConstructionInvestment(year) +
+                          calculateWorkingCapital(year) +
+                          calculateOperatingCost(operationYear) +
+                          calculateVatAndTaxes(operationYear) +
                           calculateMaintenanceInvestment(operationYear);
         yearTotal = yearInflow - yearOutflow;
       }
       
-      row3[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row3[`${year}`] = yearTotal;
       totalRow3 += yearTotal;
     });
     row3['合计'] = totalRow3;
@@ -648,20 +704,20 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) + 
-                          calculateSubsidyIncome(operationYear) + 
-                          calculateFixedAssetResidual(operationYear) + 
+        const yearInflow = calculateOperatingRevenue(operationYear) +
+                          calculateSubsidyIncome(operationYear) +
+                          calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
-        const yearOutflow = calculateConstructionInvestment(year) + 
-                          calculateWorkingCapital(year) + 
-                          calculateOperatingCost(operationYear) + 
-                          calculateVatAndTaxes(operationYear) + 
+        const yearOutflow = calculateConstructionInvestment(year) +
+                          calculateWorkingCapital(year) +
+                          calculateOperatingCost(operationYear) +
+                          calculateVatAndTaxes(operationYear) +
                           calculateMaintenanceInvestment(operationYear);
         yearTotal = yearInflow - yearOutflow;
       }
       
       cumulativeCashFlow += yearTotal;
-      row4[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = cumulativeCashFlow;
+      row4[`${year}`] = cumulativeCashFlow;
     });
     row4['合计'] = cumulativeCashFlow;
     excelData.push(row4);
@@ -678,7 +734,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
         yearTotal = calculateAdjustedIncomeTax(operationYear);
       }
       
-      row5[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row5[`${year}`] = yearTotal;
       totalRow5 += yearTotal;
     });
     row5['合计'] = totalRow5;
@@ -698,20 +754,20 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) + 
-                          calculateSubsidyIncome(operationYear) + 
-                          calculateFixedAssetResidual(operationYear) + 
+        const yearInflow = calculateOperatingRevenue(operationYear) +
+                          calculateSubsidyIncome(operationYear) +
+                          calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
-        const yearOutflow = calculateConstructionInvestment(year) + 
-                          calculateWorkingCapital(year) + 
-                          calculateOperatingCost(operationYear) + 
-                          calculateVatAndTaxes(operationYear) + 
-                          calculateMaintenanceInvestment(operationYear) + 
+        const yearOutflow = calculateConstructionInvestment(year) +
+                          calculateWorkingCapital(year) +
+                          calculateOperatingCost(operationYear) +
+                          calculateVatAndTaxes(operationYear) +
+                          calculateMaintenanceInvestment(operationYear) +
                           calculateAdjustedIncomeTax(operationYear);
         yearTotal = yearInflow - yearOutflow;
       }
       
-      row6[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = yearTotal;
+      row6[`${year}`] = yearTotal;
       totalRow6 += yearTotal;
     });
     row6['合计'] = totalRow6;
@@ -731,21 +787,21 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) + 
-                          calculateSubsidyIncome(operationYear) + 
-                          calculateFixedAssetResidual(operationYear) + 
+        const yearInflow = calculateOperatingRevenue(operationYear) +
+                          calculateSubsidyIncome(operationYear) +
+                          calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
-        const yearOutflow = calculateConstructionInvestment(year) + 
-                          calculateWorkingCapital(year) + 
-                          calculateOperatingCost(operationYear) + 
-                          calculateVatAndTaxes(operationYear) + 
-                          calculateMaintenanceInvestment(operationYear) + 
+        const yearOutflow = calculateConstructionInvestment(year) +
+                          calculateWorkingCapital(year) +
+                          calculateOperatingCost(operationYear) +
+                          calculateVatAndTaxes(operationYear) +
+                          calculateMaintenanceInvestment(operationYear) +
                           calculateAdjustedIncomeTax(operationYear);
         yearTotal = yearInflow - yearOutflow;
       }
       
       cumulativeCashFlow += yearTotal;
-      row7[year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`] = cumulativeCashFlow;
+      row7[`${year}`] = cumulativeCashFlow;
     });
     row7['合计'] = cumulativeCashFlow;
     excelData.push(row7);
@@ -788,7 +844,7 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
             <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
               {years.map((year) => (
                 <Table.Th key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                  {year <= constructionYears ? `建设期${year}` : `运营期${year - constructionYears}`}
+                  {year}
                 </Table.Th>
               ))}
             </Table.Tr>
@@ -831,8 +887,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -855,8 +911,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -879,8 +935,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -903,8 +959,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -927,8 +983,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -976,8 +1032,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -993,8 +1049,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
               {years.map((year) => {
                 const yearTotal = calculateConstructionInvestment(year);
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -1010,8 +1066,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
               {years.map((year) => {
                 const yearTotal = calculateWorkingCapital(year);
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -1034,8 +1090,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -1058,8 +1114,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -1082,8 +1138,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -1143,8 +1199,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearInflow - yearOutflow)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearInflow - yearOutflow)}
                   </Table.Td>
                 );
               })}
@@ -1213,8 +1269,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                   cumulativeCashFlow += yearInflow - yearOutflow;
                   
                   return (
-                    <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                      {formatNumberNoRounding(cumulativeCashFlow)}
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(cumulativeCashFlow)}
                     </Table.Td>
                   );
                 });
@@ -1238,8 +1294,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearTotal)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
                 );
               })}
@@ -1303,8 +1359,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                 }
                 
                 return (
-                  <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                    {formatNumberNoRounding(yearInflow - yearOutflow - yearTax)}
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearInflow - yearOutflow - yearTax)}
                   </Table.Td>
                 );
               })}
@@ -1377,8 +1433,8 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
                   cumulativeCashFlow += yearInflow - yearOutflow - yearTax;
                   
                   return (
-                    <Table.Td key={year} style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                      {formatNumberNoRounding(cumulativeCashFlow)}
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(cumulativeCashFlow)}
                     </Table.Td>
                   );
                 });
@@ -1392,43 +1448,57 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
 
   return (
     <>
-      <Card shadow="sm" padding="xl" radius="md" withBorder>
-        <Stack gap="lg">
-          <div>
-            <Group justify="space-between" align="center">
-              <Text size="lg" fw={600} c="#1D2129">
-                项目投资现金流量
-              </Text>
-              <Group gap="xs">
-                <Tooltip label="查看项目投资现金流量表">
-                  <ActionIcon
-                    variant="light"
-                    color="cyan"
-                    size="lg"
-                    onClick={() => setShowProfitTaxModal(true)}
-                  >
-                    <IconTable size={20} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-            </Group>
-            <Text size="sm" c="#86909C">
-              查看项目投资现金流量汇总表
-            </Text>
-          </div>
-          
-          <div style={{ 
-            padding: '40px', 
-            textAlign: 'center',
-            backgroundColor: '#F7F8FA',
-            borderRadius: '8px'
-          }}>
-            <Text size="sm" c="#86909C">
-              点击上方表格图标查看项目投资现金流量表
-            </Text>
-          </div>
-        </Stack>
-      </Card>
+      <Stack gap="md">
+        <Group justify="space-between" align="center">
+          <Text size="md" fw={600} c="#1D2129">
+            项目投资现金流量配置
+          </Text>
+          <Group gap="xs">
+            <Tooltip label="导出项目投资现金流量表">
+              <ActionIcon
+                variant="light"
+                color="green"
+                size="lg"
+                onClick={handleExportProfitTaxTable}
+              >
+                <IconDownload size={20} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Group>
+
+        {/* Card with actions grid */}
+        <Card withBorder radius="md">
+          <Group justify="space-between">
+            <Text size="lg" fw={600}>投资配置项</Text>
+          </Group>
+          <SimpleGrid cols={3} mt="md">
+            {investmentConfigItems.map((item) => (
+              <UnstyledButton
+                key={item.title}
+                onClick={item.onClick}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '16px',
+                  border: '1px solid #e9ecef',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.borderColor = '#165DFF'}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e9ecef'}
+              >
+                <item.icon color="#165DFF" size={32} />
+                <Text size="xs" mt={7}>
+                  {item.title}
+                </Text>
+              </UnstyledButton>
+            ))}
+          </SimpleGrid>
+        </Card>
+      </Stack>
       
       {/* 项目投资现金流量表弹窗 */}
       <Modal
@@ -1461,8 +1531,101 @@ const ProfitTaxTable: React.FC<ProfitTaxTableProps> = ({
       >
         {renderProfitTaxModal()}
       </Modal>
+
+      {/* 分年度投资估算表弹窗 */}
+      <Modal
+        opened={showAnnualInvestmentModal}
+        onClose={() => setShowAnnualInvestmentModal(false)}
+        title={
+          <Text size="md">
+            📊 分年度投资估算表
+          </Text>
+        }
+        size="calc(100vw - 100px)"
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        <AnnualInvestmentTable
+          investmentEstimate={investmentEstimate}
+          constructionYears={context?.constructionYears}
+        />
+      </Modal>
+
+      {/* 利润与利润分配表弹窗 */}
+      <Modal
+        opened={showProfitDistributionModal}
+        onClose={() => setShowProfitDistributionModal(false)}
+        title={
+          <Text size="md">
+            📊 利润与利润分配表
+          </Text>
+        }
+        size="calc(100vw - 100px)"
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        <Stack gap="md" align="center">
+          <div style={{
+            padding: '60px 40px',
+            textAlign: 'center',
+            backgroundColor: '#F7F8FA',
+            borderRadius: '8px'
+          }}>
+            <IconChartLine size={48} color="#00C48C" />
+            <Text size="sm" c="#86909C" mt="md">
+              利润与利润分配表功能开发中
+            </Text>
+          </div>
+          <Button onClick={() => setShowProfitDistributionModal(false)}>
+            关闭
+          </Button>
+        </Stack>
+      </Modal>
+
+      {/* 财务计算指标表弹窗 */}
+      <Modal
+        opened={showFinancialIndicatorsModal}
+        onClose={() => setShowFinancialIndicatorsModal(false)}
+        title={
+          <Text size="md">
+            📊 财务计算指标表
+          </Text>
+        }
+        size="calc(100vw - 100px)"
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        <Stack gap="md" align="center">
+          <div style={{
+            padding: '60px 40px',
+            textAlign: 'center',
+            backgroundColor: '#F7F8FA',
+            borderRadius: '8px'
+          }}>
+            <IconCalculator size={48} color="#9254DE" />
+            <Text size="sm" c="#86909C" mt="md">
+              财务计算指标表功能开发中
+            </Text>
+          </div>
+          <Button onClick={() => setShowFinancialIndicatorsModal(false)}>
+            关闭
+          </Button>
+        </Stack>
+      </Modal>
     </>
   )
 }
 
-export default ProfitTaxTable
+export default FinancialIndicatorsTable
