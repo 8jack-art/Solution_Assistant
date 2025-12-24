@@ -37,6 +37,7 @@ import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
 import DynamicRevenueTable from '@/components/revenue-cost/DynamicRevenueTable'
 import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
 import ProductionRateModal from '@/components/revenue-cost/ProductionRateModal'
+import ProfitTaxTable from '@/components/revenue-cost/ProfitTaxTable'
 
 // 步骤定义
 const STEPS = [
@@ -44,7 +45,7 @@ const STEPS = [
   { label: 'AI推荐结构', value: 1 },
   { label: '收入建模', value: 2 },
   { label: '成本建模', value: 3 },
-  { label: '利润税金', value: 4 },
+  { label: '项目投资现金流量', value: 4 },
 ]
 
 /**
@@ -1479,28 +1480,11 @@ const RevenueCostModeling: React.FC = () => {
 
       case 4:
         return (
-          <Card shadow="sm" padding="xl" radius="md" withBorder>
-            <Stack gap="lg">
-              <div>
-                <Text size="lg" fw={600} c="#1D2129" mb="md">
-                  利润税金
-                </Text>
-                <Text size="sm" c="#86909C">
-                  查看利润税金汇总
-                </Text>
-              </div>
-              <div style={{ 
-                padding: '40px', 
-                textAlign: 'center',
-                backgroundColor: '#F7F8FA',
-                borderRadius: '8px'
-              }}>
-                <Text size="sm" c="#86909C">
-                  🚧 功能开发中...
-                </Text>
-              </div>
-            </Stack>
-          </Card>
+          <ProfitTaxTable
+            repaymentTableData={repaymentTableData}
+            depreciationData={depreciationData}
+            deductibleInputTax={deductibleInputTax}
+          />
         )
 
       default:
