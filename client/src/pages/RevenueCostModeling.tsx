@@ -1004,7 +1004,7 @@ const RevenueCostModeling: React.FC = () => {
                           </Table.Td>
                         </Table.Tr>
                         <Table.Tr>
-                          <Table.Td>待抵扣进销项税</Table.Td>
+                          <Table.Td>待抵扣进项税</Table.Td>
                           <Table.Td>
                             <Text fw={600} c="#F7BA1E" size="sm">{deductibleInputTax.toFixed(2)}</Text>
                           </Table.Td>
@@ -1467,7 +1467,7 @@ const RevenueCostModeling: React.FC = () => {
       case 2:
         return (
           <Stack gap="md">
-            <DynamicRevenueTable />
+            <DynamicRevenueTable deductibleInputTax={deductibleInputTax} />
           </Stack>
         )
 
