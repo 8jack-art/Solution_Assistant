@@ -894,7 +894,7 @@ export const calculateOtherTaxesAndSurcharges = (
   deductibleInputTax: number = 0
 ): number => {
   // 计算增值税
-  const vatAmount = (() => {
+  return (() => {
     // 计算销项税额
     const yearOutputTax = revenueItems.reduce((sum, item) => {
       const productionRate = getProductionRateForYear(productionRates, year)
@@ -1084,4 +1084,5 @@ export const calculateOtherTaxesAndSurcharges = (
     const educationTaxRate = 0.05;
     // 其他税费及附加 = 增值税 × (城市建设维护税税率 + 教育费附加税率)
     return vatAmount * (urbanTaxRate + educationTaxRate);
-  };
+  })();
+};
