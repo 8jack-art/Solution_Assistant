@@ -22,7 +22,7 @@ import {
   IconFileText
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { useRevenueCostStore } from '@/stores/revenueCostStore'
+import { useRevenueCostStore, calculateYearlyRevenue, getProductionRateForYear } from '@/stores/revenueCostStore'
 import * as XLSX from 'xlsx'
 import AnnualInvestmentTable from './AnnualInvestmentTable'
 
@@ -133,41 +133,20 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     },
   ]
   
-  // 计算营业收入的函数
+  // 计算营业收入的函数（不含税收入 = 含税收入 - 销项税额）
   const calculateOperatingRevenue = (year?: number): number => {
     if (year !== undefined) {
-      // 计算指定年份的营业收入
+      // 计算指定年份的营业收入（不含税）
+      // 利润与利润分配表的营业收入 = 营业收入估算表的营业收入 - 销项税额
       const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
       return revenueItems.reduce((sum, item) => {
-        // 计算基础含税收入
-        let baseRevenue = 0;
-        switch (item.fieldTemplate) {
-          case 'quantity-price':
-            baseRevenue = (item.quantity || 0) * (item.unitPrice || 0);
-            break;
-          case 'area-yield-price':
-            baseRevenue = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0);
-            break;
-          case 'capacity-utilization':
-            baseRevenue = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0);
-            break;
-          case 'subscription':
-            baseRevenue = (item.subscriptions || 0) * (item.unitPrice || 0);
-            break;
-          case 'direct-amount':
-            baseRevenue = item.directAmount || 0;
-            break;
-        }
-        
-        // 应用涨价规则
-        if (item.priceIncreaseInterval && item.priceIncreaseInterval > 0 && item.priceIncreaseRate && item.priceIncreaseRate > 0) {
-          const priceRoundIndex = Math.floor((year - 1) / item.priceIncreaseInterval);
-          const priceMultiplier = Math.pow(1 + item.priceIncreaseRate / 100, priceRoundIndex);
-          baseRevenue = baseRevenue * priceMultiplier;
-        }
-        
-        // 应用达产率
-        return sum + baseRevenue * productionRate;
+        // 计算含税收入
+        const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
+        // 计算销项税额 = 含税收入 - 不含税收入 = 含税收入 - 含税收入/(1+税率)
+        const outputTax = taxableRevenue - taxableRevenue / (1 + item.vatRate);
+        // 不含税收入 = 含税收入 - 销项税额
+        const nonTaxRevenue = taxableRevenue - outputTax;
+        return sum + nonTaxRevenue;
       }, 0);
     } else {
       // 计算所有年份的营业收入合计
@@ -393,6 +372,114 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     }
   };
   
+  // 计算外购原材料费进项税额的运营期列值
+  const calculateRawMaterialsInputTaxForYear = (year: number): number => {
+    if (!costConfig.rawMaterials.items || costConfig.rawMaterials.items.length === 0) {
+      return 0;
+    }
+
+    const productionRate = costConfig.rawMaterials.applyProductionRate
+      ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+      : 1;
+
+    let yearInputTax = 0;
+    costConfig.rawMaterials.items.forEach((item: any) => {
+      const baseAmount = (() => {
+        if (item.sourceType === 'percentage') {
+          let revenueBase = 0;
+          if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+            revenueBase = revenueItems.reduce((sum, revItem) => {
+              const productionRate = getProductionRateForYear(productionRates, year);
+              return sum + calculateYearlyRevenue(revItem, year, productionRate);
+            }, 0);
+          } else {
+            const revItem = revenueItems.find(r => r.id === item.linkedRevenueId);
+            if (revItem) {
+              const productionRate = getProductionRateForYear(productionRates, year);
+              revenueBase = calculateYearlyRevenue(revItem, year, productionRate);
+            }
+          }
+          return revenueBase * (item.percentage || 0) / 100;
+        } else if (item.sourceType === 'quantityPrice') {
+          return (item.quantity || 0) * (item.unitPrice || 0);
+        } else if (item.sourceType === 'directAmount') {
+          return item.directAmount || 0;
+        }
+        return 0;
+      })();
+
+      const taxRate = Number(item.taxRate) || 0;
+      const taxRateDecimal = taxRate / 100;
+      // 进项税额 = 含税金额 / (1 + 税率) × 税率
+      yearInputTax += baseAmount * productionRate * taxRateDecimal / (1 + taxRateDecimal);
+    });
+
+    return yearInputTax;
+  };
+
+  // 计算外购燃料及动力费进项税额的运营期列值
+  const calculateFuelPowerInputTaxForYear = (year: number): number => {
+    if (!costConfig.fuelPower.items || costConfig.fuelPower.items.length === 0) {
+      return 0;
+    }
+
+    const productionRate = costConfig.fuelPower.applyProductionRate
+      ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+      : 1;
+
+    let yearInputTax = 0;
+    costConfig.fuelPower.items.forEach((item: any) => {
+      let consumption = item.consumption || 0;
+      let amount = 0;
+      // 对汽油和柴油进行特殊处理：单价×数量/10000
+      if (['汽油', '柴油'].includes(item.name)) {
+        amount = (item.price || 0) * consumption / 10000 * productionRate;
+      } else {
+        amount = consumption * (item.price || 0) * productionRate;
+      }
+      
+      const taxRate = (item.taxRate || 13) / 100;
+      // 进项税额 = 含税金额 / (1 + 税率) × 税率
+      yearInputTax += amount * taxRate / (1 + taxRate);
+    });
+
+    return yearInputTax;
+  };
+
+  // 计算总进项税额（外购原材料费 + 外购燃料及动力费）
+  const calculateTotalInputTaxForYear = (year: number): number => {
+    return calculateRawMaterialsInputTaxForYear(year) + calculateFuelPowerInputTaxForYear(year);
+  };
+
+  // 计算指定年份的增值税额
+  const calculateVatForYear = (year: number): number => {
+    // 计算销项税额
+    const yearOutputTax = revenueItems.reduce((sum, item) => {
+      const productionRate = getProductionRateForYear(productionRates, year);
+      const revenue = calculateYearlyRevenue(item, year, productionRate);
+      // 销项税额 = 含税收入 - 不含税收入
+      return sum + (revenue - revenue / (1 + item.vatRate));
+    }, 0);
+    
+    // 计算进项税额
+    const yearInputTax = calculateTotalInputTaxForYear(year);
+    
+    // 增值税 = 销项税额 - 进项税额
+    return yearOutputTax - yearInputTax;
+  };
+
+  // 计算其他税费及附加的函数
+  const calculateOtherTaxesAndSurcharges = (year: number): number => {
+    // 使用增值税计算其他税费及附加
+    const vatAmount = calculateVatForYear(year);
+    // 城市建设维护税税率（默认7%，市区）
+    const urbanTaxRate = 0.07;
+    // 教育费附加税率（3%+地方2%=5%）
+    const educationTaxRate = 0.05;
+    // 其他税费及附加 = 增值税 × (城市建设维护税税率 + 教育费附加税率)
+    return vatAmount * (urbanTaxRate + educationTaxRate);
+  };
+
   // 计算增值税、房产税等及附加的函数
   const calculateVatAndTaxes = (year?: number): number => {
     if (year !== undefined) {
@@ -882,8 +969,19 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
 
   // 计算税金及附加
   const calculateTaxAndSurcharges = (year?: number): number => {
-    // 目前返回0，实际应该根据增值税等计算
-    return 0;
+    if (year !== undefined) {
+      // 利润与利润分配表的税金附加等 = 营业收入估算表的其他税费及附加
+      return calculateOtherTaxesAndSurcharges(year);
+    } else {
+      // 计算所有年份的税金及附加合计
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateTaxAndSurcharges(year);
+      });
+      return totalSum;
+    }
   };
 
   // 计算总成本费用
