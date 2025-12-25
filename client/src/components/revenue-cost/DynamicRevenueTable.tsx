@@ -1740,9 +1740,6 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                     },
                     label: {
                       color: '#000000', // 黑色文字
-                      '&[data-active]': {
-                        color: '#ffffff', // 白色选中文字
-                      },
                     },
                   }}
                 />
