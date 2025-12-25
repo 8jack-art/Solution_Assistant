@@ -1358,7 +1358,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       calculateInvestment();
     }, [depreciationData, context?.projectId]);
 
-    // 导出营业成本估算表为Excel
+    // 导出总成本费用估算表为Excel
     const handleExportCostTable = () => {
       if (!context) {
         notifications.show({
@@ -1766,14 +1766,14 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       // 创建工作簿和工作表
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '营业成本估算表');
+      XLSX.utils.book_append_sheet(wb, ws, '总成本费用估算表');
 
       // 导出文件
-      XLSX.writeFile(wb, `营业成本估算表_${context.projectName || '项目'}.xlsx`);
+      XLSX.writeFile(wb, `总成本费用估算表_${context.projectName || '项目'}.xlsx`);
 
       notifications.show({
         title: '导出成功',
-        message: '营业成本估算表已导出为Excel文件',
+        message: '总成本费用估算表已导出为Excel文件',
         color: 'green',
       });
     };
@@ -2507,7 +2507,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       <Stack gap="md">
         <Group justify="space-between" align="center">
           <Text size="md" fw={600} c="#1D2129">
-            营业成本配置
+            总成本费用配置
           </Text>
           <Group gap="xs">
             <Tooltip label="查看成本详表">
@@ -2607,7 +2607,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         title={
           <Group justify="space-between" w="100%">
             <Text size="md">
-              📊 营业成本估算表
+              📊 总成本费用估算表
             </Text>
             <Tooltip label="导出Excel">
               <ActionIcon
