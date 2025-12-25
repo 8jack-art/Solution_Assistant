@@ -2537,7 +2537,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Text size="sm" fw={500} mb="xs">年补贴收入</Text>
             <NumberInput
               value={tempSubsidyIncome}
-              onChange={(value) => setTempSubsidyIncome(value || 0)}
+              onChange={(value) => setTempSubsidyIncome(typeof value === 'number' ? value : 0)}
               min={0}
               step={1000}
               placeholder="请输入年补贴收入"
@@ -2548,11 +2548,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Text size="sm" fw={500} mb="xs">所得税率 (%)</Text>
             <NumberInput
               value={tempIncomeTaxRate}
-              onChange={(value) => setTempIncomeTaxRate(value || 0)}
+              onChange={(value) => setTempIncomeTaxRate(typeof value === 'number' ? value : 0)}
               min={0}
               max={100}
               step={0.1}
-              precision={1}
               placeholder="请输入所得税率"
             />
           </div>
@@ -2561,11 +2560,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Text size="sm" fw={500} mb="xs">提取公积金比例 (%)</Text>
             <NumberInput
               value={tempStatutorySurplusRate}
-              onChange={(value) => setTempStatutorySurplusRate(value || 0)}
+              onChange={(value) => setTempStatutorySurplusRate(typeof value === 'number' ? value : 0)}
               min={0}
               max={100}
               step={0.1}
-              precision={1}
               placeholder="请提取公积金比例"
             />
           </div>
