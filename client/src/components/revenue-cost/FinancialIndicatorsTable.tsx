@@ -118,6 +118,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [incomeTaxRate, setIncomeTaxRate] = useState(25)
   const [statutorySurplusRate, setStatutorySurplusRate] = useState(10)
   
+  // 设置弹窗中的临时状态
+  const [tempSubsidyIncome, setTempSubsidyIncome] = useState(0)
+  const [tempIncomeTaxRate, setTempIncomeTaxRate] = useState(25)
+  const [tempStatutorySurplusRate, setTempStatutorySurplusRate] = useState(10)
+  
   // 从localStorage加载设置
   useEffect(() => {
     const savedSubsidyIncome = localStorage.getItem('profitSubsidyIncome')
@@ -126,20 +131,29 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     
     if (savedSubsidyIncome !== null) {
       setSubsidyIncome(Number(savedSubsidyIncome))
+      setTempSubsidyIncome(Number(savedSubsidyIncome))
     }
     if (savedIncomeTaxRate !== null) {
       setIncomeTaxRate(Number(savedIncomeTaxRate))
+      setTempIncomeTaxRate(Number(savedIncomeTaxRate))
     }
     if (savedStatutorySurplusRate !== null) {
       setStatutorySurplusRate(Number(savedStatutorySurplusRate))
+      setTempStatutorySurplusRate(Number(savedStatutorySurplusRate))
     }
   }, [])
   
   // 保存设置到localStorage
   const saveProfitSettings = () => {
-    localStorage.setItem('profitSubsidyIncome', subsidyIncome.toString())
-    localStorage.setItem('profitIncomeTaxRate', incomeTaxRate.toString())
-    localStorage.setItem('profitStatutorySurplusRate', statutorySurplusRate.toString())
+    // 将临时状态值保存到实际状态
+    setSubsidyIncome(tempSubsidyIncome)
+    setIncomeTaxRate(tempIncomeTaxRate)
+    setStatutorySurplusRate(tempStatutorySurplusRate)
+    
+    // 保存到localStorage
+    localStorage.setItem('profitSubsidyIncome', tempSubsidyIncome.toString())
+    localStorage.setItem('profitIncomeTaxRate', tempIncomeTaxRate.toString())
+    localStorage.setItem('profitStatutorySurplusRate', tempStatutorySurplusRate.toString())
     
     notifications.show({
       title: '保存成功',
@@ -154,6 +168,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     setTimeout(() => {
       setShowProfitDistributionModal(true)
     }, 100)
+  }
+  
+  // 打开设置弹窗时，将当前状态复制到临时状态
+  const openProfitSettingsModal = () => {
+    setTempSubsidyIncome(subsidyIncome)
+    setTempIncomeTaxRate(incomeTaxRate)
+    setTempStatutorySurplusRate(statutorySurplusRate)
+    setShowProfitSettingsModal(true)
   }
   
   // 配置按钮数据
@@ -193,6 +215,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   // 计算营业收入的函数（不含税收入 = 含税收入 - 销项税额）
   const calculateOperatingRevenue = (year?: number): number => {
     if (year !== undefined) {
+      // 优先从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
+      if (revenueTableData && revenueTableData.rows) {
+        const row = revenueTableData.rows.find(r => r.序号 === '1');
+        if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
+          return row.运营期[year - 1];
+        }
+      }
+      // 如果没有表格数据，使用原有计算逻辑作为后备
       // 计算指定年份的营业收入（不含税）
       // 利润与利润分配表的营业收入 = 营业收入估算表的营业收入 - 销项税额
       const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
@@ -206,6 +236,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         return sum + nonTaxRevenue;
       }, 0);
     } else {
+      // 优先从 revenueTableData 中获取"营业收入"（序号1）的合计数据
+      if (revenueTableData && revenueTableData.rows) {
+        const row = revenueTableData.rows.find(r => r.序号 === '1');
+        if (row && row.合计 !== undefined) {
+          return row.合计;
+        }
+      }
+      // 如果没有表格数据，使用原有计算逻辑作为后备
       // 计算所有年份的营业收入合计
       if (!context) return 0;
       const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
@@ -235,19 +273,37 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     
     // 只在运营期最后一年回收
     if (year !== undefined && year === context.operationYears) {
-      // 计算固定资产余值 = 建安费原值 × 残值率 + 设备原值 × 残值率
-      // 这里使用默认残值率5%，实际应该从配置中获取
-      const constructionResidualRate = 0.05;
-      const equipmentResidualRate = 0.05;
+      // 计算固定资产余值 = 固定资产净值 + 无形资产净值
+      // 固定资产净值 = 原值 - 累计折旧摊销额
+      // 无形资产净值 = 原值 - 累计折旧摊销额
       
-      // 从折旧数据中获取原值
+      // 从折旧数据中获取固定资产净值（序号A和D）
       const rowA = depreciationData.find(row => row.序号 === 'A');
       const rowD = depreciationData.find(row => row.序号 === 'D');
       
-      const constructionOriginalValue = rowA?.原值 || 0;
-      const equipmentOriginalValue = rowD?.原值 || 0;
+      // 计算固定资产净值
+      let fixedAssetsNetValue = 0;
+      if (rowA && rowA.原值 !== undefined && rowA.分年数据) {
+        const totalDepreciation = rowA.分年数据.reduce((sum: number, val: number) => sum + val, 0);
+        fixedAssetsNetValue = (rowA.原值 || 0) - totalDepreciation;
+      }
       
-      return constructionOriginalValue * constructionResidualRate + equipmentOriginalValue * equipmentResidualRate;
+      if (rowD && rowD.原值 !== undefined && rowD.分年数据) {
+        const totalDepreciation = rowD.分年数据.reduce((sum: number, val: number) => sum + val, 0);
+        fixedAssetsNetValue += (rowD.原值 || 0) - totalDepreciation;
+      }
+      
+      // 从折旧数据中获取无形资产净值（序号E）
+      const rowE = depreciationData.find(row => row.序号 === 'E');
+      
+      // 计算无形资产净值
+      let intangibleAssetsNetValue = 0;
+      if (rowE && rowE.原值 !== undefined && rowE.分年数据) {
+        const totalAmortization = rowE.分年数据.reduce((sum: number, val: number) => sum + val, 0);
+        intangibleAssetsNetValue = (rowE.原值 || 0) - totalAmortization;
+      }
+      
+      return fixedAssetsNetValue + intangibleAssetsNetValue;
     }
     
     if (year === undefined) {
@@ -325,6 +381,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   // 计算经营成本的函数
   const calculateOperatingCost = (year?: number): number => {
     if (year !== undefined) {
+      // 优先从 costTableData 中获取"经营成本"（序号1）的运营期列数据
+      if (costTableData && costTableData.rows) {
+        const row = costTableData.rows.find(r => r.序号 === '1');
+        if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
+          return row.运营期[year - 1];
+        }
+      }
+      // 如果没有表格数据，使用原有计算逻辑作为后备
       // 计算指定年份的经营成本
       const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
       
@@ -424,6 +488,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       
       return rawMaterialsCost + fuelPowerCost + wagesCost + repairCost + otherExpensesCost;
     } else {
+      // 优先从 costTableData 中获取"经营成本"（序号1）的合计数据
+      if (costTableData && costTableData.rows) {
+        const row = costTableData.rows.find(r => r.序号 === '1');
+        if (row && row.合计 !== undefined) {
+          return row.合计;
+        }
+      }
+      // 如果没有表格数据，使用原有计算逻辑作为后备
       // 计算所有年份的经营成本合计
       if (!context) return 0;
       const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
@@ -1452,11 +1524,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
       { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
       { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateTaxableIncome(y) },
-      { id: '8', name: '所得税(25%)', calc: (y?: number) => calculateIncomeTax(y) },
+      { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
       { id: '10', name: '期初未分配利润', calc: (y?: number) => y !== undefined ? calculateInitialUndistributedProfit(y) : 0 },
       { id: '11', name: '可供分配利润（9+10）', calc: (y?: number) => calculateDistributableProfit(y) },
-      { id: '12', name: '提取法定盈余公积金(10%)', calc: (y?: number) => calculateStatutorySurplus(y) },
+      { id: '12', name: `提取法定盈余公积金(${statutorySurplusRate}%)`, calc: (y?: number) => calculateStatutorySurplus(y) },
       { id: '13', name: '可供投资者分配的利润（11-12）', calc: (y?: number) => calculateInvestorDistributableProfit(y) },
       { id: '14', name: '应付优先股股利', calc: (y?: number) => calculatePreferredStockDividend(y) },
       { id: '15', name: '提取任意盈余公积金', calc: (y?: number) => calculateArbitrarySurplus(y) },
@@ -1515,11 +1587,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
       { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
       { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateTaxableIncome(y) },
-      { id: '8', name: '所得税(25%)', calc: (y?: number) => calculateIncomeTax(y) },
+      { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
       { id: '10', name: '期初未分配利润', calc: (y?: number) => y !== undefined ? calculateInitialUndistributedProfit(y) : 0 },
       { id: '11', name: '可供分配利润（9+10）', calc: (y?: number) => calculateDistributableProfit(y) },
-      { id: '12', name: '提取法定盈余公积金(10%)', calc: (y?: number) => calculateStatutorySurplus(y) },
+      { id: '12', name: `提取法定盈余公积金(${statutorySurplusRate}%)`, calc: (y?: number) => calculateStatutorySurplus(y) },
       { id: '13', name: '可供投资者分配的利润（11-12）', calc: (y?: number) => calculateInvestorDistributableProfit(y) },
       { id: '14', name: '应付优先股股利', calc: (y?: number) => calculatePreferredStockDividend(y) },
       { id: '15', name: '提取任意盈余公积金', calc: (y?: number) => calculateArbitrarySurplus(y) },
@@ -1606,7 +1678,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>现金流入</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
                   // 现金流入合计 = 运营期各年数值的总和
                   let totalSum = 0;
@@ -1650,7 +1722,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>营业收入</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateOperatingRevenue(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1674,7 +1746,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.2</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>补贴收入</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateSubsidyIncome(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1698,7 +1770,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.3</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>回收固定资产余值</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateFixedAssetResidual(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1722,7 +1794,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.4</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>回收流动资金</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateWorkingCapitalRecovery(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1746,7 +1818,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>现金流出</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
                   // 现金流出合计 = 建设期和运营期各年数值的总和
                   let totalSum = 0;
@@ -1795,7 +1867,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.1</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>建设投资</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateConstructionInvestment(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1812,7 +1884,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.2</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>流动资金</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateWorkingCapital(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1829,7 +1901,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.3</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>经营成本</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateOperatingCost(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1853,7 +1925,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.4</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>增值税、房产税等及附加</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateVatAndTaxes(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1877,7 +1949,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.5</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>维持运营投资</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateMaintenanceInvestment(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -1901,7 +1973,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>3</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>所得税前净现金流量（1-2）</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
                   // 所得税前净现金流量合计 = 现金流入合计 - 现金流出合计
                   let totalInflow = 0;
@@ -1962,7 +2034,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>4</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税前净现金流量</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
                   // 累计所得税前净现金流量合计 = 最后一年累计值
                   let cumulativeCashFlow = 0;
@@ -2033,7 +2105,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>5</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>调整所得税</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {formatNumberNoRounding(calculateAdjustedIncomeTax(undefined))}
               </Table.Td>
               {years.map((year) => {
@@ -2057,7 +2129,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>6</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>所得税后净现金流量</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
                   // 所得税后净现金流量合计 = 现金流入合计 - 现金流出合计 - 调整所得税合计
                   let totalInflow = 0;
@@ -2122,7 +2194,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>7</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税后净现金流量</Table.Td>
-              <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
                   // 累计所得税后净现金流量合计 = 最后一年累计值
                   let cumulativeCashFlow = 0;
@@ -2379,7 +2451,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   variant="light"
                   color="blue"
                   size={16}
-                  onClick={() => setShowProfitSettingsModal(true)}
+                  onClick={openProfitSettingsModal}
                 >
                   <IconSettings size={16} />
                 </ActionIcon>
@@ -2464,8 +2536,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           <div>
             <Text size="sm" fw={500} mb="xs">年补贴收入</Text>
             <NumberInput
-              value={subsidyIncome}
-              onChange={(value) => setSubsidyIncome(value || 0)}
+              value={tempSubsidyIncome}
+              onChange={(value) => setTempSubsidyIncome(value || 0)}
               min={0}
               step={1000}
               placeholder="请输入年补贴收入"
@@ -2475,8 +2547,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           <div>
             <Text size="sm" fw={500} mb="xs">所得税率 (%)</Text>
             <NumberInput
-              value={incomeTaxRate}
-              onChange={(value) => setIncomeTaxRate(value || 0)}
+              value={tempIncomeTaxRate}
+              onChange={(value) => setTempIncomeTaxRate(value || 0)}
               min={0}
               max={100}
               step={0.1}
@@ -2488,8 +2560,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           <div>
             <Text size="sm" fw={500} mb="xs">提取公积金比例 (%)</Text>
             <NumberInput
-              value={statutorySurplusRate}
-              onChange={(value) => setStatutorySurplusRate(value || 0)}
+              value={tempStatutorySurplusRate}
+              onChange={(value) => setTempStatutorySurplusRate(value || 0)}
               min={0}
               max={100}
               step={0.1}

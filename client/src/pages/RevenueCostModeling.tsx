@@ -468,27 +468,35 @@ const RevenueCostModeling: React.FC = () => {
 
     // A. 房屋（建筑物）
     const constructionAnnualDepreciation = constructionOriginalValue * (1 - constructionResidualRate / 100) / constructionDepreciationYears
+    const constructionYearlyData = Array.from({ length: operationYears }, (_, i) => {
+      // 折旧年限内，每年按固定额度折旧
+      return i < constructionDepreciationYears ? constructionAnnualDepreciation : 0
+    })
+    // 计算有数值的年份的平均值
+    const constructionNonZeroYears = constructionYearlyData.filter(val => val > 0).length
+    const constructionAverageAnnualAmount = constructionNonZeroYears > 0 ? constructionYearlyData.reduce((sum, val) => sum + val, 0) / constructionNonZeroYears : 0
     data.push({
       序号: 'A',
       资产类别: '🏢 房屋（建筑物）',
       原值: constructionOriginalValue,
-      年折旧摊销额: constructionAnnualDepreciation,
-      分年数据: Array.from({ length: operationYears }, (_, i) => {
-        // 折旧年限内，每年按固定额度折旧
-        return i < constructionDepreciationYears ? constructionAnnualDepreciation : 0
-      })
+      年折旧摊销额: constructionAverageAnnualAmount,
+      分年数据: constructionYearlyData
     })
 
     // D. 设备购置
     const equipmentAnnualDepreciation = equipmentOriginalValue * (1 - equipmentResidualRate / 100) / equipmentDepreciationYears
+    const equipmentYearlyData = Array.from({ length: operationYears }, (_, i) => {
+      return i < equipmentDepreciationYears ? equipmentAnnualDepreciation : 0
+    })
+    // 计算有数值的年份的平均值
+    const equipmentNonZeroYears = equipmentYearlyData.filter(val => val > 0).length
+    const equipmentAverageAnnualAmount = equipmentNonZeroYears > 0 ? equipmentYearlyData.reduce((sum, val) => sum + val, 0) / equipmentNonZeroYears : 0
     data.push({
       序号: 'D',
       资产类别: '⚙️ 设备购置',
       原值: equipmentOriginalValue,
-      年折旧摊销额: equipmentAnnualDepreciation,
-      分年数据: Array.from({ length: operationYears }, (_, i) => {
-        return i < equipmentDepreciationYears ? equipmentAnnualDepreciation : 0
-      })
+      年折旧摊销额: equipmentAverageAnnualAmount,
+      分年数据: equipmentYearlyData
     })
 
     // E. 无形资产（土地） - 从投资估算 partB 土地费用获取
@@ -496,14 +504,18 @@ const RevenueCostModeling: React.FC = () => {
     const intangibleAnnualAmortization = intangibleOriginalValue > 0
       ? intangibleOriginalValue * (1 - intangibleResidualRate / 100) / intangibleAmortizationYears
       : 0
+    const intangibleYearlyData = Array.from({ length: operationYears }, (_, i) => {
+      return i < intangibleAmortizationYears ? intangibleAnnualAmortization : 0
+    })
+    // 计算有数值的年份的平均值
+    const intangibleNonZeroYears = intangibleYearlyData.filter(val => val > 0).length
+    const intangibleAverageAnnualAmount = intangibleNonZeroYears > 0 ? intangibleYearlyData.reduce((sum, val) => sum + val, 0) / intangibleNonZeroYears : 0
     data.push({
       序号: 'E',
       资产类别: '🌍 无形资产（土地）',
       原值: intangibleOriginalValue,
-      年折旧摊销额: intangibleAnnualAmortization,
-      分年数据: Array.from({ length: operationYears }, (_, i) => {
-        return i < intangibleAmortizationYears ? intangibleAnnualAmortization : 0
-      })
+      年折旧摊销额: intangibleAverageAnnualAmount,
+      分年数据: intangibleYearlyData
     })
 
     console.log('📉 折旧摊销表数据:', {
@@ -1292,8 +1304,45 @@ const RevenueCostModeling: React.FC = () => {
                   </div>
                 )}
             
-                {/* 关闭按钮 */}
-                <Group justify="flex-end">
+                {/* 净值信息标签 */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '16px',
+                  padding: '8px 0',
+                  borderTop: '1px solid #E5E6EB'
+                }}>
+                  <div style={{ display: 'flex', gap: '24px' }}>
+                    <Text size="sm" fw={500} c="#1D2129">
+                      固定资产净值为：
+                      <Text span fw={700} c="#165DFF">
+                        {(depreciationData.filter(d => ['A', 'D'].includes(d.序号)).reduce((sum, row) => {
+                          // 计算固定资产净值 = 原值 - 累计折旧
+                          const totalDepreciation = row.分年数据.reduce((acc, val) => acc + val, 0);
+                          return sum + (row.原值 - totalDepreciation);
+                        }, 0)).toFixed(2)}万元
+                      </Text>
+                      ，
+                      无形资产净值为：
+                      <Text span fw={700} c="#00C48C">
+                        {(depreciationData.filter(d => d.序号 === 'E').reduce((sum, row) => {
+                          // 计算无形资产净值 = 原值 - 累计摊销
+                          const totalAmortization = row.分年数据.reduce((acc, val) => acc + val, 0);
+                          return sum + (row.原值 - totalAmortization);
+                        }, 0)).toFixed(2)}万元
+                      </Text>
+                      。
+                      合计：
+                      <Text span fw={700} c="#F7BA1E">
+                        {(depreciationData.reduce((sum, row) => {
+                          // 计算总净值 = 原值 - 累计折旧/摊销
+                          const totalAmount = row.分年数据.reduce((acc, val) => acc + val, 0);
+                          return sum + (row.原值 - totalAmount);
+                        }, 0)).toFixed(2)}万元
+                      </Text>
+                    </Text>
+                  </div>
                   <Button 
                     onClick={() => setDepreciationTableOpened(false)}
                     style={{ 
@@ -1303,7 +1352,7 @@ const RevenueCostModeling: React.FC = () => {
                   >
                     关闭
                   </Button>
-                </Group>
+                </div>
               </Stack>
             </Modal>
 

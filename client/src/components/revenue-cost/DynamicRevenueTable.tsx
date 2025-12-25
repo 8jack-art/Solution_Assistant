@@ -1767,10 +1767,18 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>营业收入</Table.Td>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                      {revenueItems.reduce((sum, item) => {
-                        const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, 1)
-                        return sum + calculateYearlyRevenue(item, 1, productionRate)
-                      }, 0).toFixed(2)}
+                      {(() => {
+                        // 计算运营期各年营业收入的总和
+                        let totalRevenue = 0;
+                        years.forEach((year) => {
+                          const yearTotal = revenueItems.reduce((sum, item) => {
+                            const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+                            return sum + calculateYearlyRevenue(item, year, productionRate)
+                          }, 0);
+                          totalRevenue += yearTotal;
+                        });
+                        return totalRevenue.toFixed(2);
+                      })()}
                     </Table.Td>
                     {years.map((year) => {
                       const yearTotal = revenueItems.reduce((sum, item) => {
