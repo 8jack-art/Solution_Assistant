@@ -60,6 +60,15 @@ const getDefaultCostConfig = (): CostConfig => ({
   }
 })
 
+// 默认贷款配置
+const getDefaultLoanConfig = (): LoanConfig => ({
+  loanAmount: 1000,      // 默认1000万元
+  interestRate: 5.0,    // 默认年利率5%
+  loanTerm: 10,         // 默认10年
+  gracePeriod: 2,       // 默认2年宽限期
+  repaymentMethod: 'equal-installment' // 默认等额本息
+})
+
 // 成本配置类型定义
 interface WageItem {
   id: string
@@ -356,6 +365,48 @@ export interface CostTableData {
 }
 
 /**
+ * 利润与利润分配表数据结构
+ */
+export interface ProfitDistributionTableRow {
+  序号: string;           // "1", "1.1", "2", "3" 等
+  项目: string;           // "营业收入", "税金附加等", "总成本费用" 等
+  合计: number;           // 合计列数值
+  运营期: number[];       // 各年数据数组
+}
+
+export interface ProfitDistributionTableData {
+  rows: ProfitDistributionTableRow[];   // 所有行数据
+  updatedAt: string;      // 最后更新时间
+}
+
+/**
+ * 借款还本付息计划表数据结构
+ */
+export interface LoanRepaymentTableRow {
+  序号: string;           // "1", "1.1", "1.2", "2" 等
+  项目: string;           // "借款还本付息计划", "期初借款余额" 等
+  合计: number | null;    // 合计列数值
+  建设期: number[];       // 建设期各年数据数组
+  运营期: number[];       // 运营期各年数据数组
+}
+
+export interface LoanRepaymentTableData {
+  rows: LoanRepaymentTableRow[]; // 所有行数据
+  updatedAt: string;              // 最后更新时间
+}
+
+/**
+ * 贷款配置参数
+ */
+export interface LoanConfig {
+  loanAmount: number;        // 贷款金额（万元）
+  interestRate: number;      // 年利率（%）
+  loanTerm: number;          // 贷款期限（年）
+  gracePeriod: number;       // 宽限期（年，只还息不还本）
+  repaymentMethod: 'equal-installment' | 'equal-principal'; // 还款方式：等额本息或等额本金
+}
+
+/**
  * 收入成本建模状态接口
  */
 interface RevenueCostState {
@@ -379,6 +430,11 @@ interface RevenueCostState {
   // ========== 表格数据 ==========
   revenueTableData: RevenueTableData | null
   costTableData: CostTableData | null
+  profitDistributionTableData: ProfitDistributionTableData | null
+  loanRepaymentTableData: LoanRepaymentTableData | null
+  
+  // ========== 贷款配置 ==========
+  loanConfig: LoanConfig
   
   // ========== 控制状态 ==========
   currentStep: WorkflowStep
@@ -421,6 +477,12 @@ interface RevenueCostState {
   // 表格数据管理
   setRevenueTableData: (data: RevenueTableData | null) => void
   setCostTableData: (data: CostTableData | null) => void
+  setProfitDistributionTableData: (data: ProfitDistributionTableData | null) => void
+  setLoanRepaymentTableData: (data: LoanRepaymentTableData | null) => void
+  
+  // 贷款配置管理
+  setLoanConfig: (config: LoanConfig) => void
+  updateLoanConfig: (updates: Partial<LoanConfig>) => void
   
   // 步骤控制
   setCurrentStep: (step: WorkflowStep) => void
@@ -594,6 +656,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       costConfig: getDefaultCostConfig(),
       revenueTableData: null,
       costTableData: null,
+      profitDistributionTableData: null,
+      loanRepaymentTableData: null,
+      loanConfig: getDefaultLoanConfig(),
       currentStep: 'period',
       isSubmitting: false,
       isSaving: false,
@@ -763,6 +828,33 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         debouncedSave()
       },
       
+      setProfitDistributionTableData: (data) => {
+        set({ profitDistributionTableData: data })
+        // 触发自动保存
+        debouncedSave()
+      },
+      
+      setLoanRepaymentTableData: (data) => {
+        set({ loanRepaymentTableData: data })
+        // 触发自动保存
+        debouncedSave()
+      },
+      
+      // 贷款配置管理
+      setLoanConfig: (config) => {
+        set({ loanConfig: config })
+        // 触发自动保存
+        debouncedSave()
+      },
+      
+      updateLoanConfig: (updates) => {
+        set((state) => ({
+          loanConfig: { ...state.loanConfig, ...updates }
+        }))
+        // 触发自动保存
+        debouncedSave()
+      },
+      
       setCurrentStep: (step) => {
         set({ currentStep: step })
         // 触发自动保存
@@ -854,7 +946,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             costConfig: state.costConfig,
             workflow_step: state.currentStep,
             revenueTableData: state.revenueTableData,
-            costTableData: state.costTableData
+            costTableData: state.costTableData,
+            profitDistributionTableData: state.profitDistributionTableData,
+            loanRepaymentTableData: state.loanRepaymentTableData
           };
           
           console.log('💾 正在保存数据到后端:', {
@@ -909,6 +1003,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               costConfig: modelData?.costConfig || getDefaultCostConfig(),
               revenueTableData: modelData?.revenueTableData || null,
               costTableData: modelData?.costTableData || null,
+              profitDistributionTableData: modelData?.profitDistributionTableData || null,
+              loanRepaymentTableData: modelData?.loanRepaymentTableData || null,
+              loanConfig: modelData?.loanConfig || getDefaultLoanConfig(),
               currentStep: estimate.workflow_step || 'period'
             })
           }
@@ -934,6 +1031,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           productionRates: [],
           revenueTableData: null,
           costTableData: null,
+          profitDistributionTableData: null,
+          loanRepaymentTableData: null,
+          loanConfig: getDefaultLoanConfig(),
           currentStep: 'period',
           isSubmitting: false,
           isSaving: false,

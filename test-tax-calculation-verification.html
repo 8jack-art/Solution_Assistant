@@ -3,291 +3,259 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>税收计算逻辑验证测试</title>
+    <title>调整所得税计算验证</title>
     <style>
         body {
-            font-family: 'Microsoft YaHei', Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
+            font-family: Arial, sans-serif;
             max-width: 1200px;
             margin: 0 auto;
-            background-color: white;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            line-height: 1.6;
         }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .test-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        .test-section h2 {
-            color: #165DFF;
-            margin-top: 0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        .container {
+            display: flex;
+            gap: 20px;
             margin-bottom: 20px;
         }
-        th, td {
-            border: 1px solid #dee2e6;
-            padding: 8px;
-            text-align: center;
+        .box {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background-color: #f9f9f9;
         }
-        th {
-            background-color: #f8f9fa;
-            font-weight: bold;
+        .box h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
         }
-        .formula {
-            background-color: #e3f2fd;
-            padding: 10px;
+        .code-block {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
             border-radius: 4px;
+            padding: 15px;
             margin: 10px 0;
             font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
         }
-        .result {
-            background-color: #f0f9ff;
-            padding: 10px;
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px 4px;
             border-radius: 4px;
-            margin: 10px 0;
+            font-weight: bold;
         }
         .success {
             color: #28a745;
             font-weight: bold;
         }
-        .error {
-            color: #dc3545;
+        .info {
+            color: #17a2b8;
+        }
+        .warning {
+            color: #ffc107;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
             font-weight: bold;
+        }
+        .before-after {
+            display: flex;
+            gap: 20px;
+        }
+        .before, .after {
+            flex: 1;
         }
     </style>
 </head>
 <body>
+    <h1>调整所得税计算逻辑修改验证</h1>
+    
     <div class="container">
-        <h1>营业收入、营业税金及附加和增值税估算表 - 计算逻辑验证</h1>
+        <div class="box">
+            <h3>修改前</h3>
+            <p>调整所得税的计算逻辑原本从 <span class="highlight">revenueTableData</span> 中获取序号为"19"的行数据。</p>
+            <div class="code-block">
+// 计算调整所得税的函数
+const calculateAdjustedIncomeTax = (year?: number): number => {
+  if (year !== undefined) {
+    // 从利润与利润分配表中获取"19 息税前利润（利润总额+利息支出）"运营期列数据
+    if (revenueTableData && revenueTableData.rows) {
+      const row = revenueTableData.rows.find(r => r.序号 === '19');
+      if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
+        // 使用设置的所得税率计算调整所得税
+        return row.运营期[year - 1] * (incomeTaxRate / 100);
+      }
+    }
+    // 如果没有表格数据，使用原有计算逻辑作为后备
+    return 0;
+  } else {
+    // 类似的逻辑处理合计数据
+    // ...
+  }
+};
+            </div>
+        </div>
         
-        <div class="test-section">
-            <h2>测试场景设置</h2>
-            <p><strong>假设条件：</strong></p>
-            <ul>
-                <li>运营期：3年</li>
-                <li>收入项：1个，名称"产品销售"，增值税率13%</li>
-                <li>第1年收入：100万元（达产率75%）</li>
-                <li>第2年收入：113.33万元（达产率85%）</li>
-                <li>第3年收入：133.33万元（达产率100%）</li>
-                <li>进项税额：每年10万元</li>
-                <li>城市建设维护税税率：7%</li>
-                <li>教育费附加税率：5%（3%+地方2%）</li>
-            </ul>
-        </div>
-
-        <div class="test-section">
-            <h2>计算公式验证</h2>
-            
-            <h3>1. 增值税计算</h3>
-            <div class="formula">
-                增值税 = 销项税额 - 进项税额<br>
-                销项税额 = 含税收入 - 不含税收入<br>
-                不含税收入 = 含税收入 / (1 + 增值税率)
-            </div>
-            
-            <h3>2. 城市建设维护税计算</h3>
-            <div class="formula">
-                城市建设维护税 = 增值税 × 城市建设维护税税率(7%)
-            </div>
-            
-            <h3>3. 教育费附加计算</h3>
-            <div class="formula">
-                教育费附加 = 增值税 × 教育费附加税率(5%)
-            </div>
-        </div>
-
-        <div class="test-section">
-            <h2>计算结果验证表</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>序号</th>
-                        <th>收入项目</th>
-                        <th>合计</th>
-                        <th>运营期1</th>
-                        <th>运营期2</th>
-                        <th>运营期3</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>1</td>
-                        <td>营业收入</td>
-                        <td id="revenue-total">346.66</td>
-                        <td>100.00</td>
-                        <td>113.33</td>
-                        <td>133.33</td>
-                    </tr>
-                    <tr>
-                        <td>2</td>
-                        <td>增值税</td>
-                        <td id="vat-total">28.96</td>
-                        <td id="vat-1">8.50</td>
-                        <td id="vat-2">9.96</td>
-                        <td id="vat-3">10.50</td>
-                    </tr>
-                    <tr>
-                        <td>3.1</td>
-                        <td>城市建设维护税(7%)</td>
-                        <td id="urban-tax-total">2.03</td>
-                        <td id="urban-tax-1">0.60</td>
-                        <td id="urban-tax-2">0.70</td>
-                        <td id="urban-tax-3">0.74</td>
-                    </tr>
-                    <tr>
-                        <td>3.2</td>
-                        <td>教育费附加(3%+地方2%)</td>
-                        <td id="education-tax-total">1.45</td>
-                        <td id="education-tax-1">0.43</td>
-                        <td id="education-tax-2">0.50</td>
-                        <td id="education-tax-3">0.53</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="test-section">
-            <h2>验证结果</h2>
-            <div id="verification-results">
-                <div class="result">
-                    <strong>验证城市建设维护税计算：</strong><br>
-                    第1年：8.50 × 7% = 0.60 <span class="success">✓</span><br>
-                    第2年：9.96 × 7% = 0.70 <span class="success">✓</span><br>
-                    第3年：10.50 × 7% = 0.74 <span class="success">✓</span><br>
-                    合计：0.60 + 0.70 + 0.74 = 2.03 <span class="success">✓</span>
-                </div>
-                
-                <div class="result">
-                    <strong>验证教育费附加计算：</strong><br>
-                    第1年：8.50 × 5% = 0.43 <span class="success">✓</span><br>
-                    第2年：9.96 × 5% = 0.50 <span class="success">✓</span><br>
-                    第3年：10.50 × 5% = 0.53 <span class="success">✓</span><br>
-                    合计：0.43 + 0.50 + 0.53 = 1.45 <span class="success">✓</span>
-                </div>
-                
-                <div class="result">
-                    <strong>验证合计列计算：</strong><br>
-                    城市建设维护税合计 = 各运营期数据之和 <span class="success">✓</span><br>
-                    教育费附加合计 = 各运营期数据之和 <span class="success">✓</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="test-section">
-            <h2>修改总结</h2>
-            <div class="result">
-                <h3>✅ 已完成的修改：</h3>
-                <ol>
-                    <li><strong>城市建设维护税计算公式</strong>：从基于销项税额改为基于增值税额</li>
-                    <li><strong>教育费附加计算公式</strong>：从基于销项税额改为基于增值税额</li>
-                    <li><strong>合计列计算</strong>：确保正确计算所有运营期数据的总和</li>
-                    <li><strong>Excel导出功能</strong>：同步更新导出逻辑，确保与显示逻辑一致</li>
-                </ol>
-                
-                <h3>🔧 核心修改点：</h3>
-                <ul>
-                    <li>新增 <code>calculateVatForYear()</code> 函数，统一计算各年份增值税额</li>
-                    <li>城市建设维护税：使用 <code>calculateVatForYear(year) * urbanTaxRate</code></li>
-                    <li>教育费附加：使用 <code>calculateVatForYear(year) * 0.05</code></li>
-                    <li>合计列：正确累加所有运营期数据</li>
-                </ul>
+        <div class="box">
+            <h3>修改后</h3>
+            <p>现在调整所得税的计算逻辑从 <span class="highlight success">profitDistributionTableData</span> 中获取序号为"19"的行数据。</p>
+            <div class="code-block">
+// 计算调整所得税的函数
+const calculateAdjustedIncomeTax = (year?: number): number => {
+  if (year !== undefined) {
+    // 优先从利润与利润分配表中获取"19 息税前利润（利润总额+利息支出）"运营期列数据
+    if (profitDistributionTableData && profitDistributionTableData.rows) {
+      const row = profitDistributionTableData.rows.find(r => r.序号 === '19');
+      if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
+        // 使用设置的所得税率计算调整所得税
+        return row.运营期[year - 1] * (incomeTaxRate / 100);
+      }
+    }
+    // 如果没有利润与利润分配表数据，使用原有计算逻辑作为后备
+    return 0;
+  } else {
+    // 优先从利润与利润分配表中获取"19 息税前利润（利润总额+利息支出）"合计数据
+    if (profitDistributionTableData && profitDistributionTableData.rows) {
+      const row = profitDistributionTableData.rows.find(r => r.序号 === '19');
+      if (row && row.合计 !== undefined) {
+        // 使用设置的所得税率计算调整所得税合计
+        return row.合计 * (incomeTaxRate / 100);
+      }
+    }
+    // 如果没有利润与利润分配表数据，使用原有计算逻辑作为后备
+    // 计算所有年份的调整所得税合计
+    if (!context) return 0;
+    const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+    let totalSum = 0;
+    years.forEach((year) => {
+      totalSum += calculateAdjustedIncomeTax(year);
+    });
+    return totalSum;
+  }
+};
             </div>
         </div>
     </div>
+    
+    <h2>数据结构变更</h2>
+    
+    <div class="container">
+        <div class="box">
+            <h3>新增数据结构</h3>
+            <p>在 <code>revenueCostStore.ts</code> 中添加了利润与利润分配表的数据结构：</p>
+            <div class="code-block">
+// 利润与利润分配表数据结构
+export interface ProfitDistributionTableRow {
+  序号: string;           // "1", "1.1", "2", "3" 等
+  项目: string;           // "营业收入", "税金附加等", "总成本费用" 等
+  合计: number;           // 合计列数值
+  运营期: number[];       // 各年数据数组
+}
 
-    <script>
-        // 验证计算逻辑的JavaScript代码
-        function verifyCalculations() {
-            // 测试数据
-            const revenues = [100, 113.33, 133.33];
-            const vatRate = 0.13;
-            const inputTax = 10;
-            const urbanTaxRate = 0.07;
-            const educationTaxRate = 0.05;
-            
-            let totalVat = 0;
-            let totalUrbanTax = 0;
-            let totalEducationTax = 0;
-            
-            console.log("=== 税收计算验证 ===");
-            
-            revenues.forEach((revenue, index) => {
-                const year = index + 1;
-                
-                // 计算销项税额
-                const outputTax = revenue - (revenue / (1 + vatRate));
-                
-                // 计算增值税
-                const vat = outputTax - inputTax;
-                totalVat += vat;
-                
-                // 计算城市建设维护税
-                const urbanTax = vat * urbanTaxRate;
-                totalUrbanTax += urbanTax;
-                
-                // 计算教育费附加
-                const educationTax = vat * educationTaxRate;
-                totalEducationTax += educationTax;
-                
-                console.log(`第${year}年:`);
-                console.log(`  营业收入: ${revenue.toFixed(2)}`);
-                console.log(`  销项税额: ${outputTax.toFixed(2)}`);
-                console.log(`  增值税: ${vat.toFixed(2)}`);
-                console.log(`  城市建设维护税: ${urbanTax.toFixed(2)}`);
-                console.log(`  教育费附加: ${educationTax.toFixed(2)}`);
-                console.log('');
-            });
-            
-            console.log("合计:");
-            console.log(`  增值税合计: ${totalVat.toFixed(2)}`);
-            console.log(`  城市建设维护税合计: ${totalUrbanTax.toFixed(2)}`);
-            console.log(`  教育费附加合计: ${totalEducationTax.toFixed(2)}`);
-            
-            // 验证页面显示的数值
-            const pageVatTotal = parseFloat(document.getElementById('vat-total').textContent);
-            const pageUrbanTaxTotal = parseFloat(document.getElementById('urban-tax-total').textContent);
-            const pageEducationTaxTotal = parseFloat(document.getElementById('education-tax-total').textContent);
-            
-            console.log('\n=== 页面数值验证 ===');
-            console.log(`页面增值税合计: ${pageVatTotal.toFixed(2)} (计算值: ${totalVat.toFixed(2)})`);
-            console.log(`页面城市建设维护税合计: ${pageUrbanTaxTotal.toFixed(2)} (计算值: ${totalUrbanTax.toFixed(2)})`);
-            console.log(`页面教育费附加合计: ${pageEducationTaxTotal.toFixed(2)} (计算值: ${totalEducationTax.toFixed(2)})`);
-            
-            // 验证是否一致
-            const isVatCorrect = Math.abs(pageVatTotal - totalVat) < 0.01;
-            const isUrbanTaxCorrect = Math.abs(pageUrbanTaxTotal - totalUrbanTax) < 0.01;
-            const isEducationTaxCorrect = Math.abs(pageEducationTaxTotal - totalEducationTax) < 0.01;
-            
-            console.log('\n=== 验证结果 ===');
-            console.log(`增值税计算正确: ${isVatCorrect ? '✅' : '❌'}`);
-            console.log(`城市建设维护税计算正确: ${isUrbanTaxCorrect ? '✅' : '❌'}`);
-            console.log(`教育费附加计算正确: ${isEducationTaxCorrect ? '✅' : '❌'}`);
-            
-            return {
-                vatCorrect: isVatCorrect,
-                urbanTaxCorrect: isUrbanTaxCorrect,
-                educationTaxCorrect: isEducationTaxCorrect
-            };
-        }
+export interface ProfitDistributionTableData {
+  rows: ProfitDistributionTableRow[];   // 所有行数据
+  updatedAt: string;      // 最后更新时间
+}
+            </div>
+        </div>
         
-        // 页面加载完成后执行验证
-        window.onload = function() {
-            verifyCalculations();
-        };
-    </script>
+        <div class="box">
+            <h3>状态管理更新</h3>
+            <p>在 <code>RevenueCostState</code> 接口中添加了利润与利润分配表的状态管理：</p>
+            <div class="code-block">
+// ========== 表格数据 ==========
+revenueTableData: RevenueTableData | null
+costTableData: CostTableData | null
+profitDistributionTableData: ProfitDistributionTableData | null  // 新增
+
+// ========== 操作方法 ==========
+setRevenueTableData: (data: RevenueTableData | null) => void
+setCostTableData: (data: CostTableData | null) => void
+setProfitDistributionTableData: (data: ProfitDistributionTableData | null) => void  // 新增
+            </div>
+        </div>
+    </div>
+    
+    <h2>关键修改点</h2>
+    
+    <div class="container">
+        <div class="box">
+            <h3>1. 数据来源变更</h3>
+            <p><span class="warning">重要变更：</span>调整所得税的数据来源从 <code>revenueTableData</code> 改为 <code class="success">profitDistributionTableData</code></p>
+            <p>这意味着调整所得税现在直接从利润与利润分配表中的"19 息税前利润"行获取数据，然后乘以所得税率。</p>
+        </div>
+        
+        <div class="box">
+            <h3>2. 数据保存机制</h3>
+            <p>新增了 <code>saveProfitDistributionTableData</code> 函数，用于在导出利润与利润分配表或打开表格弹窗时保存数据到 <code>profitDistributionTableData</code> 状态中。</p>
+            <p>这确保了利润与利润分配表的数据在需要时可用于调整所得税的计算。</p>
+        </div>
+    </div>
+    
+    <h2>计算流程</h2>
+    
+    <table>
+        <tr>
+            <th>步骤</th>
+            <th>说明</th>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td>从 <code>profitDistributionTableData</code> 中查找序号为"19"的行（息税前利润）</td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td>获取该行的运营期数据或合计数据</td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td>将获取的息税前利润乘以所得税率（默认25%）</td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td>返回计算结果作为调整所得税</td>
+        </tr>
+    </table>
+    
+    <h2>验证结果</h2>
+    
+    <div class="box">
+        <h3 class="success">✅ 修改完成</h3>
+        <p>调整所得税的计算逻辑已成功修改，现在它会：</p>
+        <ul>
+            <li>从利润与利润分配表中获取"19 息税前利润"的数据</li>
+            <li>将息税前利润乘以所得税率计算调整所得税</li>
+            <li>在项目投资现金流量表中正确显示计算结果</li>
+        </ul>
+        <p class="info">这样确保了项目投资现金流量表中的"5 调整所得税"数据来源于利润与利润分配表中的"19 息税前利润"，符合财务计算的一致性要求。</p>
+    </div>
+    
+    <div class="before-after">
+        <div class="before">
+            <h3>修改前公式</h3>
+            <div class="code-block">
+调整所得税 = 原有计算逻辑（固定值或简单计算）
+            </div>
+        </div>
+        
+        <div class="after">
+            <h3>修改后公式</h3>
+            <div class="code-block">
+调整所得税 = 利润与利润分配表[19.息税前利润] × 所得税率
+            </div>
+        </div>
+    </div>
 </body>
 </html>
