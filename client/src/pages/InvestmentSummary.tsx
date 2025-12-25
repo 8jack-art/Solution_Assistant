@@ -20,10 +20,11 @@ import {
   Tooltip,
   Select,
 } from '@mantine/core'
-import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar, IconInfoCircle } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
 import LoadingOverlay from '@/components/LoadingOverlay'
+import ConstructionInterestModal from '@/components/revenue-cost/ConstructionInterestModal'
 
 // 投资估算数据结构
 interface InvestmentItem {
@@ -120,6 +121,7 @@ const InvestmentSummary: React.FC = () => {
   const [thirdLevelItems, setThirdLevelItems] = useState<Record<number, any[]>>({})
   const [editingThirdLevelItem, setEditingThirdLevelItem] = useState<{parentIndex: number, itemIndex: number} | null>(null)
   const [thirdLevelItemTemp, setThirdLevelItemTemp] = useState<any>(null)
+  const [showConstructionInterestModal, setShowConstructionInterestModal] = useState(false)
 
   const columnStyles = {
     sequence: { width: '35px', textAlign: 'center' as const },
@@ -2702,6 +2704,27 @@ const InvestmentSummary: React.FC = () => {
       <Text size="xs" c="#86909C" mb={4}>建设期利息</Text>
       <Text size="lg" fw={600} c="#1D2129">{estimate.partF.合计?.toFixed(2) || 0} 万元</Text>
     </div>
+    <div style={{ textAlign: 'center' }}>
+      <Tooltip label="查看建设期利息详情" position="top" withArrow>
+        <ActionIcon
+          onClick={() => setShowConstructionInterestModal(true)}
+          size={32}
+          radius={32}
+          style={{
+            backgroundColor: '#F0F5FF',
+            color: '#165DFF',
+            border: '1px solid #CCE0FF',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+            transition: 'all 0.2s ease',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%'
+          }}
+        >
+          <IconInfoCircle size={18} stroke={1.5} />
+        </ActionIcon>
+      </Tooltip>
+    </div>
   </Group>
 </Card>
 
@@ -4215,6 +4238,13 @@ const InvestmentSummary: React.FC = () => {
           </Stack>
         )}
       </Modal>
+
+      {/* 建设期利息详情Modal */}
+      <ConstructionInterestModal
+        opened={showConstructionInterestModal}
+        onClose={() => setShowConstructionInterestModal(false)}
+        estimate={estimate}
+      />
     </div>
   )
 }
