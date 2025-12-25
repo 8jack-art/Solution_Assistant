@@ -108,6 +108,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [showFinancialIndicatorsModal, setShowFinancialIndicatorsModal] = useState(false)
   const [showProfitSettingsModal, setShowProfitSettingsModal] = useState(false)
   const [showLoanRepaymentModal, setShowLoanRepaymentModal] = useState(false)
+  const [showFinancialIndicatorsSettings, setShowFinancialIndicatorsSettings] = useState(false)
+  
+  // 财务指标设置状态
+  const [preTaxRate, setPreTaxRate] = useState(6)
+  const [postTaxRate, setPostTaxRate] = useState(6)
+  
+  // 用于强制刷新财务指标表的状态
+  const [financialIndicatorsRefreshKey, setFinancialIndicatorsRefreshKey] = useState(0)
   
   // JSON 数据查看器状态
   const [showJsonViewer, setShowJsonViewer] = useState(false)
@@ -142,6 +150,17 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     if (savedStatutorySurplusRate !== null) {
       setStatutorySurplusRate(Number(savedStatutorySurplusRate))
       setTempStatutorySurplusRate(Number(savedStatutorySurplusRate))
+    }
+    
+    // 加载财务指标基准收益率设置
+    const savedPreTaxRate = localStorage.getItem('financialIndicatorsPreTaxRate');
+    const savedPostTaxRate = localStorage.getItem('financialIndicatorsPostTaxRate');
+    
+    if (savedPreTaxRate !== null) {
+      setPreTaxRate(Number(savedPreTaxRate));
+    }
+    if (savedPostTaxRate !== null) {
+      setPostTaxRate(Number(savedPostTaxRate));
     }
   }, [])
   
@@ -2488,7 +2507,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       if (revenueTableData && costTableData) {
         setJsonData({
           revenueTable: revenueTableData,
-          costTable: costTableData
+          costTable: costTableData,
+          constructionInterest: investmentEstimate?.partF
         })
       } else {
         // 从后端获取
@@ -2497,7 +2517,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           const modelData = response.data.estimate.model_data
           setJsonData({
             revenueTable: modelData.revenueTableData,
-            costTable: modelData.costTableData
+            costTable: modelData.costTableData,
+            constructionInterest: response.data.estimate?.partF
           })
         } else {
           throw new Error('获取数据失败')
@@ -2592,16 +2613,28 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Text size="md">
               📊 项目投资现金流量表
             </Text>
-            <Tooltip label="导出Excel">
-              <ActionIcon
-                variant="light"
-                color="green"
-                size={16}
-                onClick={handleExportProfitTaxTable}
-              >
-                <IconDownload size={16} />
-              </ActionIcon>
-            </Tooltip>
+            <Group gap="xs">
+              <Tooltip label="计算指标">
+                <ActionIcon
+                  variant="light"
+                  color="blue"
+                  size={16}
+                  onClick={() => setShowFinancialIndicatorsModal(true)}
+                >
+                  <IconCalculator size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="导出Excel">
+                <ActionIcon
+                  variant="light"
+                  color="green"
+                  size={16}
+                  onClick={handleExportProfitTaxTable}
+                >
+                  <IconDownload size={16} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
         }
         size="2000px"
@@ -2681,41 +2714,189 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         {renderProfitDistributionModal()}
       </Modal>
 
+      {/* 财务计算指标设置弹窗 */}
+      <Modal
+        opened={showFinancialIndicatorsSettings}
+        onClose={() => {
+          setShowFinancialIndicatorsSettings(false);
+          // 重新打开财务指标表modal，保持用户操作流程连贯
+          setTimeout(() => {
+            setShowFinancialIndicatorsModal(true);
+          }, 100);
+        }}
+        centered
+        title="设置基准收益率"
+        size="400px"
+      >
+        <Stack gap="md">
+          <div>
+            <Text size="sm" fw={500} mb="xs">基准收益率（所得税前）%</Text>
+            <NumberInput
+              value={preTaxRate}
+              onChange={(value) => setPreTaxRate(typeof value === 'number' ? value : 0)}
+              min={0}
+              max={100}
+              step={0.1}
+              placeholder="请输入基准收益率（所得税前）"
+            />
+          </div>
+          
+          <div>
+            <Text size="sm" fw={500} mb="xs">基准收益率（所得税后）%</Text>
+            <NumberInput
+              value={postTaxRate}
+              onChange={(value) => setPostTaxRate(typeof value === 'number' ? value : 0)}
+              min={0}
+              max={100}
+              step={0.1}
+              placeholder="请输入基准收益率（所得税后）"
+            />
+          </div>
+          
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowFinancialIndicatorsSettings(false);
+                // 重新打开财务指标表modal，保持用户操作流程连贯
+                setTimeout(() => {
+                  setShowFinancialIndicatorsModal(true);
+                }, 100);
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                // 保存设置并关闭弹窗
+                localStorage.setItem('financialIndicatorsPreTaxRate', preTaxRate.toString());
+                localStorage.setItem('financialIndicatorsPostTaxRate', postTaxRate.toString());
+                
+                // 强制刷新财务指标表
+                setFinancialIndicatorsRefreshKey(prev => prev + 1);
+                setShowFinancialIndicatorsSettings(false);
+                
+                // 重新打开财务指标表modal，保持用户操作流程连贯
+                setTimeout(() => {
+                  setShowFinancialIndicatorsModal(true);
+                }, 100);
+              }}
+            >
+              确定
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      
       {/* 财务计算指标表弹窗 */}
       <Modal
+        key={`financial-indicators-modal-${financialIndicatorsRefreshKey}`}
         opened={showFinancialIndicatorsModal}
-        onClose={() => setShowFinancialIndicatorsModal(false)}
+        onClose={() => {
+          // 确保关闭财务指标表时也关闭设置弹窗
+          setShowFinancialIndicatorsSettings(false);
+          setShowFinancialIndicatorsModal(false);
+        }}
+        centered
         title={
-          <Text size="md">
-            📊 财务计算指标表
-          </Text>
+          <Group justify="space-between" w="100%">
+            <Text size="md">
+              📊 财务计算指标表
+            </Text>
+            <Tooltip label="设置">
+              <ActionIcon
+                variant="light"
+                color="blue"
+                size={16}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // 先关闭财务指标表modal，然后打开设置modal
+                  setShowFinancialIndicatorsModal(false);
+                  // 使用setTimeout确保设置modal在财务指标表modal关闭后再打开
+                  setTimeout(() => {
+                    setShowFinancialIndicatorsSettings(true);
+                  }, 100);
+                }}
+              >
+                <IconSettings size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         }
-        size="calc(100vw - 100px)"
+        size="420px"
         styles={{
           body: {
-            maxHeight: 'calc(100vh - 200px)',
+            maxHeight: '350px',
             overflowY: 'auto',
           },
         }}
       >
-        <Stack gap="md" align="center">
-          <div style={{
-            padding: '60px 40px',
-            textAlign: 'center',
-            backgroundColor: '#F7F8FA',
-            borderRadius: '8px'
-          }}>
-            <IconCalculator size={48} color="#9254DE" />
-            <Text size="sm" c="#86909C" mt="md">
-              财务计算指标表功能开发中
-            </Text>
+        <Stack gap="md">
+          <div style={{ overflowX: 'auto' }}>
+            <Table
+              striped
+              withTableBorder
+              styles={{
+                th: {
+                  backgroundColor: '#F7F8FA',
+                  color: '#1D2129',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  border: '1px solid #E5E6EB'
+                },
+                td: {
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  border: '1px solid #E5E6EB'
+                }
+              }}
+            >
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th style={{ width: '180px' }}>项目</Table.Th>
+                  <Table.Th style={{ width: '50px' }}>数值</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目投资财务内部收益率（%）（所得税前）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目投资财务内部收益率（%）（所得税后）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目投资财务净现值（所得税前）（ic={preTaxRate}%）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目投资财务净现值（所得税后）（ic={postTaxRate}%）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目静态投资回收期（年）（所得税前）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目静态投资回收期（年）（所得税后）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目动态投资回收期（年）（所得税前）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td style={{ textAlign: 'left' }}>项目动态投资回收期（年）（所得税后）</Table.Td>
+                  <Table.Td>-</Table.Td>
+                </Table.Tr>
+              </Table.Tbody>
+            </Table>
           </div>
-          <Button onClick={() => setShowFinancialIndicatorsModal(false)}>
-            关闭
-          </Button>
         </Stack>
       </Modal>
-
+      
       {/* JSON 数据查看器 */}
       <JsonDataViewer
         opened={showJsonViewer}
@@ -2804,7 +2985,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           },
         }}
       >
-        <LoanRepaymentScheduleTable showCard={false} />
+        <LoanRepaymentScheduleTable showCard={false} estimate={investmentEstimate} />
       </Modal>
     </>
   )

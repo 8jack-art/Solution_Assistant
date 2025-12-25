@@ -158,7 +158,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'revenue' | 'cost'>('revenue')
+  const [activeTab, setActiveTab] = useState<'revenue' | 'cost' | 'construction'>('revenue')
 
   // 默认展开第一层
   React.useEffect(() => {
@@ -169,6 +169,9 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       }
       if (data.costTable) {
         defaultExpanded.add('costTable')
+      }
+      if (data.constructionInterest) {
+        defaultExpanded.add('constructionInterest')
       }
       setExpanded(defaultExpanded)
     }
@@ -210,6 +213,8 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       expandAllPaths(data.revenueTable, 'revenueTable').forEach(p => allPaths.add(p))
     } else if (activeTab === 'cost' && data.costTable) {
       expandAllPaths(data.costTable, 'costTable').forEach(p => allPaths.add(p))
+    } else if (activeTab === 'construction' && data.constructionInterest) {
+      expandAllPaths(data.constructionInterest, 'constructionInterest').forEach(p => allPaths.add(p))
     }
     setExpanded(allPaths)
   }
@@ -223,13 +228,24 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
     if (data && data.costTable) {
       defaultExpanded.add('costTable')
     }
+    if (data && data.constructionInterest) {
+      defaultExpanded.add('constructionInterest')
+    }
     setExpanded(defaultExpanded)
   }
 
   // 复制 JSON 数据
   const handleCopy = async () => {
     try {
-      const jsonToCopy = activeTab === 'revenue' ? data?.revenueTable : data?.costTable
+      let jsonToCopy: any
+      if (activeTab === 'revenue') {
+        jsonToCopy = data?.revenueTable
+      } else if (activeTab === 'cost') {
+        jsonToCopy = data?.costTable
+      } else if (activeTab === 'construction') {
+        jsonToCopy = data?.constructionInterest
+      }
+      
       if (!jsonToCopy) {
         notifications.show({
           title: '错误',
@@ -273,6 +289,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
     return {
       revenueTable: filterBySearchTerm(data.revenueTable, searchTerm),
       costTable: filterBySearchTerm(data.costTable, searchTerm),
+      constructionInterest: filterBySearchTerm(data.constructionInterest, searchTerm),
     }
   }, [data, searchTerm])
 
@@ -346,6 +363,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
             <Tabs.List>
               <Tabs.Tab value="revenue">营业收入、营业税金及附加和增值税估算表</Tabs.Tab>
               <Tabs.Tab value="cost">总成本费用估算表</Tabs.Tab>
+              <Tabs.Tab value="construction">建设期利息详情</Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="revenue">
@@ -386,6 +404,27 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
               ) : (
                 <Box p="xl" style={{ textAlign: 'center', color: '#86909C' }}>
                   <Text>暂无总成本费用表数据</Text>
+                </Box>
+              )}
+            </Tabs.Panel>
+
+            <Tabs.Panel value="construction">
+              {filteredData?.constructionInterest ? (
+                <ScrollArea h="calc(85vh - 180px)" offsetScrollbars>
+                  <Box p="md" style={{ backgroundColor: '#1e1e1e', borderRadius: '8px', color: '#d4d4d4', fontFamily: 'Consolas, Monaco, monospace', fontSize: '13px' }}>
+                    <JsonNode
+                      data={filteredData.constructionInterest}
+                      searchTerm={searchTerm}
+                      level={0}
+                      expanded={expanded}
+                      onToggle={handleToggle}
+                      path="constructionInterest"
+                    />
+                  </Box>
+                </ScrollArea>
+              ) : (
+                <Box p="xl" style={{ textAlign: 'center', color: '#86909C' }}>
+                  <Text>暂无建设期利息详情数据</Text>
                 </Box>
               )}
             </Tabs.Panel>

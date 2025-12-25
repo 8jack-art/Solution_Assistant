@@ -67,9 +67,10 @@ const formatNumberWithZeroBlank = (value: number): string => {
  */
 interface LoanRepaymentScheduleTableProps {
   showCard?: boolean;
+  estimate?: any; // 投资估算数据，包含建设期利息信息
 }
 
-const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({ showCard = true }) => {
+const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({ showCard = true, estimate }) => {
   const {
     context,
     loanConfig,
@@ -80,8 +81,6 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
   } = useRevenueCostStore()
   
   const [showModal, setShowModal] = useState(false)
-  const [showSettingsModal, setShowSettingsModal] = useState(false)
-  const [tempLoanConfig, setTempLoanConfig] = useState<LoanConfig>(loanConfig)
 
   // 计算借款还本付息计划表数据
   const calculateLoanRepaymentData = useMemo(() => {
@@ -95,17 +94,76 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     const constructionPeriod = Array(constructionYears).fill(0);
     const operationPeriod = Array(operationYears).fill(0);
 
+    // 从建设期利息详情表获取建设期数据
+    const yearlyInterestData = estimate?.partF?.分年利息 || [];
+    
+    // 计算某年期末借款余额（累计借款金额）
+    const calculateEndOfYearBalance = (yearIndex: number): number => {
+      let balance = 0;
+      for (let i = 0; i <= yearIndex; i++) {
+        if (yearlyInterestData[i]) {
+          balance += yearlyInterestData[i].当期借款金额 || 0;
+        }
+      }
+      return balance;
+    };
+
+    // 计算某年期初借款余额
+    const calculateBeginningOfYearBalance = (yearIndex: number): number => {
+      if (yearIndex === 0) return 0;
+      return calculateEndOfYearBalance(yearIndex - 1);
+    };
+
+    // 计算建设期各年数据
+    // 建设期期初借款余额
+    const constructionBeginningBalance = Array(constructionYears).fill(0).map((_, index) =>
+      calculateBeginningOfYearBalance(index)
+    );
+
+    // 建设期当期借款金额
+    const constructionLoanAmount = Array(constructionYears).fill(0).map((_, index) =>
+      yearlyInterestData[index]?.当期借款金额 || 0
+    );
+
+    // 建设期当期利息
+    const constructionInterest = Array(constructionYears).fill(0).map((_, index) =>
+      yearlyInterestData[index]?.当期利息 || 0
+    );
+
+    // 建设期期末借款余额（累计借款金额）
+    const constructionEndingBalance = Array(constructionYears).fill(0).map((_, index) =>
+      calculateEndOfYearBalance(index)
+    );
+
+    // 建设期当期还本付息（建设期只付息，不还本）
+    const constructionRepayment = Array(constructionYears).fill(0).map((_, index) =>
+      yearlyInterestData[index]?.当期利息 || 0
+    );
+
+    // 建设期还本（建设期为0）
+    const constructionPrincipalRepayment = Array(constructionYears).fill(0);
+
+    // 建设期付息
+    const constructionInterestPayment = Array(constructionYears).fill(0).map((_, index) =>
+      yearlyInterestData[index]?.当期利息 || 0
+    );
+
+    // 计算运营期还款数据
+    // 获取贷款总额和利率
+    const loanAmount = estimate?.partF?.贷款总额 || loanConfig.loanAmount;
+    const interestRate = estimate?.partF?.年利率 || loanConfig.interestRate;
+    
     // 计算等额本息还款
-    const monthlyRate = loanConfig.interestRate / 100 / 12;
+    const monthlyRate = interestRate / 100 / 12;
     const totalMonths = loanConfig.loanTerm * 12;
-    const monthlyPayment = loanConfig.loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths) / (Math.pow(1 + monthlyRate, totalMonths) - 1);
+    const monthlyPayment = loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths) / (Math.pow(1 + monthlyRate, totalMonths) - 1);
 
     // 计算每年的还款额
     const yearlyPrincipal = Array(operationYears).fill(0);
     const yearlyInterest = Array(operationYears).fill(0);
     const yearlyPayment = Array(operationYears).fill(0);
 
-    let remainingPrincipal = loanConfig.loanAmount;
+    let remainingPrincipal = loanAmount;
     let currentYear = 1;
 
     for (let month = 1; month <= totalMonths && currentYear <= operationYears; month++) {
@@ -128,7 +186,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     const beginningBalance = Array(operationYears).fill(0);
     const endingBalance = Array(operationYears).fill(0);
     
-    let balance = loanConfig.loanAmount;
+    let balance = loanAmount;
     for (let year = 1; year <= operationYears; year++) {
       beginningBalance[year - 1] = balance;
       balance -= yearlyPrincipal[year - 1];
@@ -221,7 +279,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
           序号: '1.1',
           项目: '期初借款余额',
           合计: null,
-          建设期: constructionPeriod,
+          建设期: constructionBeginningBalance,
           运营期: beginningBalance
         },
         // 1.2 当期还本付息
@@ -229,7 +287,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
           序号: '1.2',
           项目: '当期还本付息',
           合计: null,
-          建设期: constructionPeriod,
+          建设期: constructionRepayment,
           运营期: yearlyPayment
         },
         // 其中：还本
@@ -237,7 +295,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
           序号: '',
           项目: '其中：还本',
           合计: null,
-          建设期: constructionPeriod,
+          建设期: constructionPrincipalRepayment,
           运营期: yearlyPrincipal
         },
         // 付息
@@ -245,7 +303,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
           序号: '',
           项目: '付息',
           合计: null,
-          建设期: constructionPeriod,
+          建设期: constructionInterestPayment,
           运营期: yearlyInterest
         },
         // 1.3 期末借款余额
@@ -253,7 +311,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
           序号: '1.3',
           项目: '期末借款余额',
           合计: null,
-          建设期: constructionPeriod,
+          建设期: constructionEndingBalance,
           运营期: endingBalance
         },
         // 2 还本付息资金来源
@@ -357,7 +415,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     };
 
     return tableData;
-  }, [context, loanConfig, profitDistributionTableData]);
+  }, [context, loanConfig, profitDistributionTableData, estimate]);
 
   // 保存借款还本付息计划表数据
   useEffect(() => {
@@ -366,23 +424,6 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     }
   }, [calculateLoanRepaymentData, setLoanRepaymentTableData]);
 
-  // 打开设置弹窗时，将当前配置复制到临时状态
-  const openSettingsModal = () => {
-    setTempLoanConfig(loanConfig);
-    setShowSettingsModal(true);
-  };
-
-  // 保存贷款配置
-  const saveLoanConfig = () => {
-    setLoanConfig(tempLoanConfig);
-    setShowSettingsModal(false);
-    
-    notifications.show({
-      title: '保存成功',
-      message: '贷款配置已保存，表格已重新计算',
-      color: 'green',
-    });
-  };
 
   // 导出Excel
   const handleExportExcel = () => {
@@ -511,120 +552,28 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
 
   const content = (
     <>
-      <Group justify="space-between" align="center" mb="md">
-        <Text size="md" fw={600} c="#1D2129">
-          借款还本付息计划表
-        </Text>
-        <Group gap="xs">
-          <Tooltip label="贷款设置">
-            <ActionIcon
-              variant="light"
-              color="blue"
-              size="lg"
-              onClick={openSettingsModal}
-            >
-              <IconSettings size={20} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="导出Excel">
-            <ActionIcon
-              variant="light"
-              color="green"
-              size="lg"
-              onClick={handleExportExcel}
-            >
-              <IconDownload size={20} />
-            </ActionIcon>
-          </Tooltip>
+      {showCard && (
+        <Group justify="space-between" align="center" mb="md">
+          <Text size="md" fw={600} c="#1D2129">
+            借款还本付息计划表
+          </Text>
+          <Group gap="xs">
+            <Tooltip label="导出Excel">
+              <ActionIcon
+                variant="light"
+                color="green"
+                size="lg"
+                onClick={handleExportExcel}
+              >
+                <IconDownload size={20} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         </Group>
-      </Group>
+      )}
 
       {renderTable()}
 
-      {/* 贷款设置弹窗 */}
-      <Modal
-        opened={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-        centered
-        title="📊 贷款设置"
-        size="500px"
-      >
-        <Stack gap="md">
-          <div>
-            <Text size="sm" fw={500} mb="xs">贷款金额（万元）</Text>
-            <NumberInput
-              value={tempLoanConfig.loanAmount}
-              onChange={(value) => setTempLoanConfig(prev => ({ ...prev, loanAmount: typeof value === 'number' ? value : 0 }))}
-              min={0}
-              step={100}
-              placeholder="请输入贷款金额"
-            />
-          </div>
-          
-          <div>
-            <Text size="sm" fw={500} mb="xs">年利率（%）</Text>
-            <NumberInput
-              value={tempLoanConfig.interestRate}
-              onChange={(value) => setTempLoanConfig(prev => ({ ...prev, interestRate: typeof value === 'number' ? value : 0 }))}
-              min={0}
-              max={100}
-              step={0.1}
-              decimalScale={1}
-              placeholder="请输入年利率"
-            />
-          </div>
-          
-          <div>
-            <Text size="sm" fw={500} mb="xs">贷款期限（年）</Text>
-            <NumberInput
-              value={tempLoanConfig.loanTerm}
-              onChange={(value) => setTempLoanConfig(prev => ({ ...prev, loanTerm: typeof value === 'number' ? value : 0 }))}
-              min={1}
-              step={1}
-              placeholder="请输入贷款期限"
-            />
-          </div>
-          
-          <div>
-            <Text size="sm" fw={500} mb="xs">宽限期（年）</Text>
-            <NumberInput
-              value={tempLoanConfig.gracePeriod}
-              onChange={(value) => setTempLoanConfig(prev => ({ ...prev, gracePeriod: typeof value === 'number' ? value : 0 }))}
-              min={0}
-              step={1}
-              placeholder="请输入宽限期"
-            />
-          </div>
-          
-          <div>
-            <Text size="sm" fw={500} mb="xs">还款方式</Text>
-            <Select
-              value={tempLoanConfig.repaymentMethod}
-              onChange={(value) =>
-                setTempLoanConfig(prev => ({ ...prev, repaymentMethod: value as 'equal-installment' | 'equal-principal' }))
-              }
-              data={[
-                { value: 'equal-installment', label: '等额本息' },
-                { value: 'equal-principal', label: '等额本金' }
-              ]}
-            />
-          </div>
-          
-          <Group justify="flex-end" mt="md">
-            <Button
-              variant="outline"
-              onClick={() => setShowSettingsModal(false)}
-            >
-              取消
-            </Button>
-            <Button
-              onClick={saveLoanConfig}
-            >
-              保存
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
     </>
   );
 
