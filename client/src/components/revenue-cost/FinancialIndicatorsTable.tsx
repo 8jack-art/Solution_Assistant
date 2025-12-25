@@ -20,12 +20,15 @@ import {
   IconChartLine,
   IconCoin,
   IconCalculator,
-  IconFileText
+  IconFileText,
+  IconCode
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, calculateYearlyRevenue, getProductionRateForYear, calculateOtherTaxesAndSurcharges } from '@/stores/revenueCostStore'
+import { revenueCostApi } from '@/lib/api'
 import * as XLSX from 'xlsx'
 import AnnualInvestmentTable from './AnnualInvestmentTable'
+import JsonDataViewer from './JsonDataViewer'
 
 // 格式化数字显示为2位小数，不四舍五入，无千分号（不修改实际值，只用于显示）
 const formatNumberNoRounding = (value: number): string => {
@@ -99,6 +102,12 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [showAnnualInvestmentModal, setShowAnnualInvestmentModal] = useState(false)
   const [showProfitDistributionModal, setShowProfitDistributionModal] = useState(false)
   const [showFinancialIndicatorsModal, setShowFinancialIndicatorsModal] = useState(false)
+  
+  // JSON 数据查看器状态
+  const [showJsonViewer, setShowJsonViewer] = useState(false)
+  const [jsonLoading, setJsonLoading] = useState(false)
+  const [jsonError, setJsonError] = useState<string | null>(null)
+  const [jsonData, setJsonData] = useState<any>(null)
   
   // 配置按钮数据
   const investmentConfigItems = [
@@ -2120,6 +2129,52 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     )
   };
 
+  // 处理查看 JSON 数据
+  const handleViewJsonData = async () => {
+    setJsonLoading(true)
+    setJsonError(null)
+    
+    try {
+      const projectId = context?.projectId
+      if (!projectId) {
+        throw new Error('项目ID不存在')
+      }
+      
+      // 从 store 获取数据（如果已加载）
+      const { revenueTableData, costTableData } = useRevenueCostStore.getState()
+      
+      if (revenueTableData && costTableData) {
+        setJsonData({
+          revenueTable: revenueTableData,
+          costTable: costTableData
+        })
+      } else {
+        // 从后端获取
+        const response = await revenueCostApi.getByProjectId(projectId)
+        if (response.success && response.data?.estimate?.model_data) {
+          const modelData = response.data.estimate.model_data
+          setJsonData({
+            revenueTable: modelData.revenueTableData,
+            costTable: modelData.costTableData
+          })
+        } else {
+          throw new Error('获取数据失败')
+        }
+      }
+      
+      setShowJsonViewer(true)
+    } catch (error: any) {
+      setJsonError(error.message || '获取数据失败')
+      notifications.show({
+        title: '错误',
+        message: error.message || '获取数据失败',
+        color: 'red'
+      })
+    } finally {
+      setJsonLoading(false)
+    }
+  }
+
   return (
     <>
       <Stack gap="md">
@@ -2128,6 +2183,17 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             项目投资现金流量配置
           </Text>
           <Group gap="xs">
+            <Tooltip label="查看 JSON 数据">
+              <ActionIcon
+                variant="light"
+                color="blue"
+                size="lg"
+                onClick={handleViewJsonData}
+                loading={jsonLoading}
+              >
+                <IconCode size={20} />
+              </ActionIcon>
+            </Tooltip>
             <Tooltip label="导出项目投资现金流量表">
               <ActionIcon
                 variant="light"
@@ -2295,6 +2361,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           </Button>
         </Stack>
       </Modal>
+
+      {/* JSON 数据查看器 */}
+      <JsonDataViewer
+        opened={showJsonViewer}
+        onClose={() => setShowJsonViewer(false)}
+        data={jsonData}
+        loading={jsonLoading}
+        error={jsonError}
+      />
     </>
   )
 }
