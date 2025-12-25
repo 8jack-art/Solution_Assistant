@@ -224,7 +224,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   repaymentTableData = [],
   depreciationData = []
 }) => {
-  const { context, revenueItems, productionRates, costConfig, updateCostConfig } = useRevenueCostStore()
+  const { context, revenueItems, productionRates, costConfig, updateCostConfig, costTableData, setCostTableData, saveToBackend } = useRevenueCostStore()
   
   // 固定资产投资状态（用于修理费计算）
   const [fixedAssetsInvestment, setFixedAssetsInvestment] = useState(0)
@@ -1358,8 +1358,238 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       calculateInvestment();
     }, [depreciationData, context?.projectId]);
 
-    // 导出总成本费用估算表为Excel
-    const handleExportCostTable = () => {
+  /**
+   * 生成总成本费用表数据
+   */
+  const generateCostTableData = () => {
+    if (!context) return null;
+    
+    const operationYears = context.operationYears;
+    const years = Array.from({ length: operationYears }, (_, i) => i + 1);
+    
+    const rows: Array<{
+      序号: string;
+      成本项目: string;
+      合计: number;
+      运营期: number[];
+    }> = [];
+    
+    // 1. 营业成本
+    const row1 = { 序号: '1', 成本项目: '营业成本', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      let yearTotal = 0;
+      
+      // 1.1 外购原材料费（除税）
+      yearTotal += calculateRawMaterialsExcludingTax(year, years);
+      
+      // 1.2 外购燃料及动力费（除税）
+      yearTotal += calculateFuelPowerExcludingTax(year, years);
+      
+      // 1.3 工资及福利费
+      yearTotal += calculateWagesTotal(year, years);
+      
+      // 1.4 修理费
+      if (costConfig.repair.type === 'percentage') {
+        yearTotal += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+      } else {
+        yearTotal += costConfig.repair.directAmount || 0;
+      }
+      
+      // 1.5 其他费用
+      const productionRate = costConfig.otherExpenses.applyProductionRate
+        ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+        : 1;
+      if (costConfig.otherExpenses.type === 'percentage') {
+        const revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
+        yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+      } else {
+        yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+      }
+      
+      row1.运营期.push(yearTotal);
+      row1.合计 += yearTotal;
+    });
+    rows.push(row1);
+    
+    // 1.1 外购原材料费
+    const row1_1 = { 序号: '1.1', 成本项目: '外购原材料费', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      const value = calculateRawMaterialsExcludingTax(year, years);
+      row1_1.运营期.push(value);
+      row1_1.合计 += value;
+    });
+    rows.push(row1_1);
+    
+    // 1.2 外购燃料及动力费
+    const row1_2 = { 序号: '1.2', 成本项目: '外购燃料及动力费', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      const value = calculateFuelPowerExcludingTax(year, years);
+      row1_2.运营期.push(value);
+      row1_2.合计 += value;
+    });
+    rows.push(row1_2);
+    
+    // 1.3 工资及福利费
+    const row1_3 = { 序号: '1.3', 成本项目: '工资及福利费', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      const value = calculateWagesTotal(year, years);
+      row1_3.运营期.push(value);
+      row1_3.合计 += value;
+    });
+    rows.push(row1_3);
+    
+    // 1.4 修理费
+    const row1_4 = { 序号: '1.4', 成本项目: '修理费', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      let yearTotal = 0;
+      if (costConfig.repair.type === 'percentage') {
+        yearTotal += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+      } else {
+        yearTotal += costConfig.repair.directAmount || 0;
+      }
+      row1_4.运营期.push(yearTotal);
+      row1_4.合计 += yearTotal;
+    });
+    rows.push(row1_4);
+    
+    // 1.5 其他费用
+    const row1_5 = { 序号: '1.5', 成本项目: '其他费用', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      const productionRate = costConfig.otherExpenses.applyProductionRate
+        ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+        : 1;
+      let yearTotal = 0;
+      if (costConfig.otherExpenses.type === 'percentage') {
+        const revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
+        yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+      } else {
+        yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+      }
+      row1_5.运营期.push(yearTotal);
+      row1_5.合计 += yearTotal;
+    });
+    rows.push(row1_5);
+    
+    // 2. 管理费用
+    const row2 = { 序号: '2', 成本项目: '管理费用', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      row2.运营期.push(0);
+    });
+    rows.push(row2);
+    
+    // 3. 利息支出
+    const row3 = { 序号: '3', 成本项目: '利息支出', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      let yearInterest = 0;
+      const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
+      if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
+        yearInterest = interestRow.分年数据[year - 1];
+      }
+      row3.运营期.push(yearInterest);
+      row3.合计 += yearInterest;
+    });
+    rows.push(row3);
+    
+    // 4. 折旧费
+    const row4 = { 序号: '4', 成本项目: '折旧费', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      const yearIndex = year - 1;
+      const rowA = depreciationData.find(row => row.序号 === 'A');
+      const rowD = depreciationData.find(row => row.序号 === 'D');
+      const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
+      row4.运营期.push(yearDepreciation);
+      row4.合计 += yearDepreciation;
+    });
+    rows.push(row4);
+    
+    // 5. 摊销费
+    const row5 = { 序号: '5', 成本项目: '摊销费', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      const yearIndex = year - 1;
+      const rowE = depreciationData.find(row => row.序号 === 'E');
+      const yearAmortization = rowE?.分年数据[yearIndex] || 0;
+      row5.运营期.push(yearAmortization);
+      row5.合计 += yearAmortization;
+    });
+    rows.push(row5);
+    
+    // 6. 开发成本
+    const row6 = { 序号: '6', 成本项目: '开发成本', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      row6.运营期.push(0);
+    });
+    rows.push(row6);
+    
+    // 7. 总成本费用合计
+    const row7 = { 序号: '7', 成本项目: '总成本费用合计', 合计: 0, 运营期: [] as number[] };
+    years.forEach((year) => {
+      const yearIndex = year - 1;
+      let yearTotal = 0;
+      
+      // 行1: 营业成本
+      yearTotal += row1.运营期[yearIndex];
+      
+      // 行2: 管理费用
+      yearTotal += row2.运营期[yearIndex];
+      
+      // 行3: 利息支出
+      yearTotal += row3.运营期[yearIndex];
+      
+      // 行4: 折旧费
+      yearTotal += row4.运营期[yearIndex];
+      
+      // 行5: 摊销费
+      yearTotal += row5.运营期[yearIndex];
+      
+      // 行6: 开发成本
+      yearTotal += row6.运营期[yearIndex];
+      
+      row7.运营期.push(yearTotal);
+      row7.合计 += yearTotal;
+    });
+    rows.push(row7);
+    
+    return {
+      rows: rows,
+      updatedAt: new Date().toISOString()
+    };
+  };
+
+  /**
+   * 保存总成本费用表数据
+   */
+  const handleSaveCostTableData = async () => {
+    if (!context) return;
+    
+    // 生成并保存表格数据
+    const tableData = generateCostTableData();
+    if (tableData) {
+      setCostTableData(tableData);
+      
+      // 触发保存到后端
+      const success = await saveToBackend();
+      
+      if (success) {
+        notifications.show({
+          title: '保存成功',
+          message: '总成本费用表数据已保存',
+          color: 'green',
+        });
+      } else {
+        notifications.show({
+          title: '保存失败',
+          message: '总成本费用表数据保存失败',
+          color: 'red',
+        });
+        return false; // 返回失败，不关闭弹窗
+      }
+    }
+    
+    return true;
+  };
+
+  // 导出总成本费用估算表为Excel
+  const handleExportCostTable = () => {
       if (!context) {
         notifications.show({
           title: '导出失败',
@@ -2603,7 +2833,12 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       {/* 成本详表弹窗 */}
       <Modal
         opened={showCostDetailModal}
-        onClose={() => setShowCostDetailModal(false)}
+        onClose={async () => {
+          const success = await handleSaveCostTableData();
+          if (success) {
+            setShowCostDetailModal(false);
+          }
+        }}
         title={
           <Group justify="space-between" w="100%">
             <Text size="md">

@@ -325,6 +325,37 @@ export type WorkflowStep =
   | 'done'        // 完成
 
 /**
+ * 营业收入表数据结构
+ */
+export interface RevenueTableRow {
+  序号: string;           // "1", "1.1", "2", "2.1" 等
+  收入项目: string;       // "营业收入", "增值税", "销项税额" 等
+  合计: number;           // 合计列数值
+  运营期: number[];       // 各年数据数组
+}
+
+export interface RevenueTableData {
+  urbanTaxRate: number;    // 城市建设维护税税率 (0.07 或 0.05)
+  rows: RevenueTableRow[]; // 所有行数据
+  updatedAt: string;       // 最后更新时间
+}
+
+/**
+ * 总成本费用表数据结构
+ */
+export interface CostTableRow {
+  序号: string;           // "1", "1.1", "2", "3" 等
+  成本项目: string;       // "营业成本", "外购原材料费" 等
+  合计: number;           // 合计列数值
+  运营期: number[];       // 各年数据数组
+}
+
+export interface CostTableData {
+  rows: CostTableRow[];   // 所有行数据
+  updatedAt: string;      // 最后更新时间
+}
+
+/**
  * 收入成本建模状态接口
  */
 interface RevenueCostState {
@@ -344,6 +375,10 @@ interface RevenueCostState {
   costItems: CostItem[]
   productionRates: ProductionRateConfig[]
   costConfig: CostConfig
+  
+  // ========== 表格数据 ==========
+  revenueTableData: RevenueTableData | null
+  costTableData: CostTableData | null
   
   // ========== 控制状态 ==========
   currentStep: WorkflowStep
@@ -382,6 +417,10 @@ interface RevenueCostState {
   // 成本配置管理
   setCostConfig: (config: CostConfig) => void
   updateCostConfig: (updates: Partial<CostConfig>) => void
+  
+  // 表格数据管理
+  setRevenueTableData: (data: RevenueTableData | null) => void
+  setCostTableData: (data: CostTableData | null) => void
   
   // 步骤控制
   setCurrentStep: (step: WorkflowStep) => void
@@ -553,6 +592,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       costItems: [],
       productionRates: [],
       costConfig: getDefaultCostConfig(),
+      revenueTableData: null,
+      costTableData: null,
       currentStep: 'period',
       isSubmitting: false,
       isSaving: false,
@@ -709,6 +750,19 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         debouncedSave()
       },
       
+      // 表格数据管理
+      setRevenueTableData: (data) => {
+        set({ revenueTableData: data })
+        // 触发自动保存
+        debouncedSave()
+      },
+      
+      setCostTableData: (data) => {
+        set({ costTableData: data })
+        // 触发自动保存
+        debouncedSave()
+      },
+      
       setCurrentStep: (step) => {
         set({ currentStep: step })
         // 触发自动保存
@@ -798,7 +852,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             productionRates: state.productionRates,
             aiAnalysisResult: state.aiAnalysisResult,
             costConfig: state.costConfig,
-            workflow_step: state.currentStep
+            workflow_step: state.currentStep,
+            revenueTableData: state.revenueTableData,
+            costTableData: state.costTableData
           };
           
           console.log('💾 正在保存数据到后端:', {
@@ -851,6 +907,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               productionRates: modelData?.productionRates || [],
               aiAnalysisResult: modelData?.aiAnalysisResult || estimate.ai_analysis_result || null,
               costConfig: modelData?.costConfig || getDefaultCostConfig(),
+              revenueTableData: modelData?.revenueTableData || null,
+              costTableData: modelData?.costTableData || null,
               currentStep: estimate.workflow_step || 'period'
             })
           }
@@ -874,6 +932,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           revenueItems: [],
           costItems: [],
           productionRates: [],
+          revenueTableData: null,
+          costTableData: null,
           currentStep: 'period',
           isSubmitting: false,
           isSaving: false,
