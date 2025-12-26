@@ -2039,12 +2039,33 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     }
     
     // 计算所有财务指标
-    const preTaxCashFlows = getPreTaxCashFlows();
-    const postTaxCashFlows = getPostTaxCashFlows();
-    const cumulativePreTaxCashFlows = getCumulativePreTaxCashFlows();
-    const cumulativePostTaxCashFlows = getCumulativePostTaxCashFlows();
-    const cumulativeDynamicPreTaxCashFlows = getCumulativeDynamicPreTaxCashFlows();
-    const cumulativeDynamicPostTaxCashFlows = getCumulativeDynamicPostTaxCashFlows();
+    const preTaxCashFlows = getPreTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                                              calculateOperatingRevenue, calculateSubsidyIncome,
+                                              calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                              calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment);
+    const postTaxCashFlows = getPostTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                                                calculateOperatingRevenue, calculateSubsidyIncome,
+                                                calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                                calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment,
+                                                calculateAdjustedIncomeTax);
+    const cumulativePreTaxCashFlows = getCumulativePreTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                                                                    calculateOperatingRevenue, calculateSubsidyIncome,
+                                                                    calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                                                    calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment);
+    const cumulativePostTaxCashFlows = getCumulativePostTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                                                                     calculateOperatingRevenue, calculateSubsidyIncome,
+                                                                     calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                                                     calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment,
+                                                                     calculateAdjustedIncomeTax);
+    const cumulativeDynamicPreTaxCashFlows = getCumulativeDynamicPreTaxCashFlows(context, preTaxRate, calculateConstructionInvestment, calculateWorkingCapital,
+                                                                                calculateOperatingRevenue, calculateSubsidyIncome,
+                                                                                calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                                                                calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment);
+    const cumulativeDynamicPostTaxCashFlows = getCumulativeDynamicPostTaxCashFlows(context, preTaxRate, postTaxRate, calculateConstructionInvestment, calculateWorkingCapital,
+                                                                                  calculateOperatingRevenue, calculateSubsidyIncome,
+                                                                                  calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                                                                  calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment,
+                                                                                  calculateAdjustedIncomeTax);
     
     const indicators = {
       preTaxIRR: safeCalculateIRR(preTaxCashFlows),
@@ -3647,7 +3668,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         size="420px"
         styles={{
           body: {
-            maxHeight: '350px',
+            maxHeight: '500px',
             overflowY: 'auto',
           },
         }}
@@ -3675,7 +3696,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             >
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th style={{ width: '180px' }}>项目</Table.Th>
+                  <Table.Th style={{ width: '230px' }}>项目</Table.Th>
                   <Table.Th style={{ width: '50px' }}>数值</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -3823,7 +3844,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
 
 
 // 获取所得税前净现金流量数组
-const getPreTaxCashFlows = (): number[] => {
+const getPreTaxCashFlows = (context: any, calculateConstructionInvestment: (year?: number) => number,
+                                      calculateWorkingCapital: (year?: number) => number,
+                                      calculateOperatingRevenue: (year?: number) => number,
+                                      calculateSubsidyIncome: (year?: number) => number,
+                                      calculateFixedAssetResidual: (year?: number) => number,
+                                      calculateWorkingCapitalRecovery: (year?: number) => number,
+                                      calculateOperatingCost: (year?: number) => number,
+                                      calculateVatAndTaxes: (year?: number) => number,
+                                      calculateMaintenanceInvestment: (year?: number) => number): number[] => {
     if (!context) return [];
     
     const constructionYears = context.constructionYears;
@@ -3859,7 +3888,16 @@ const getPreTaxCashFlows = (): number[] => {
   };
 
   // 获取所得税后净现金流量数组
-  const getPostTaxCashFlows = (): number[] => {
+  const getPostTaxCashFlows = (context: any, calculateConstructionInvestment: (year?: number) => number,
+                                                calculateWorkingCapital: (year?: number) => number,
+                                                calculateOperatingRevenue: (year?: number) => number,
+                                                calculateSubsidyIncome: (year?: number) => number,
+                                                calculateFixedAssetResidual: (year?: number) => number,
+                                                calculateWorkingCapitalRecovery: (year?: number) => number,
+                                                calculateOperatingCost: (year?: number) => number,
+                                                calculateVatAndTaxes: (year?: number) => number,
+                                                calculateMaintenanceInvestment: (year?: number) => number,
+                                                calculateAdjustedIncomeTax: (year?: number) => number): number[] => {
     if (!context) return [];
     
     const constructionYears = context.constructionYears;
@@ -3897,8 +3935,19 @@ const getPreTaxCashFlows = (): number[] => {
   };
 
   // 获取累计所得税前净现金流量数组
-  const getCumulativePreTaxCashFlows = (): number[] => {
-    const cashFlows = getPreTaxCashFlows();
+  const getCumulativePreTaxCashFlows = (context: any, calculateConstructionInvestment: (year?: number) => number,
+                                     calculateWorkingCapital: (year?: number) => number,
+                                     calculateOperatingRevenue: (year?: number) => number,
+                                     calculateSubsidyIncome: (year?: number) => number,
+                                     calculateFixedAssetResidual: (year?: number) => number,
+                                     calculateWorkingCapitalRecovery: (year?: number) => number,
+                                     calculateOperatingCost: (year?: number) => number,
+                                     calculateVatAndTaxes: (year?: number) => number,
+                                     calculateMaintenanceInvestment: (year?: number) => number): number[] => {
+    const cashFlows = getPreTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                                        calculateOperatingRevenue, calculateSubsidyIncome,
+                                        calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                        calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment);
     const cumulativeCashFlows: number[] = [];
     let cumulative = 0;
     
@@ -3911,8 +3960,21 @@ const getPreTaxCashFlows = (): number[] => {
   };
 
   // 获取累计所得税后净现金流量数组
-  const getCumulativePostTaxCashFlows = (): number[] => {
-    const cashFlows = getPostTaxCashFlows();
+  const getCumulativePostTaxCashFlows = (context: any, calculateConstructionInvestment: (year?: number) => number,
+                                        calculateWorkingCapital: (year?: number) => number,
+                                        calculateOperatingRevenue: (year?: number) => number,
+                                        calculateSubsidyIncome: (year?: number) => number,
+                                        calculateFixedAssetResidual: (year?: number) => number,
+                                        calculateWorkingCapitalRecovery: (year?: number) => number,
+                                        calculateOperatingCost: (year?: number) => number,
+                                        calculateVatAndTaxes: (year?: number) => number,
+                                        calculateMaintenanceInvestment: (year?: number) => number,
+                                        calculateAdjustedIncomeTax: (year?: number) => number): number[] => {
+    const cashFlows = getPostTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                                        calculateOperatingRevenue, calculateSubsidyIncome,
+                                        calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                                        calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment,
+                                        calculateAdjustedIncomeTax);
     const cumulativeCashFlows: number[] = [];
     let cumulative = 0;
     
@@ -3925,7 +3987,15 @@ const getPreTaxCashFlows = (): number[] => {
   };
 
   // 获取累计所得税前净现金流量（动态）数组
-  const getCumulativeDynamicPreTaxCashFlows = (): number[] => {
+  const getCumulativeDynamicPreTaxCashFlows = (context: any, preTaxRate: number, calculateConstructionInvestment: (year?: number) => number,
+                                              calculateWorkingCapital: (year?: number) => number,
+                                              calculateOperatingRevenue: (year?: number) => number,
+                                              calculateSubsidyIncome: (year?: number) => number,
+                                              calculateFixedAssetResidual: (year?: number) => number,
+                                              calculateWorkingCapitalRecovery: (year?: number) => number,
+                                              calculateOperatingCost: (year?: number) => number,
+                                              calculateVatAndTaxes: (year?: number) => number,
+                                              calculateMaintenanceInvestment: (year?: number) => number): number[] => {
     if (!context) return [];
     
     const constructionYears = context.constructionYears;
@@ -3968,7 +4038,16 @@ const getPreTaxCashFlows = (): number[] => {
   };
 
   // 获取累计所得税后净现金流量（动态）数组
-  const getCumulativeDynamicPostTaxCashFlows = (): number[] => {
+  const getCumulativeDynamicPostTaxCashFlows = (context: any, preTaxRate: number, postTaxRate: number, calculateConstructionInvestment: (year?: number) => number,
+                                               calculateWorkingCapital: (year?: number) => number,
+                                               calculateOperatingRevenue: (year?: number) => number,
+                                               calculateSubsidyIncome: (year?: number) => number,
+                                               calculateFixedAssetResidual: (year?: number) => number,
+                                               calculateWorkingCapitalRecovery: (year?: number) => number,
+                                               calculateOperatingCost: (year?: number) => number,
+                                               calculateVatAndTaxes: (year?: number) => number,
+                                               calculateMaintenanceInvestment: (year?: number) => number,
+                                               calculateAdjustedIncomeTax: (year?: number) => number): number[] => {
     if (!context) return [];
     
     const constructionYears = context.constructionYears;
