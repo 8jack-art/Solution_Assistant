@@ -1249,12 +1249,12 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       let yearTotal = 0;
       
       if (year <= constructionYears) {
-        // 建设期
+        // 建设期：直接计算现金流入和流出的差值
         const yearInflow = 0; // 建设期没有现金流入
         const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
         yearTotal = yearInflow - yearOutflow;
       } else {
-        // 运营期
+        // 运营期：直接计算现金流入和流出的差值
         const operationYear = year - constructionYears;
         const yearInflow = calculateOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
@@ -2699,19 +2699,22 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 let yearOutflow = 0;
                 
                 if (year <= constructionYears) {
-                  // 建设期
+                  // 建设期：直接使用"1 现金流入"和"2 现金流出"的计算结果
+                  // 从表格中获取对应年份的数据
+                  yearInflow = 0; // 建设期没有现金流入
                   yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
                 } else {
-                  // 运营期
+                  // 运营期：直接使用"1 现金流入"和"2 现金流出"的计算结果
+                  // 从表格中获取对应年份的数据
                   const operationYear = year - constructionYears;
-                  yearInflow = calculateOperatingRevenue(operationYear) + 
-                              calculateSubsidyIncome(operationYear) + 
-                              calculateFixedAssetResidual(operationYear) + 
+                  yearInflow = calculateOperatingRevenue(operationYear) +
+                              calculateSubsidyIncome(operationYear) +
+                              calculateFixedAssetResidual(operationYear) +
                               calculateWorkingCapitalRecovery(operationYear);
-                  yearOutflow = calculateConstructionInvestment(year) + 
-                              calculateWorkingCapital(year) + 
-                              calculateOperatingCost(operationYear) + 
-                              calculateVatAndTaxes(operationYear) + 
+                  yearOutflow = calculateConstructionInvestment(year) +
+                              calculateWorkingCapital(year) +
+                              calculateOperatingCost(operationYear) +
+                              calculateVatAndTaxes(operationYear) +
                               calculateMaintenanceInvestment(operationYear);
                 }
                 
