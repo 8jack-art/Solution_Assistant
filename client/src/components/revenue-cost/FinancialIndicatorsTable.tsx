@@ -2699,13 +2699,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 let yearOutflow = 0;
                 
                 if (year <= constructionYears) {
-                  // 建设期：直接使用"1 现金流入"和"2 现金流出"的计算结果
-                  // 从表格中获取对应年份的数据
+                  // 建设期：直接计算现金流入和流出的差值
                   yearInflow = 0; // 建设期没有现金流入
                   yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
                 } else {
-                  // 运营期：直接使用"1 现金流入"和"2 现金流出"的计算结果
-                  // 从表格中获取对应年份的数据
+                  // 运营期：直接计算现金流入和流出的差值
                   const operationYear = year - constructionYears;
                   yearInflow = calculateOperatingRevenue(operationYear) +
                               calculateSubsidyIncome(operationYear) +
