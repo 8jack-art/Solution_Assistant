@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>累计值计算过程图标按钮添加验证</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .highlight {
+            background-color: #e7f3ff;
+        }
+        .calculation {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #007acc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>累计值计算过程图标按钮添加验证</h1>
+        
+        <div class="section">
+            <h2>问题描述</h2>
+            <p>用户要求在项目投资现金流量表中添加一个新按钮，用于专门显示四个累计值的计算过程：</p>
+            <ul>
+                <li>累计所得税前净现金流量</li>
+                <li>累计所得税后净现金流量</li>
+                <li>累计所得税前净现金流量（动态）</li>
+                <li>累计所得税后净现金流量（动态）</li>
+            </ul>
+        </div>
+        
+        <div class="section highlight">
+            <h2>实现内容</h2>
+            <p>已完成以下功能实现：</p>
+            
+            <div class="calculation">
+                <strong>1. 状态管理：</strong><br>
+                - 添加了 <code>showCumulativeCalculationDebug</code> 状态变量用于控制新弹窗的显示<br>
+                - 添加了对应的设置函数
+            </div>
+            
+            <div class="calculation">
+                <strong>2. 按钮添加：</strong><br>
+                - 在项目投资现金流量表模态框标题的按钮组中添加了新按钮<br>
+                - 按钮使用 <code>IconCalculator</code> 图标<br>
+                - 按钮颜色为 indigo<br>
+                - 悬浮提示为"累计值计算过程"
+            </div>
+            
+            <div class="calculation">
+                <strong>3. 新弹窗内容：</strong><br>
+                - 创建了"累计值计算过程"弹窗<br>
+                - 包含四个累计值的详细计算说明<br>
+                - 提供了关键计算公式和要点说明
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>功能验证</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>功能组件</th>
+                        <th>实现状态</th>
+                        <th>验证结果</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>状态变量</td>
+                        <td>已添加</td>
+                        <td>✓ 正常</td>
+                        <td><code>showCumulativeCalculationDebug</code> 状态已正确添加</td>
+                    </tr>
+                    <tr>
+                        <td>函数定义</td>
+                        <td>已添加</td>
+                        <td>✓ 正常</td>
+                        <td><code>showCumulativeCalculationDebug</code> 函数已正确实现</td>
+                    </tr>
+                    <tr>
+                        <td>按钮添加</td>
+                        <td>已添加</td>
+                        <td>✓ 正常</td>
+                        <td>在项目投资现金流量表标题栏中添加了新按钮</td>
+                    </tr>
+                    <tr>
+                        <td>弹窗内容</td>
+                        <td>已添加</td>
+                        <td>✓ 正常</td>
+                        <td>包含四个累计值的详细计算说明</td>
+                    </tr>
+                    <tr>
+                        <td>计算说明</td>
+                        <td>已添加</td>
+                        <td>✓ 完整</td>
+                        <td>涵盖累计所得税前/后净现金流量及动态指标</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>四个累计值计算说明</h2>
+            <ol>
+                <li><strong>累计所得税前净现金流量</strong>：逐年累加各年所得税前净现金流量</li>
+                <li><strong>累计所得税后净现金流量</strong>：逐年累加各年所得税后净现金流量</li>
+                <li><strong>累计所得税前净现金流量（动态）</strong>：逐年累加各年所得税前净现金流量（动态）</li>
+                <li><strong>累计所得税后净现金流量（动态）</strong>：逐年累加各年所得税后净现金流量（动态）</li>
+            </ol>
+        </div>
+        
+        <div class="section">
+            <h2>结论</h2>
+            <p>已成功在项目投资现金流量表中添加了专门显示四个累计值计算过程的按钮。用户现在可以通过点击新按钮查看详细的累计值计算说明，包括计算方法、公式和关键要点。</p>
+        </div>
+    </div>
+</body>
+</html>
