@@ -242,14 +242,18 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     },
   ]
   
-  // 计算营业收入的函数（不含税收入 = 含税收入 - 销项税额）
+  // 计算营业收入的函数（营业收入 = 营业收入（含税） - 销项税额）
   const calculateOperatingRevenue = (year?: number): number => {
     if (year !== undefined) {
-      // 优先从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
+      // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的运营期列数据
       if (revenueTableData && revenueTableData.rows) {
-        const row = revenueTableData.rows.find(r => r.序号 === '1');
-        if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
-          return row.运营期[year - 1];
+        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+        const outputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.1');
+        
+        if (revenueRow && revenueRow.运营期 && revenueRow.运营期[year - 1] !== undefined &&
+            outputTaxRow && outputTaxRow.运营期 && outputTaxRow.运营期[year - 1] !== undefined) {
+          // 营业收入 = 营业收入（含税） - 销项税额
+          return revenueRow.运营期[year - 1] - outputTaxRow.运营期[year - 1];
         }
       }
       // 如果没有表格数据，使用原有计算逻辑作为后备
@@ -266,11 +270,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         return sum + nonTaxRevenue;
       }, 0);
     } else {
-      // 优先从 revenueTableData 中获取"营业收入"（序号1）的合计数据
+      // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的合计数据
       if (revenueTableData && revenueTableData.rows) {
-        const row = revenueTableData.rows.find(r => r.序号 === '1');
-        if (row && row.合计 !== undefined) {
-          return row.合计;
+        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+        const outputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.1');
+        
+        if (revenueRow && revenueRow.合计 !== undefined &&
+            outputTaxRow && outputTaxRow.合计 !== undefined) {
+          // 营业收入 = 营业收入（含税） - 销项税额
+          return revenueRow.合计 - outputTaxRow.合计;
         }
       }
       // 如果没有表格数据，使用原有计算逻辑作为后备
@@ -1912,9 +1920,17 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     if (year > constructionYears) {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      totalSum += calculateOperatingRevenue(operationYear) + 
-                                 calculateSubsidyIncome(operationYear) + 
-                                 calculateFixedAssetResidual(operationYear) + 
+                      // 直接从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
+                      let operatingRevenue = 0;
+                      if (revenueTableData && revenueTableData.rows) {
+                        const row = revenueTableData.rows.find(r => r.序号 === '1');
+                        if (row && row.运营期 && row.运营期[operationYear - 1] !== undefined) {
+                          operatingRevenue = row.运营期[operationYear - 1];
+                        }
+                      }
+                      totalSum += operatingRevenue +
+                                 calculateSubsidyIncome(operationYear) +
+                                 calculateFixedAssetResidual(operationYear) +
                                  calculateWorkingCapitalRecovery(operationYear);
                     }
                   });
@@ -1930,9 +1946,17 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  yearTotal = calculateOperatingRevenue(operationYear) + 
-                             calculateSubsidyIncome(operationYear) + 
-                             calculateFixedAssetResidual(operationYear) + 
+                  // 直接从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
+                  let operatingRevenue = 0;
+                  if (revenueTableData && revenueTableData.rows) {
+                    const row = revenueTableData.rows.find(r => r.序号 === '1');
+                    if (row && row.运营期 && row.运营期[operationYear - 1] !== undefined) {
+                      operatingRevenue = row.运营期[operationYear - 1];
+                    }
+                  }
+                  yearTotal = operatingRevenue +
+                             calculateSubsidyIncome(operationYear) +
+                             calculateFixedAssetResidual(operationYear) +
                              calculateWorkingCapitalRecovery(operationYear);
                 }
                 
@@ -1949,7 +1973,16 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>营业收入</Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                {formatNumberNoRounding(calculateOperatingRevenue(undefined))}
+                {(() => {
+                  // 直接从 revenueTableData 中获取"营业收入"（序号1）的合计数据
+                  if (revenueTableData && revenueTableData.rows) {
+                    const row = revenueTableData.rows.find(r => r.序号 === '1');
+                    if (row && row.合计 !== undefined) {
+                      return formatNumberNoRounding(row.合计);
+                    }
+                  }
+                  return formatNumberNoRounding(0);
+                })()}
               </Table.Td>
               {years.map((year) => {
                 let yearTotal = 0;
@@ -1957,7 +1990,13 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 if (year > constructionYears) {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  yearTotal = calculateOperatingRevenue(operationYear);
+                  // 直接从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
+                  if (revenueTableData && revenueTableData.rows) {
+                    const row = revenueTableData.rows.find(r => r.序号 === '1');
+                    if (row && row.运营期 && row.运营期[operationYear - 1] !== undefined) {
+                      yearTotal = row.运营期[operationYear - 1];
+                    }
+                  }
                 }
                 
                 return (

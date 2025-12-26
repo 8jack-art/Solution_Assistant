@@ -178,52 +178,67 @@ const AnnualInvestmentTable: React.FC<AnnualInvestmentTableProps> = ({
       return result
     }
 
+    // 先计算子项的建设期数据
+    const buildingInstallationData = distributeEvenly(buildingInstallationFee, constructionYears)
+    const equipmentData = distributeToLastYear(equipmentFee, constructionYears)
+    const engineeringOtherData = distributeToFirstYear(engineeringOtherFees, constructionYears)
+    const intangibleAssetData = distributeToFirstYear(intangibleAssetFees, constructionYears)
+    const reserveData = distributeToLastYear(reserveFees, constructionYears)
+
+    // "一 工程费用"的建设期列 = 合计1.1、1.2的建设期列
+    const partAData = buildingInstallationData.map((val, idx) => val + equipmentData[idx])
+
+    // "五 建设投资合计"的建设期列 = 合计一、二、三、四的建设期列
+    const totalConstructionData = partAData.map((val, idx) =>
+      val + engineeringOtherData[idx] + intangibleAssetData[idx] + reserveData[idx]
+    )
+
     // 构建表格数据
     const data = [
       {
         序号: '一',
         项目: '工程费用',
         合计: partATotal,
-        分年数据: distributeEvenly(partATotal, constructionYears),
+        分年数据: partAData,
         isSubTotal: true
       },
       {
         序号: '1.1',
         项目: '建筑安装工程费',
         合计: buildingInstallationFee,
-        分年数据: distributeEvenly(buildingInstallationFee, constructionYears),
+        分年数据: buildingInstallationData,
         isSubItem: true
       },
       {
         序号: '1.2',
         项目: '设备购置费',
         合计: equipmentFee,
-        分年数据: distributeToLastYear(equipmentFee, constructionYears),
+        分年数据: equipmentData,
         isSubItem: true
       },
       {
         序号: '二',
         项目: '工程其他费用',
         合计: engineeringOtherFees,
-        分年数据: distributeToFirstYear(engineeringOtherFees, constructionYears),
+        分年数据: engineeringOtherData,
       },
       {
         序号: '三',
         项目: '无形资产费用',
         合计: intangibleAssetFees,
-        分年数据: distributeToFirstYear(intangibleAssetFees, constructionYears),
+        分年数据: intangibleAssetData,
       },
       {
         序号: '四',
         项目: '预备费',
         合计: reserveFees,
-        分年数据: distributeToLastYear(reserveFees, constructionYears),
+        分年数据: reserveData,
       },
       {
         序号: '五',
         项目: '建设投资合计',
         合计: totalConstructionInvestment,
-        分年数据: distributeEvenly(totalConstructionInvestment, constructionYears),
+        分年数据: totalConstructionData,
         isTotal: true
       }
     ]
