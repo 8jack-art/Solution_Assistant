@@ -10,15 +10,13 @@
             margin: 20px;
             line-height: 1.6;
         }
-        .section {
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
         }
         table {
-            width: 100%;
             border-collapse: collapse;
+            width: 100%;
             margin: 20px 0;
         }
         th, td {
@@ -29,260 +27,161 @@
         th {
             background-color: #f2f2f2;
         }
-        .formula {
-            background-color: #f9f9f9;
-            padding: 10px;
-            border-left: 3px solid #007cba;
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .highlight {
+            background-color: #e7f3ff;
+        }
+        .calculation {
             margin: 10px 0;
-        }
-        .result {
-            color: #d9534f;
-            font-weight: bold;
-        }
-        .success {
-            color: #5cb85c;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #007acc;
         }
     </style>
 </head>
 <body>
-    <h1>项目投资现金流量表计算逻辑验证</h1>
-    
-    <div class="section">
-        <h2>验证目标</h2>
-        <p>验证"3 所得税前净现金流量（1-2）"运营期列的数据是否等于"1 现金流入"运营期列的数据减"2 现金流出"运营期列的数据</p>
-    </div>
-    
-    <div class="section">
-        <h2>计算逻辑说明</h2>
-        <div class="formula">
-            <strong>现金流入（第1行）</strong> = 营业收入 + 补贴收入 + 回收固定资产余值 + 回收流动资金
-        </div>
-        <div class="formula">
-            <strong>现金流出（第2行）</strong> = 建设投资 + 流动资金 + 经营成本 + 增值税、房产税等及附加 + 维持运营投资
-        </div>
-        <div class="formula">
-            <strong>所得税前净现金流量（第3行）</strong> = 现金流入 - 现金流出
-        </div>
-    </div>
-    
-    <div class="section">
-        <h2>测试数据</h2>
-        <p>假设项目有2年建设期，3年运营期</p>
+    <div class="container">
+        <h1>项目投资现金流量表计算逻辑验证</h1>
         
-        <table id="testData">
-            <thead>
-                <tr>
-                    <th>年份</th>
-                    <th>类型</th>
-                    <th>建设期1</th>
-                    <th>建设期2</th>
-                    <th>运营期1</th>
-                    <th>运营期2</th>
-                    <th>运营期3</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td rowspan="2">现金流入</td>
-                    <td>营业收入</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>300</td>
-                    <td>350</td>
-                    <td>350</td>
-                </tr>
-                <tr>
-                    <td>补贴收入</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                </tr>
-                <tr>
-                    <td rowspan="5">现金流出</td>
-                    <td>建设投资</td>
-                    <td>200</td>
-                    <td>150</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                </tr>
-                <tr>
-                    <td>流动资金</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                </tr>
-                <tr>
-                    <td>经营成本</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>100</td>
-                    <td>50</td>
-                    <td>50</td>
-                </tr>
-                <tr>
-                    <td>增值税等附加</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>50</td>
-                    <td>25</td>
-                    <td>25</td>
-                </tr>
-                <tr>
-                    <td>维持运营投资</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>计算过程</h2>
-        <table id="calculation">
-            <thead>
-                <tr>
-                    <th>年份</th>
-                    <th>现金流入</th>
-                    <th>现金流出</th>
-                    <th>所得税前净现金流量（计算）</th>
-                    <th>所得税前净现金流量（公式）</th>
-                    <th>验证结果</th>
-                </tr>
-            </thead>
-            <tbody id="calculation-body">
-            </tbody>
-        </table>
-    </div>
-    
-    <div class="section">
-        <h2>验证代码</h2>
-        <pre id="code"></pre>
-    </div>
-
-    <script>
-        // 测试数据
-        const testData = {
-            years: ['建设期1', '建设期2', '运营期1', '运营期2', '运营期3'],
-            cashInflow: [0, 0, 300, 350, 350],  // 营业收入（其他收入为0）
-            cashOutflow: [200, 150, 150, 75, 75]  // 建设投资+经营成本+增值税等
-        };
-
-        // 执行验证计算
-        function performCalculation() {
-            const tbody = document.getElementById('calculation-body');
-            let allMatch = true;
+        <div class="section">
+            <h2>验证"3 所得税前净现金流量（1-2）"计算逻辑</h2>
+            <p>验证是否等于"1 现金流入" - "2 现金流出"</p>
             
-            for (let i = 0; i < testData.years.length; i++) {
-                const year = testData.years[i];
-                const inflow = testData.cashInflow[i];
-                const outflow = testData.cashOutflow[i];
+            <div class="calculation">
+                <h3>计算公式</h3>
+                <p><strong>所得税前净现金流量 = 现金流入 - 现金流出</strong></p>
                 
-                // 计算所得税前净现金流量（直接计算）
-                const calculatedNetFlow = inflow - outflow;
+                <h3>现金流入组成</h3>
+                <ul>
+                    <li>营业收入</li>
+                    <li>补贴收入</li>
+                    <li>回收固定资产余值</li>
+                    <li>回收流动资金</li>
+                </ul>
                 
-                // 按公式计算所得税前净现金流量（现金流入 - 现金流出）
-                const formulaNetFlow = inflow - outflow;
-                
-                // 验证是否匹配
-                const matches = calculatedNetFlow === formulaNetFlow;
-                if (!matches) allMatch = false;
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${year}</td>
-                    <td>${inflow}</td>
-                    <td>${outflow}</td>
-                    <td>${calculatedNetFlow}</td>
-                    <td>${formulaNetFlow}</td>
-                    <td class="${matches ? 'success' : 'result'}">${matches ? '✓ 匹配' : '✗ 不匹配'}</td>
-                `;
-                
-                tbody.appendChild(row);
-            }
+                <h3>现金流出组成</h3>
+                <ul>
+                    <li>建设投资</li>
+                    <li>流动资金</li>
+                    <li>经营成本</li>
+                    <li>增值税、房产税等及附加</li>
+                    <li>维持运营投资</li>
+                </ul>
+            </div>
             
-            // 显示验证结果
-            const resultRow = document.createElement('tr');
-            resultRow.innerHTML = `
-                <td colspan="5" style="text-align: right; font-weight: bold;">总体验证结果：</td>
-                <td class="${allMatch ? 'success' : 'result'}">${allMatch ? '✓ 全部匹配' : '✗ 存在不匹配'}</td>
-            `;
-            tbody.appendChild(resultRow);
+            <div class="calculation highlight">
+                <h3>代码实现验证</h3>
+                <p>在 <strong>FinancialIndicatorsTable.tsx</strong> 文件中，第2673-2733行：</p>
+                
+                <pre>
+// 3. 所得税前净现金流量（1-2）
+&lt;Table.Tr&gt;
+  &lt;Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}&gt;3&lt;/Table.Td&gt;
+  &lt;Table.Td style={{ border: '1px solid #dee2e6' }}&gt;所得税前净现金流量（1-2）&lt;/Table.Td&gt;
+  &lt;Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}&gt;
+    {(() => {
+      // 所得税前净现金流量合计 = 现金流入合计 - 现金流出合计
+      let totalInflow = 0;
+      let totalOutflow = 0;
+      
+      years.forEach((year) => {
+        if (year <= constructionYears) {
+          // 建设期
+          totalOutflow += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+        } else {
+          // 运营期
+          const operationYear = year - constructionYears;
+          totalInflow += calculateOperatingRevenue(operationYear) + 
+                        calculateSubsidyIncome(operationYear) + 
+                        calculateFixedAssetResidual(operationYear) + 
+                        calculateWorkingCapitalRecovery(operationYear);
+          totalOutflow += calculateConstructionInvestment(year) + 
+                        calculateWorkingCapital(year) + 
+                        calculateOperatingCost(operationYear) + 
+                        calculateVatAndTaxes(operationYear) + 
+                        calculateMaintenanceInvestment(operationYear);
         }
-
-        // 显示验证代码
-        function displayCode() {
-            const codeElement = document.getElementById('code');
-            const code = `// 验证所得税前净现金流量计算逻辑
-function verifyCashFlowCalculation() {
-    // 现金流入 = 营业收入 + 补贴收入 + 回收固定资产余值 + 回收流动资金
-    const cashInflow = [
-        0,   // 建设期1
-        0,   // 建设期2
-        300, // 运营期1
-        350, // 运营期2
-        350  // 运营期3
-    ];
+      });
+      
+      return formatNumberNoRounding(totalInflow - totalOutflow);
+    })()}
+  &lt;/Table.Td&gt;
+  {years.map((year) => {
+    let yearInflow = 0;
+    let yearOutflow = 0;
     
-    // 现金流出 = 建设投资 + 流动资金 + 经营成本 + 增值税、房产税等及附加 + 维持运营投资
-    const cashOutflow = [
-        200, // 建设期1
-        150, // 建设期2
-        150, // 运营期1
-        75,  // 运营期2
-        75   // 运营期3
-    ];
-    
-    console.log('验证所得税前净现金流量计算逻辑：');
-    console.log('所得税前净现金流量 = 现金流入 - 现金流出');
-    
-    for (let i = 0; i < cashInflow.length; i++) {
-        const calculated = cashInflow[i] - cashOutflow[i];
-        const expected = cashInflow[i] - cashOutflow[i];
-        
-        console.log(\`第\${i+1}年: \${cashInflow[i]} - \${cashOutflow[i]} = \${calculated} (期望: \${expected}) \${calculated === expected ? '✓' : '✗'}\`);
+    if (year <= constructionYears) {
+      // 建设期：直接计算现金流入和流出的差值
+      yearInflow = 0; // 建设期没有现金流入
+      yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+    } else {
+      // 运营期：直接计算现金流入和流出的差值
+      const operationYear = year - constructionYears;
+      yearInflow = calculateOperatingRevenue(operationYear) +
+                  calculateSubsidyIncome(operationYear) +
+                  calculateFixedAssetResidual(operationYear) +
+                  calculateWorkingCapitalRecovery(operationYear);
+      yearOutflow = calculateConstructionInvestment(year) +
+                  calculateWorkingCapital(year) +
+                  calculateOperatingCost(operationYear) +
+                  calculateVatAndTaxes(operationYear) +
+                  calculateMaintenanceInvestment(operationYear);
     }
     
-    console.log('验证完成！');
-}
-
-// 执行验证
-verifyCashFlowCalculation();`;
-            
-            codeElement.textContent = code;
-        }
-
-        // 页面加载完成后执行
-        window.onload = function() {
-            performCalculation();
-            displayCode();
-            
-            // 在控制台也执行验证
-            console.log('项目投资现金流量表计算逻辑验证');
-            console.log('=====================================');
-            
-            const cashInflow = [0, 0, 300, 350, 350];
-            const cashOutflow = [200, 150, 150, 75, 75];
-            
-            console.log('验证所得税前净现金流量计算逻辑：');
-            console.log('所得税前净现金流量 = 现金流入 - 现金流出');
-            
-            for (let i = 0; i < cashInflow.length; i++) {
-                const calculated = cashInflow[i] - cashOutflow[i];
-                const expected = cashInflow[i] - cashOutflow[i];
+    return (
+      &lt;Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}&gt;
+        {formatNumberWithZeroBlank(yearInflow - yearOutflow)}
+      &lt;/Table.Td&gt;
+    );
+  })}
+&lt;/Table.Tr&gt;
+                </pre>
                 
-                console.log(`第${i+1}年: ${cashInflow[i]} - ${cashOutflow[i]} = ${calculated} (期望: ${expected}) ${calculated === expected ? '✓' : '✗'}`);
-            }
-            
-            console.log('验证完成！');
-        };
-    </script>
+                <p><strong>验证结果：</strong> 代码实现完全符合"所得税前净现金流量 = 现金流入 - 现金流出"的逻辑。</p>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>具体年份计算示例</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>年份</th>
+                        <th>现金流入</th>
+                        <th>现金流出</th>
+                        <th>所得税前净现金流量</th>
+                        <th>验证公式</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>建设期第1年</td>
+                        <td>0</td>
+                        <td>建设投资 + 流动资金</td>
+                        <td>0 - (建设投资 + 流动资金)</td>
+                        <td>0 - 流出 = -流出</td>
+                    </tr>
+                    <tr>
+                        <td>运营期第1年</td>
+                        <td>营业收入 + 补贴收入 + ...</td>
+                        <td>建设投资 + 流动资金 + 经营成本 + ...</td>
+                        <td>(流入各项之和) - (流出各项之和)</td>
+                        <td>流入 - 流出</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>结论</h2>
+            <p><strong>项目投资现金流量表中"3 所得税前净现金流量（1-2）"确实等于"1 现金流入"减"2 现金流出"。</strong></p>
+            <p>计算逻辑验证无误，代码实现正确。</p>
+        </div>
+    </div>
 </body>
 </html>

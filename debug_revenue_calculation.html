@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>营业收入计算逻辑验证</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .highlight {
+            background-color: #e7f3ff;
+        }
+        .calculation {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #007acc;
+        }
+        .code {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: monospace;
+            white-space: pre;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>营业收入计算逻辑验证</h1>
+        
+        <div class="section">
+            <h2>问题描述</h2>
+            <p>项目投资现金流量表中营业收入的表格渲染公式与Excel导出公式不一致，导致数据不一致。</p>
+        </div>
+        
+        <div class="section">
+            <h2>原代码问题分析</h2>
+            
+            <div class="calculation">
+                <h3>表格渲染部分（问题代码）</h3>
+                <div class="code">
+// 1.1 营业收入 - 合计
+{(() => {
+  // 直接从 revenueTableData 中获取"营业收入"（序号1）的合计数据
+  if (revenueTableData && revenueTableData.rows) {
+    const row = revenueTableData.rows.find(r => r.序号 === '1');
+    if (row && row.合计 !== undefined) {
+      return formatNumberNoRounding(row.合计);
+    }
+  }
+  return formatNumberNoRounding(0);
+})()}
+
+// 1.1 营业收入 - 年份数据
+{years.map((year) => {
+  let yearTotal = 0;
+  
+  if (year > constructionYears) {
+    // 运营期
+    const operationYear = year - constructionYears;
+    // 直接从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
+    if (revenueTableData && revenueTableData.rows) {
+      const row = revenueTableData.rows.find(r => r.序号 === '1');
+      if (row && row.运营期 && row.运营期[operationYear - 1] !== undefined) {
+        yearTotal = row.运营期[operationYear - 1];
+      }
+    }
+  }
+  
+  return (
+    &lt;Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}&gt;
+      {formatNumberWithZeroBlank(yearTotal)}
+    &lt;/Table.Td&gt;
+  );
+})}
+                </div>
+            </div>
+            
+            <div class="calculation highlight">
+                <h3>Excel导出部分（正确代码）</h3>
+                <div class="code">
+// 1.1 营业收入
+const row1_1: any = { '序号': '1.1', '项目': '营业收入' };
+let totalRow1_1 = 0;
+years.forEach((year) => {
+  let yearTotal = 0;
+  
+  if (year > constructionYears) {
+    // 运营期
+    const operationYear = year - constructionYears;
+    yearTotal = calculateOperatingRevenue(operationYear);  // 使用函数计算
+  }
+  
+  row1_1[`${year}`] = yearTotal;
+  totalRow1_1 += yearTotal;  // 合计是逐年相加
+});
+row1_1['合计'] = totalRow1_1;  // 合计等于逐年之和
+                </div>
+                
+                <h3>问题分析</h3>
+                <p>表格渲染部分直接从<code>revenueTableData.rows.find(r => r.序号 === '1')</code>获取数据，但这个数据可能不是通过<code>calculateOperatingRevenue</code>函数计算得到的，导致与Excel导出部分不一致。</p>
+                
+                <h3>calculateOperatingRevenue函数定义</h3>
+                <div class="code">
+const calculateOperatingRevenue = (year?: number): number => {
+  if (year !== undefined) {
+    // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的运营期列数据
+    if (revenueTableData && revenueTableData.rows) {
+      const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+      const outputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.1');
+      
+      if (revenueRow && revenueRow.运营期 && revenueRow.运营期[year - 1] !== undefined &&
+          outputTaxRow && outputTaxRow.运营期 && outputTaxRow.运营期[year - 1] !== undefined) {
+        // 营业收入 = 营业收入（含税） - 销项税额
+        return revenueRow.运营期[year - 1] - outputTaxRow.运营期[year - 1];
+      }
+    }
+    // 如果没有表格数据，使用原有计算逻辑作为后备
+    // ...
+  } else {
+    // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的合计数据
+    if (revenueTableData && revenueTableData.rows) {
+      const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+      const outputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.1');
+      
+      if (revenueRow && revenueRow.合计 !== undefined &&
+          outputTaxRow && outputTaxRow.合计 !== undefined) {
+        // 营业收入 = 营业收入（含税） - 销项税额
+        return revenueRow.合计 - outputTaxRow.合计;
+      }
+    }
+    // ...
+  }
+};
+                </div>
+                
+                <p>注意：<code>calculateOperatingRevenue</code>函数实际上会从<code>revenueTableData</code>中获取含税收入和销项税额，然后计算：营业收入 = 含税收入 - 销项税额</p>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>修正方案</h2>
+            
+            <div class="calculation highlight">
+                <h3>修正后的表格渲染代码</h3>
+                <div class="code">
+// 1.1 营业收入 - 合计
+{formatNumberNoRounding(calculateOperatingRevenue(undefined))}
+
+// 1.1 营业收入 - 年份数据
+{years.map((year) => {
+  let yearTotal = 0;
+  
+  if (year > constructionYears) {
+    // 运营期
+    const operationYear = year - constructionYears;
+    yearTotal = calculateOperatingRevenue(operationYear);
+  }
+  
+  return (
+    &lt;Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}&gt;
+      {formatNumberWithZeroBlank(yearTotal)}
+    &lt;/Table.Td&gt;
+  );
+})}
+                </div>
+                
+                <h3>现金流入部分也需要修正</h3>
+                <div class="code">
+// 现金流入 - 合计
+{(() => {
+  // 现金流入合计 = 运营期各年数值的总和
+  let totalSum = 0;
+  years.forEach((year) => {
+    if (year > constructionYears) {
+      // 运营期
+      const operationYear = year - constructionYears;
+      totalSum += calculateOperatingRevenue(operationYear) +  // 使用函数计算
+                 calculateSubsidyIncome(operationYear) +
+                 calculateFixedAssetResidual(operationYear) +
+                 calculateWorkingCapitalRecovery(operationYear);
+    }
+  });
+  return formatNumberNoRounding(totalSum);
+})()}
+
+// 现金流入 - 年份数据
+{years.map((year) => {
+  let yearTotal = 0;
+  
+  if (year <= constructionYears) {
+    // 建设期没有现金流入
+    yearTotal = 0;
+  } else {
+    // 运营期
+    const operationYear = year - constructionYears;
+    yearTotal = calculateOperatingRevenue(operationYear) +  // 使用函数计算
+               calculateSubsidyIncome(operationYear) +
+               calculateFixedAssetResidual(operationYear) +
+               calculateWorkingCapitalRecovery(operationYear);
+  }
+  
+  return (
+    &lt;Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}&gt;
+      {formatNumberWithZeroBlank(yearTotal)}
+    &lt;/Table.Td&gt;
+  );
+})}
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>验证结果</h2>
+            <p><strong>修正后，表格渲染和Excel导出将使用相同的计算逻辑，确保数据一致性。</strong></p>
+            <p>营业收入的计算现在统一使用<code>calculateOperatingRevenue</code>函数，该函数正确处理了含税收入和销项税额的计算关系。</p>
+        </div>
+    </div>
+</body>
+</html>

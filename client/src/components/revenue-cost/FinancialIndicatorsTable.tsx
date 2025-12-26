@@ -285,6 +285,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [jsonData, setJsonData] = useState<any>(null)
   
+  // 项目投资现金流量表计算过程调试状态
+  const [showDebugModal, setShowDebugModal] = useState(false)
+  
   // 利润与利润分配表设置状态
   const [subsidyIncome, setSubsidyIncome] = useState(0)
   const [incomeTaxRate, setIncomeTaxRate] = useState(25)
@@ -400,6 +403,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     },
   ]
   
+  // 项目投资现金流量表计算过程调试函数
+  const showCashFlowCalculationDebug = () => {
+    setShowDebugModal(true);
+  }
+  
   // 计算营业收入的函数（营业收入 = 营业收入（含税） - 销项税额）
   const calculateOperatingRevenue = (year?: number): number => {
     if (year !== undefined) {
@@ -446,6 +454,44 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       let totalSum = 0;
       years.forEach((year) => {
         totalSum += calculateOperatingRevenue(year);
+      });
+      return totalSum;
+    }
+  };
+  
+  // 计算含税营业收入的函数
+  const calculateTaxableOperatingRevenue = (year?: number): number => {
+    if (year !== undefined) {
+      // 从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据（含税收入）
+      if (revenueTableData && revenueTableData.rows) {
+        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+        
+        if (revenueRow && revenueRow.运营期 && revenueRow.运营期[year - 1] !== undefined) {
+          return revenueRow.运营期[year - 1];
+        }
+      }
+      // 如果没有表格数据，使用原有计算逻辑作为后备
+      const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
+      return revenueItems.reduce((sum, item) => {
+        // 计算含税收入
+        const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
+        return sum + taxableRevenue;
+      }, 0);
+    } else {
+      // 从 revenueTableData 中获取"营业收入"（序号1）的合计数据（含税收入）
+      if (revenueTableData && revenueTableData.rows) {
+        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+        
+        if (revenueRow && revenueRow.合计 !== undefined) {
+          return revenueRow.合计;
+        }
+      }
+      // 如果没有表格数据，使用原有计算逻辑作为后备
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateTaxableOperatingRevenue(year);
       });
       return totalSum;
     }
@@ -1057,7 +1103,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        yearTotal = calculateOperatingRevenue(operationYear) +
+        yearTotal = calculateTaxableOperatingRevenue(operationYear) +
                    calculateSubsidyIncome(operationYear) +
                    calculateFixedAssetResidual(operationYear) +
                    calculateWorkingCapitalRecovery(operationYear);
@@ -1078,7 +1124,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       if (year > constructionYears) {
         // 运营期
         const operationYear = year - constructionYears;
-        yearTotal = calculateOperatingRevenue(operationYear);
+        yearTotal = calculateTaxableOperatingRevenue(operationYear);
       }
       
       row1_1[`${year}`] = yearTotal;
@@ -1256,7 +1302,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期：直接计算现金流入和流出的差值
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -1288,7 +1334,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -1338,7 +1384,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -1371,7 +1417,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -1404,7 +1450,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -1440,7 +1486,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -1479,7 +1525,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -1526,7 +1572,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       } else {
         // 运营期
         const operationYear = year - constructionYears;
-        const yearInflow = calculateOperatingRevenue(operationYear) +
+        const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                           calculateSubsidyIncome(operationYear) +
                           calculateFixedAssetResidual(operationYear) +
                           calculateWorkingCapitalRecovery(operationYear);
@@ -2348,15 +2394,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     if (year > constructionYears) {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      // 直接从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
-                      let operatingRevenue = 0;
-                      if (revenueTableData && revenueTableData.rows) {
-                        const row = revenueTableData.rows.find(r => r.序号 === '1');
-                        if (row && row.运营期 && row.运营期[operationYear - 1] !== undefined) {
-                          operatingRevenue = row.运营期[operationYear - 1];
-                        }
-                      }
-                      totalSum += operatingRevenue +
+                      totalSum += calculateTaxableOperatingRevenue(operationYear) +
                                  calculateSubsidyIncome(operationYear) +
                                  calculateFixedAssetResidual(operationYear) +
                                  calculateWorkingCapitalRecovery(operationYear);
@@ -2374,15 +2412,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  // 直接从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
-                  let operatingRevenue = 0;
-                  if (revenueTableData && revenueTableData.rows) {
-                    const row = revenueTableData.rows.find(r => r.序号 === '1');
-                    if (row && row.运营期 && row.运营期[operationYear - 1] !== undefined) {
-                      operatingRevenue = row.运营期[operationYear - 1];
-                    }
-                  }
-                  yearTotal = operatingRevenue +
+                  yearTotal = calculateTaxableOperatingRevenue(operationYear) +
                              calculateSubsidyIncome(operationYear) +
                              calculateFixedAssetResidual(operationYear) +
                              calculateWorkingCapitalRecovery(operationYear);
@@ -2401,16 +2431,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>营业收入</Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                {(() => {
-                  // 直接从 revenueTableData 中获取"营业收入"（序号1）的合计数据
-                  if (revenueTableData && revenueTableData.rows) {
-                    const row = revenueTableData.rows.find(r => r.序号 === '1');
-                    if (row && row.合计 !== undefined) {
-                      return formatNumberNoRounding(row.合计);
-                    }
-                  }
-                  return formatNumberNoRounding(0);
-                })()}
+                {formatNumberNoRounding(calculateOperatingRevenue(undefined))}
               </Table.Td>
               {years.map((year) => {
                 let yearTotal = 0;
@@ -2418,13 +2439,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 if (year > constructionYears) {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  // 直接从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据
-                  if (revenueTableData && revenueTableData.rows) {
-                    const row = revenueTableData.rows.find(r => r.序号 === '1');
-                    if (row && row.运营期 && row.运营期[operationYear - 1] !== undefined) {
-                      yearTotal = row.运营期[operationYear - 1];
-                    }
-                  }
+                  yearTotal = calculateOperatingRevenue(operationYear);
                 }
                 
                 return (
@@ -2679,7 +2694,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      totalInflow += calculateOperatingRevenue(operationYear) + 
+                      totalInflow += calculateTaxableOperatingRevenue(operationYear) + 
                                     calculateSubsidyIncome(operationYear) + 
                                     calculateFixedAssetResidual(operationYear) + 
                                     calculateWorkingCapitalRecovery(operationYear);
@@ -2705,7 +2720,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期：直接计算现金流入和流出的差值
                   const operationYear = year - constructionYears;
-                  yearInflow = calculateOperatingRevenue(operationYear) +
+                  yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                               calculateSubsidyIncome(operationYear) +
                               calculateFixedAssetResidual(operationYear) +
                               calculateWorkingCapitalRecovery(operationYear);
@@ -2743,7 +2758,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      yearInflow = calculateOperatingRevenue(operationYear) + 
+                      yearInflow = calculateTaxableOperatingRevenue(operationYear) + 
                                   calculateSubsidyIncome(operationYear) + 
                                   calculateFixedAssetResidual(operationYear) + 
                                   calculateWorkingCapitalRecovery(operationYear);
@@ -2837,7 +2852,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      totalInflow += calculateOperatingRevenue(operationYear) + 
+                      totalInflow += calculateTaxableOperatingRevenue(operationYear) + 
                                     calculateSubsidyIncome(operationYear) + 
                                     calculateFixedAssetResidual(operationYear) + 
                                     calculateWorkingCapitalRecovery(operationYear);
@@ -2864,7 +2879,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  yearInflow = calculateOperatingRevenue(operationYear) + 
+                  yearInflow = calculateTaxableOperatingRevenue(operationYear) + 
                               calculateSubsidyIncome(operationYear) + 
                               calculateFixedAssetResidual(operationYear) + 
                               calculateWorkingCapitalRecovery(operationYear);
@@ -2904,7 +2919,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      yearInflow = calculateOperatingRevenue(operationYear) + 
+                      yearInflow = calculateTaxableOperatingRevenue(operationYear) + 
                                   calculateSubsidyIncome(operationYear) + 
                                   calculateFixedAssetResidual(operationYear) + 
                                   calculateWorkingCapitalRecovery(operationYear);
@@ -2936,7 +2951,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                    yearInflow = calculateOperatingRevenue(operationYear) + 
+                    yearInflow = calculateTaxableOperatingRevenue(operationYear) + 
                                 calculateSubsidyIncome(operationYear) + 
                                 calculateFixedAssetResidual(operationYear) + 
                                 calculateWorkingCapitalRecovery(operationYear);
@@ -2985,7 +3000,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      const yearInflow = calculateOperatingRevenue(operationYear) +
+                      const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                         calculateSubsidyIncome(operationYear) +
                                         calculateFixedAssetResidual(operationYear) +
                                         calculateWorkingCapitalRecovery(operationYear);
@@ -3016,7 +3031,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  const yearInflow = calculateOperatingRevenue(operationYear) +
+                  const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                     calculateSubsidyIncome(operationYear) +
                                     calculateFixedAssetResidual(operationYear) +
                                     calculateWorkingCapitalRecovery(operationYear);
@@ -3062,7 +3077,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      const yearInflow = calculateOperatingRevenue(operationYear) +
+                      const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                         calculateSubsidyIncome(operationYear) +
                                         calculateFixedAssetResidual(operationYear) +
                                         calculateWorkingCapitalRecovery(operationYear);
@@ -3098,7 +3113,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                    const yearInflow = calculateOperatingRevenue(operationYear) +
+                    const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                       calculateSubsidyIncome(operationYear) +
                                       calculateFixedAssetResidual(operationYear) +
                                       calculateWorkingCapitalRecovery(operationYear);
@@ -3147,7 +3162,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      const yearInflow = calculateOperatingRevenue(operationYear) +
+                      const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                         calculateSubsidyIncome(operationYear) +
                                         calculateFixedAssetResidual(operationYear) +
                                         calculateWorkingCapitalRecovery(operationYear);
@@ -3189,7 +3204,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  const yearInflow = calculateOperatingRevenue(operationYear) +
+                  const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                     calculateSubsidyIncome(operationYear) +
                                     calculateFixedAssetResidual(operationYear) +
                                     calculateWorkingCapitalRecovery(operationYear);
@@ -3246,7 +3261,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      const yearInflow = calculateOperatingRevenue(operationYear) +
+                      const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                         calculateSubsidyIncome(operationYear) +
                                         calculateFixedAssetResidual(operationYear) +
                                         calculateWorkingCapitalRecovery(operationYear);
@@ -3293,7 +3308,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                    const yearInflow = calculateOperatingRevenue(operationYear) +
+                    const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
                                       calculateSubsidyIncome(operationYear) +
                                       calculateFixedAssetResidual(operationYear) +
                                       calculateWorkingCapitalRecovery(operationYear);
@@ -3470,6 +3485,16 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   onClick={handleExportProfitTaxTable}
                 >
                   <IconDownload size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="查看计算过程">
+                <ActionIcon
+                  variant="light"
+                  color="orange"
+                  size={16}
+                  onClick={showCashFlowCalculationDebug}
+                >
+                  <IconCode size={16} />
                 </ActionIcon>
               </Tooltip>
             </Group>
@@ -3744,6 +3769,87 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               </Table.Tbody>
             </Table>
           </div>
+        </Stack>
+      </Modal>
+      
+      {/* 项目投资现金流量表计算过程调试弹窗 */}
+      <Modal
+        opened={showDebugModal}
+        onClose={() => setShowDebugModal(false)}
+        title="项目投资现金流量表计算过程"
+        size="xl"
+        styles={{
+          body: {
+            maxHeight: '600px',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            <strong>项目投资现金流量表计算过程：</strong>
+          </Text>
+          
+          <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>1. 现金流入计算：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>营业收入 = 营业收入（含税）</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>补贴收入 = {subsidyIncome}</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>回收固定资产余值 = 运营期最后一年计算</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>回收流动资金 = 运营期最后一年计算</Text>
+            <Text size="sm" mt="xs">现金流入 = 营业收入 + 补贴收入 + 回收固定资产余值 + 回收流动资金</Text>
+          </div>
+          
+          <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>2. 现金流出计算：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>建设投资 = 根据投资估算数据计算</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>流动资金 = 运营期第1年投入</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>经营成本 = 外购原材料费 + 外购燃料及动力费 + 工资及福利费 + 修理费 + 其他费用</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>增值税、房产税等及附加 = 根据税率计算</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>维持运营投资 = 0（当前）</Text>
+            <Text size="sm" mt="xs">现金流出 = 建设投资 + 流动资金 + 经营成本 + 增值税等 + 维持运营投资</Text>
+          </div>
+          
+          <div style={{ padding: '10px', backgroundColor: '#e7f3ff', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>3. 所得税前净现金流量计算：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>所得税前净现金流量 = 现金流入 - 现金流出（现金流入中的营业收入现为含税收入）</Text>
+            <Text size="sm" mt="xs">
+              公式：第n年所得税前净现金流量 = 第n年现金流入 - 第n年现金流出
+            </Text>
+          </div>
+          
+          <div style={{ padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>4. 具体年份计算示例（运营期）：</strong></Text>
+            {context && (
+              <>
+                {Array.from({ length: context.operationYears }, (_, i) => i + 1).map((year) => (
+                  <Text key={year} size="sm" style={{ paddingLeft: '20px' }}>
+                    运营第{year}年: 现金流入({formatNumberNoRounding(calculateTaxableOperatingRevenue(year) + calculateSubsidyIncome(year) + 
+                      (year === context.operationYears ? calculateFixedAssetResidual(year) : 0) + 
+                      (year === context.operationYears ? calculateWorkingCapitalRecovery(year) : 0))}) - 
+                    现金流出({formatNumberNoRounding(calculateConstructionInvestment(context.constructionYears + year) + 
+                      calculateWorkingCapital(context.constructionYears + year) + 
+                      calculateOperatingCost(year) + 
+                      calculateVatAndTaxes(year) + 
+                      calculateMaintenanceInvestment(year))}) = 
+                    所得税前净现金流量({formatNumberNoRounding(
+                      (calculateTaxableOperatingRevenue(year) + calculateSubsidyIncome(year) + 
+                       (year === context.operationYears ? calculateFixedAssetResidual(year) : 0) + 
+                       (year === context.operationYears ? calculateWorkingCapitalRecovery(year) : 0)) -
+                      (calculateConstructionInvestment(context.constructionYears + year) + 
+                       calculateWorkingCapital(context.constructionYears + year) + 
+                       calculateOperatingCost(year) + 
+                       calculateVatAndTaxes(year) + 
+                       calculateMaintenanceInvestment(year))
+                    )})
+                  </Text>
+                ))}
+              </>
+            )}
+          </div>
+          
+          <Text size="sm" mt="md">
+            <strong>注意：</strong>建设期现金流入为0，只有现金流出（建设投资和流动资金）。
+          </Text>
         </Stack>
       </Modal>
       
