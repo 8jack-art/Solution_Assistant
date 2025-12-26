@@ -61,15 +61,22 @@ const JsonNode: React.FC<JsonNodeProps> = ({
   // 高亮匹配的文本
   const highlightText = (text: string) => {
     if (!searchTerm) return text
-    const regex = new RegExp(`(${searchTerm})`, 'gi')
-    const parts = text.split(regex)
-    return parts.map((part, index) => 
-      part.toLowerCase() === searchTerm.toLowerCase() ? (
-        <mark key={index} style={{ backgroundColor: '#ffd700', padding: '0 2px' }}>{part}</mark>
-      ) : (
-        <span key={index}>{part}</span>
+    try {
+      // 转义正则表达式特殊字符
+      const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(${escapedSearchTerm})`, 'gi')
+      const parts = text.split(regex)
+      return parts.map((part, index) =>
+        part.toLowerCase() === searchTerm.toLowerCase() ? (
+          <mark key={index} style={{ backgroundColor: '#ffd700', padding: '0 2px' }}>{part}</mark>
+        ) : (
+          <span key={index}>{part}</span>
+        )
       )
-    )
+    } catch (error) {
+      // 如果正则表达式出错，返回原始文本
+      return text
+    }
   }
 
   if (isPrimitive) {
@@ -125,18 +132,22 @@ const JsonNode: React.FC<JsonNodeProps> = ({
       
       {isExpanded && (
         <div>
-          {Object.entries(data).map(([key, value], index) => (
-            <JsonNode
-              key={`${path}.${key}`}
-              data={value}
-              keyName={isArray ? undefined : key}
-              searchTerm={searchTerm}
-              level={level + 1}
-              expanded={expanded}
-              onToggle={onToggle}
-              path={`${path}.${key}`}
-            />
-          ))}
+          {Object.entries(data).map(([key, value], index) => {
+            // 确保路径构建的一致性，特别是对于数组索引
+            const childPath = isArray ? `${path}[${key}]` : `${path}.${key}`
+            return (
+              <JsonNode
+                key={childPath}
+                data={value}
+                keyName={isArray ? undefined : key}
+                searchTerm={searchTerm}
+                level={level + 1}
+                expanded={expanded}
+                onToggle={onToggle}
+                path={childPath}
+              />
+            )
+          })}
           <div style={{ marginLeft: `${level * 20}px` }}>
             <span style={{ color: '#569cd6' }}>{isArray ? ']' : '}'}</span>
           </div>
@@ -158,7 +169,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'revenue' | 'cost' | 'construction'>('revenue')
+  const [activeTab, setActiveTab] = useState<'revenue' | 'cost' | 'construction' | 'loan'>('revenue')
 
   // 默认展开第一层
   React.useEffect(() => {
@@ -172,6 +183,9 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       }
       if (data.constructionInterest) {
         defaultExpanded.add('constructionInterest')
+      }
+      if (data.loanRepaymentTable) {
+        defaultExpanded.add('loanRepaymentTable')
       }
       setExpanded(defaultExpanded)
     }
@@ -215,6 +229,8 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       expandAllPaths(data.costTable, 'costTable').forEach(p => allPaths.add(p))
     } else if (activeTab === 'construction' && data.constructionInterest) {
       expandAllPaths(data.constructionInterest, 'constructionInterest').forEach(p => allPaths.add(p))
+    } else if (activeTab === 'loan' && data.loanRepaymentTable) {
+      expandAllPaths(data.loanRepaymentTable, 'loanRepaymentTable').forEach(p => allPaths.add(p))
     }
     setExpanded(allPaths)
   }
@@ -231,6 +247,9 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
     if (data && data.constructionInterest) {
       defaultExpanded.add('constructionInterest')
     }
+    if (data && data.loanRepaymentTable) {
+      defaultExpanded.add('loanRepaymentTable')
+    }
     setExpanded(defaultExpanded)
   }
 
@@ -244,6 +263,8 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
         jsonToCopy = data?.costTable
       } else if (activeTab === 'construction') {
         jsonToCopy = data?.constructionInterest
+      } else if (activeTab === 'loan') {
+        jsonToCopy = data?.loanRepaymentTable
       }
       
       if (!jsonToCopy) {
@@ -280,16 +301,23 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
     const filterBySearchTerm = (obj: any, term: string): any => {
       if (!term) return obj
       
-      const objStr = JSON.stringify(obj).toLowerCase()
-      if (!objStr.includes(term.toLowerCase())) return null
-      
-      return obj
+      try {
+        const objStr = JSON.stringify(obj).toLowerCase()
+        if (!objStr.includes(term.toLowerCase())) {
+          return null
+        }
+        
+        return obj
+      } catch (error) {
+        return obj // 出错时返回原对象
+      }
     }
 
     return {
       revenueTable: filterBySearchTerm(data.revenueTable, searchTerm),
       costTable: filterBySearchTerm(data.costTable, searchTerm),
       constructionInterest: filterBySearchTerm(data.constructionInterest, searchTerm),
+      loanRepaymentTable: filterBySearchTerm(data.loanRepaymentTable, searchTerm),
     }
   }, [data, searchTerm])
 
@@ -364,6 +392,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
               <Tabs.Tab value="revenue">营业收入、营业税金及附加和增值税估算表</Tabs.Tab>
               <Tabs.Tab value="cost">总成本费用估算表</Tabs.Tab>
               <Tabs.Tab value="construction">建设期利息详情</Tabs.Tab>
+              <Tabs.Tab value="loan">还本付息计划简表</Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="revenue">
@@ -425,6 +454,27 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
               ) : (
                 <Box p="xl" style={{ textAlign: 'center', color: '#86909C' }}>
                   <Text>暂无建设期利息详情数据</Text>
+                </Box>
+              )}
+            </Tabs.Panel>
+
+            <Tabs.Panel value="loan">
+              {filteredData?.loanRepaymentTable ? (
+                <ScrollArea h="calc(85vh - 180px)" offsetScrollbars>
+                  <Box p="md" style={{ backgroundColor: '#1e1e1e', borderRadius: '8px', color: '#d4d4d4', fontFamily: 'Consolas, Monaco, monospace', fontSize: '13px' }}>
+                    <JsonNode
+                      data={filteredData.loanRepaymentTable}
+                      searchTerm={searchTerm}
+                      level={0}
+                      expanded={expanded}
+                      onToggle={handleToggle}
+                      path="loanRepaymentTable"
+                    />
+                  </Box>
+                </ScrollArea>
+              ) : (
+                <Box p="xl" style={{ textAlign: 'center', color: '#86909C' }}>
+                  <Text>暂无还本付息计划简表数据</Text>
                 </Box>
               )}
             </Tabs.Panel>

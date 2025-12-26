@@ -524,9 +524,22 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       if (costTableData && costTableData.rows) {
         const row = costTableData.rows.find(r => r.序号 === '1');
         if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
-          return row.运营期[year - 1];
+          // 如果有 costTableData 数据，需要添加 revenueTableData 中的进项税额
+          let operatingCost = row.运营期[year - 1];
+          
+          // 从 revenueTableData 中获取进项税额（序号2.2）的运营期列数据
+          if (revenueTableData && revenueTableData.rows) {
+            const inputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.2');
+            if (inputTaxRow && inputTaxRow.运营期 && inputTaxRow.运营期[year - 1] !== undefined) {
+              // 经营成本 = 原经营成本 + 进项税额
+              operatingCost += inputTaxRow.运营期[year - 1];
+            }
+          }
+          
+          return operatingCost;
         }
       }
+      
       // 如果没有表格数据，使用原有计算逻辑作为后备
       // 计算指定年份的经营成本
       const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
@@ -625,15 +638,40 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         otherExpensesCost = (costConfig.otherExpenses.directAmount || 0) * productionRate;
       }
       
-      return rawMaterialsCost + fuelPowerCost + wagesCost + repairCost + otherExpensesCost;
+      // 计算基础经营成本
+      let operatingCost = rawMaterialsCost + fuelPowerCost + wagesCost + repairCost + otherExpensesCost;
+      
+      // 从 revenueTableData 中获取进项税额（序号2.2）的运营期列数据
+      if (revenueTableData && revenueTableData.rows) {
+        const inputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.2');
+        if (inputTaxRow && inputTaxRow.运营期 && inputTaxRow.运营期[year - 1] !== undefined) {
+          // 经营成本 = 基础经营成本 + 进项税额
+          operatingCost += inputTaxRow.运营期[year - 1];
+        }
+      }
+      
+      return operatingCost;
     } else {
       // 优先从 costTableData 中获取"经营成本"（序号1）的合计数据
       if (costTableData && costTableData.rows) {
         const row = costTableData.rows.find(r => r.序号 === '1');
         if (row && row.合计 !== undefined) {
-          return row.合计;
+          // 如果有 costTableData 数据，需要添加 revenueTableData 中的进项税额合计
+          let operatingCost = row.合计;
+          
+          // 从 revenueTableData 中获取进项税额（序号2.2）的合计数据
+          if (revenueTableData && revenueTableData.rows) {
+            const inputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.2');
+            if (inputTaxRow && inputTaxRow.合计 !== undefined) {
+              // 经营成本 = 原经营成本 + 进项税额合计
+              operatingCost += inputTaxRow.合计;
+            }
+          }
+          
+          return operatingCost;
         }
       }
+      
       // 如果没有表格数据，使用原有计算逻辑作为后备
       // 计算所有年份的经营成本合计
       if (!context) return 0;
@@ -1218,7 +1256,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     if (year !== undefined) {
       // 计算指定年份的利息支出
       const yearIndex = year - 1;
-      const interestRow = repaymentTableData.find(row => row.项目 === '本年应计利息');
+      // 从还本付息计划表中查找序号为'2.2'的付息行数据
+      const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
       return interestRow?.分年数据[yearIndex] || 0;
     } else {
       // 计算所有年份的利息支出合计
@@ -2547,13 +2586,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       }
       
       // 从 store 获取数据（如果已加载）
-      const { revenueTableData, costTableData } = useRevenueCostStore.getState()
+      const { revenueTableData, costTableData, loanRepaymentTableData } = useRevenueCostStore.getState()
       
       if (revenueTableData && costTableData) {
         setJsonData({
           revenueTable: revenueTableData,
           costTable: costTableData,
-          constructionInterest: investmentEstimate?.partF
+          constructionInterest: investmentEstimate?.partF,
+          loanRepaymentTable: loanRepaymentTableData
         })
       } else {
         // 从后端获取
@@ -2563,7 +2603,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           setJsonData({
             revenueTable: modelData.revenueTableData,
             costTable: modelData.costTableData,
-            constructionInterest: response.data.estimate?.partF
+            constructionInterest: response.data.estimate?.partF,
+            loanRepaymentTable: modelData.loanRepaymentTableData
           })
         } else {
           throw new Error('获取数据失败')
