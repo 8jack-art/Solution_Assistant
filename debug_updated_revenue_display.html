@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>营业收入显示更新验证</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .highlight {
+            background-color: #e7f3ff;
+        }
+        .calculation {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #007acc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>营业收入显示更新验证</h1>
+        
+        <div class="section">
+            <h2>问题描述</h2>
+            <p>用户发现项目投资现金流量表中，第一年现金流入是6900，而营业收入是6179.32，这看起来不一致。经过检查，发现问题在于营业收入显示部分仍然使用了旧的不含税收入计算方式。</p>
+        </div>
+        
+        <div class="section">
+            <h2>问题分析</h2>
+            <p>虽然现金流入计算已经使用含税营业收入，但营业收入（序号1.1）的显示仍然使用了 <code>calculateOperatingRevenue</code> 函数（不含税），而不是 <code>calculateTaxableOperatingRevenue</code> 函数（含税）。</p>
+            
+            <div class="calculation">
+                <strong>修改前：</strong><br>
+                - 营业收入显示：含税收入 - 销项税额（不含税收入）<br>
+                - 现金流入计算：含税收入（使用新函数）<br>
+                - 导致不一致
+            </div>
+        </div>
+        
+        <div class="section highlight">
+            <h2>修改内容</h2>
+            <p>1. 项目投资现金流量表中营业收入（序号1.1）合计显示：</p>
+            <pre>
+// 修改前
+{formatNumberNoRounding(calculateOperatingRevenue(undefined))}
+
+// 修改后  
+{formatNumberNoRounding(calculateTaxableOperatingRevenue(undefined))}
+            </pre>
+            
+            <p>2. 项目投资现金流量表中营业收入（序号1.1）年度数据显示：</p>
+            <pre>
+// 修改前
+yearTotal = calculateOperatingRevenue(operationYear);
+
+// 修改后
+yearTotal = calculateTaxableOperatingRevenue(operationYear);
+            </pre>
+        </div>
+        
+        <div class="section">
+            <h2>验证结果</h2>
+            <p>修改后，营业收入显示将与现金流入中的营业收入部分保持一致：</p>
+            <ul>
+                <li>营业收入显示：含税收入（6900）</li>
+                <li>现金流入计算：含税收入 + 其他流入</li>
+                <li>数据一致性得到保证</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>影响</h2>
+            <p>这次修改确保了：</p>
+            <ol>
+                <li>营业收入显示正确反映含税收入</li>
+                <li>营业收入数据与现金流入计算逻辑一致</li>
+                <li>用户界面显示与内部计算逻辑一致</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

@@ -288,6 +288,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   // 项目投资现金流量表计算过程调试状态
   const [showDebugModal, setShowDebugModal] = useState(false)
   
+  // 累计值计算过程调试状态
+  const [showCumulativeCalculationDebug, setShowCumulativeCalculationDebug] = useState(false)
+  
   // 利润与利润分配表设置状态
   const [subsidyIncome, setSubsidyIncome] = useState(0)
   const [incomeTaxRate, setIncomeTaxRate] = useState(25)
@@ -406,6 +409,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   // 项目投资现金流量表计算过程调试函数
   const showCashFlowCalculationDebug = () => {
     setShowDebugModal(true);
+  }
+  
+  // 累计值计算过程调试函数
+  const handleShowCumulativeCalculationDebug = () => {
+    setShowCumulativeCalculationDebug(true);
   }
   
   // 计算营业收入的函数（营业收入 = 营业收入（含税） - 销项税额）
@@ -2431,7 +2439,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>营业收入</Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                {formatNumberNoRounding(calculateOperatingRevenue(undefined))}
+                {formatNumberNoRounding(calculateTaxableOperatingRevenue(undefined))}
               </Table.Td>
               {years.map((year) => {
                 let yearTotal = 0;
@@ -2439,7 +2447,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 if (year > constructionYears) {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  yearTotal = calculateOperatingRevenue(operationYear);
+                  yearTotal = calculateTaxableOperatingRevenue(operationYear);
                 }
                 
                 return (
@@ -2788,7 +2796,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                    yearInflow = calculateOperatingRevenue(operationYear) + 
+                    yearInflow = calculateTaxableOperatingRevenue(operationYear) + 
                                 calculateSubsidyIncome(operationYear) + 
                                 calculateFixedAssetResidual(operationYear) + 
                                 calculateWorkingCapitalRecovery(operationYear);
@@ -3323,8 +3331,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   
                   // 应用动态计算公式：C-D/(1+E)^B
                   // B从建设期第1年开始计算，所以直接使用year
+                  
+                  // 先计算所得税前净现金流量（动态）
+                  const preTaxRateDecimal = preTaxRate / 100; // 转换为小数
+                  const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                  const dynamicPreTaxCashFlow = yearPreTaxCashFlow / preTaxDiscountFactor;
+                  
+                  // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
                   const discountFactor = Math.pow(1 + postTaxRateDecimal, year);
-                  const dynamicValue = (yearPreTaxCashFlow - yearAdjustedTax) / discountFactor;
+                  const dynamicValue = dynamicPreTaxCashFlow - yearAdjustedTax / discountFactor;
                   cumulativeDynamicCashFlow += dynamicValue;
                   
                   return (
@@ -3495,6 +3510,16 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   onClick={showCashFlowCalculationDebug}
                 >
                   <IconCode size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="累计值计算过程">
+                <ActionIcon
+                  variant="light"
+                  color="indigo"
+                  size={16}
+                  onClick={handleShowCumulativeCalculationDebug}
+                >
+                  <IconCalculator size={16} />
                 </ActionIcon>
               </Tooltip>
             </Group>
@@ -3792,7 +3817,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           
           <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
             <Text size="sm" mb="xs"><strong>1. 现金流入计算：</strong></Text>
-            <Text size="sm" style={{ paddingLeft: '20px' }}>营业收入 = 营业收入（含税）</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>营业收入 = 营业收入（含税）（已更新显示）</Text>
             <Text size="sm" style={{ paddingLeft: '20px' }}>补贴收入 = {subsidyIncome}</Text>
             <Text size="sm" style={{ paddingLeft: '20px' }}>回收固定资产余值 = 运营期最后一年计算</Text>
             <Text size="sm" style={{ paddingLeft: '20px' }}>回收流动资金 = 运营期最后一年计算</Text>
@@ -3818,7 +3843,18 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           </div>
           
           <div style={{ padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '4px' }}>
-            <Text size="sm" mb="xs"><strong>4. 具体年份计算示例（运营期）：</strong></Text>
+            <Text size="sm" mb="xs"><strong>4. 累计值计算：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>累计所得税前净现金流量 = 逐年累加各年所得税前净现金流量</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>累计所得税后净现金流量 = 逐年累加各年所得税后净现金流量</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>累计所得税前净现金流量（动态） = 逐年累加各年所得税前净现金流量（动态）</Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>累计所得税后净现金流量（动态） = 逐年累加各年所得税后净现金流量（动态）</Text>
+            <Text size="sm" mt="xs">
+              公式：累计值(n年) = 累计值(n-1年) + 当年净现金流量
+            </Text>
+          </div>
+          
+          <div style={{ padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>5. 具体年份计算示例（运营期）：</strong></Text>
             {context && (
               <>
                 {Array.from({ length: context.operationYears }, (_, i) => i + 1).map((year) => (
@@ -3849,6 +3885,115 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           
           <Text size="sm" mt="md">
             <strong>注意：</strong>建设期现金流入为0，只有现金流出（建设投资和流动资金）。
+          </Text>
+        </Stack>
+      </Modal>
+      
+      {/* 累计值计算过程调试弹窗 */}
+      <Modal
+        opened={showCumulativeCalculationDebug}
+        onClose={() => setShowCumulativeCalculationDebug(false)}
+        title="累计值计算过程"
+        size="xl"
+        styles={{
+          body: {
+            maxHeight: '600px',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            <strong>项目投资现金流量表累计值计算过程：</strong>
+          </Text>
+          
+          <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>1. 累计所得税前净现金流量：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>计算方法：逐年累加各年所得税前净现金流量</Text>
+            <Text size="sm" mt="xs">
+              公式：累计值(n年) = 累计值(n-1年) + 当年所得税前净现金流量
+            </Text>
+            <Text size="sm" mt="xs">
+              其中，所得税前净现金流量 = 现金流入 - 现金流出
+            </Text>
+            <Text size="sm" mt="xs">
+              现金流入中营业收入使用含税收入
+            </Text>
+            <Text size="sm" mt="xs" style={{ fontWeight: 'bold', color: '#1D2129' }}>
+              项目实际合计值：{formatNumberNoRounding(getCumulativePreTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                calculateTaxableOperatingRevenue, calculateSubsidyIncome,
+                calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment).slice(-1)[0] || 0)}
+            </Text>
+          </div>
+          
+          <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>2. 累计所得税后净现金流量：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>计算方法：逐年累加各年所得税后净现金流量</Text>
+            <Text size="sm" mt="xs">
+              公式：累计值(n年) = 累计值(n-1年) + 当年所得税后净现金流量
+            </Text>
+            <Text size="sm" mt="xs">
+              其中，所得税后净现金流量 = 所得税前净现金流量 - 调整所得税
+            </Text>
+            <Text size="sm" mt="xs" style={{ fontWeight: 'bold', color: '#1D2129' }}>
+              项目实际合计值：{formatNumberNoRounding(getCumulativePostTaxCashFlows(context, calculateConstructionInvestment, calculateWorkingCapital,
+                calculateTaxableOperatingRevenue, calculateSubsidyIncome,
+                calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment,
+                calculateAdjustedIncomeTax).slice(-1)[0] || 0)}
+            </Text>
+          </div>
+          
+          <div style={{ padding: '10px', backgroundColor: '#e7f3ff', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>3. 累计所得税前净现金流量（动态）：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>计算方法：逐年累加各年所得税前净现金流量（动态）</Text>
+            <Text size="sm" mt="xs">
+              公式：累计值(n年) = 累计值(n-1年) + 当年所得税前净现金流量（动态）
+            </Text>
+            <Text size="sm" mt="xs">
+              其中，所得税前净现金流量（动态）= 所得税前净现金流量 / (1 + 基准收益率)^年份
+            </Text>
+            <Text size="sm" mt="xs" style={{ fontWeight: 'bold', color: '#1D2129' }}>
+              项目实际合计值：{formatNumberNoRounding(getCumulativeDynamicPreTaxCashFlows(context, preTaxRate, calculateConstructionInvestment, calculateWorkingCapital,
+                calculateTaxableOperatingRevenue, calculateSubsidyIncome,
+                calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment).slice(-1)[0] || 0)}
+            </Text>
+          </div>
+          
+          <div style={{ padding: '10px', backgroundColor: '#e7f3ff', borderRadius: '4px' }}>
+            <Text size="sm" mb="xs"><strong>4. 累计所得税后净现金流量（动态）：</strong></Text>
+            <Text size="sm" style={{ paddingLeft: '20px' }}>计算方法：逐年累加各年所得税后净现金流量（动态）</Text>
+            <Text size="sm" mt="xs">
+              公式：累计值(n年) = 累计值(n-1年) + 当年所得税后净现金流量（动态）
+            </Text>
+            <Text size="sm" mt="xs">
+              其中，所得税后净现金流量（动态）= 所得税前净现金流量（动态）- 调整所得税 / (1 + 基准收益率)^年份
+            </Text>
+            <Text size="sm" mt="xs" style={{ fontWeight: 'bold', color: '#1D2129' }}>
+              项目实际合计值：{formatNumberNoRounding(getCumulativeDynamicPostTaxCashFlows(context, preTaxRate, postTaxRate, calculateConstructionInvestment, calculateWorkingCapital,
+                calculateTaxableOperatingRevenue, calculateSubsidyIncome,
+                calculateFixedAssetResidual, calculateWorkingCapitalRecovery,
+                calculateOperatingCost, calculateVatAndTaxes, calculateMaintenanceInvestment,
+                calculateAdjustedIncomeTax).slice(-1)[0] || 0)}
+            </Text>
+          </div>
+          
+          <Text size="sm" mt="md">
+            <strong>关键点：</strong>
+          </Text>
+          <Text size="sm" style={{ paddingLeft: '20px' }}>
+            1. 所有累计值均从第1年开始累加，包括建设期
+          </Text>
+          <Text size="sm" style={{ paddingLeft: '20px' }}>
+            2. 建设期的现金流入通常为0，净现金流量为负值（仅现金流出）
+          </Text>
+          <Text size="sm" style={{ paddingLeft: '20px' }}>
+            3. 动态计算使用基准收益率进行折现
+          </Text>
+          <Text size="sm" style={{ paddingLeft: '20px' }}>
+            4. 合计列显示的是最终累计值
           </Text>
         </Stack>
       </Modal>
