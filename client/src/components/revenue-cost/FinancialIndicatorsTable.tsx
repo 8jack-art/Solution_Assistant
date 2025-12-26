@@ -82,6 +82,103 @@ const formatPaybackPeriod = (value: number): string => {
   return formatNumberNoRounding(value);
 }
 
+// 计算财务内部收益率（IRR）- 使用牛顿-拉夫逊法
+const calculateIRR = (cashFlows: number[], initialGuess: number = 0.1): number => {
+  if (cashFlows.length === 0) return 0;
+  
+  let irr = initialGuess;
+  const maxIterations = 100;
+  const tolerance = 1e-6;
+  
+  for (let i = 0; i < maxIterations; i++) {
+    let npv = 0;
+    let dnpv = 0;
+    
+    for (let j = 0; j < cashFlows.length; j++) {
+      npv += cashFlows[j] / Math.pow(1 + irr, j);
+      dnpv -= j * cashFlows[j] / Math.pow(1 + irr, j + 1);
+    }
+    
+    const newIrr = irr - npv / dnpv;
+    
+    if (Math.abs(newIrr - irr) < tolerance) {
+      return newIrr * 100; // 转换为百分比
+    }
+    
+    irr = newIrr;
+    
+    // 防止发散
+    if (irr < -0.99) irr = -0.99;
+    if (irr > 10) irr = 10;
+  }
+  
+  return irr * 100; // 转换为百分比
+};
+
+// 计算财务净现值（NPV）
+const calculateNPV = (cashFlows: number[], discountRate: number): number => {
+  if (cashFlows.length === 0) return 0;
+  
+  let npv = 0;
+  const rate = discountRate / 100; // 转换为小数
+  
+  for (let i = 0; i < cashFlows.length; i++) {
+    npv += cashFlows[i] / Math.pow(1 + rate, i);
+  }
+  
+  return npv;
+};
+
+// 计算静态投资回收期
+const calculateStaticPaybackPeriod = (cumulativeCashFlows: number[]): number => {
+  if (cumulativeCashFlows.length === 0) return 0;
+  
+  for (let i = 0; i < cumulativeCashFlows.length; i++) {
+    if (cumulativeCashFlows[i] >= 0) {
+      if (i === 0) return 1;
+      
+      const prevCumulative = cumulativeCashFlows[i - 1];
+      const currentCumulative = cumulativeCashFlows[i];
+      const currentCashFlow = currentCumulative - prevCumulative;
+      
+      // 线性插值计算精确的回收期
+      if (currentCashFlow > 0) {
+        return i + Math.abs(prevCumulative) / currentCashFlow;
+      } else {
+        return i + 1;
+      }
+    }
+  }
+  
+  // 如果整个项目周期内都没有回收，返回项目周期+1
+  return cumulativeCashFlows.length + 1;
+};
+
+// 计算动态投资回收期
+const calculateDynamicPaybackPeriod = (dynamicCumulativeCashFlows: number[]): number => {
+  if (dynamicCumulativeCashFlows.length === 0) return 0;
+  
+  for (let i = 0; i < dynamicCumulativeCashFlows.length; i++) {
+    if (dynamicCumulativeCashFlows[i] >= 0) {
+      if (i === 0) return 1;
+      
+      const prevCumulative = dynamicCumulativeCashFlows[i - 1];
+      const currentCumulative = dynamicCumulativeCashFlows[i];
+      const currentCashFlow = currentCumulative - prevCumulative;
+      
+      // 线性插值计算精确的回收期
+      if (currentCashFlow > 0) {
+        return i + Math.abs(prevCumulative) / currentCashFlow;
+      } else {
+        return i + 1;
+      }
+    }
+  }
+  
+  // 如果整个项目周期内都没有回收，返回项目周期+1
+  return dynamicCumulativeCashFlows.length + 1;
+};
+
 // 安全的财务指标计算，处理可能的错误情况
 const safeCalculateIRR = (cashFlows: number[], initialGuess: number = 0.1): number => {
   try {
@@ -1925,6 +2022,48 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     }
   };
 
+  // 缓存的财务指标计算函数
+  const useCachedFinancialIndicators = () => {
+    // 创建一个唯一的计算键，基于所有可能影响财务指标的数据
+    const calculationKey = JSON.stringify({
+      preTaxRate,
+      postTaxRate,
+      constructionYears: context?.constructionYears,
+      operationYears: context?.operationYears,
+      // 可以根据需要添加更多依赖项
+    })
+    
+    // 如果计算键没有变化，返回缓存的结果
+    if (lastCalculationKey === calculationKey && cachedFinancialIndicators) {
+      return cachedFinancialIndicators;
+    }
+    
+    // 计算所有财务指标
+    const preTaxCashFlows = getPreTaxCashFlows();
+    const postTaxCashFlows = getPostTaxCashFlows();
+    const cumulativePreTaxCashFlows = getCumulativePreTaxCashFlows();
+    const cumulativePostTaxCashFlows = getCumulativePostTaxCashFlows();
+    const cumulativeDynamicPreTaxCashFlows = getCumulativeDynamicPreTaxCashFlows();
+    const cumulativeDynamicPostTaxCashFlows = getCumulativeDynamicPostTaxCashFlows();
+    
+    const indicators = {
+      preTaxIRR: safeCalculateIRR(preTaxCashFlows),
+      postTaxIRR: safeCalculateIRR(postTaxCashFlows),
+      preTaxNPV: safeCalculateNPV(preTaxCashFlows, preTaxRate),
+      postTaxNPV: safeCalculateNPV(postTaxCashFlows, postTaxRate),
+      preTaxStaticPaybackPeriod: safeCalculatePaybackPeriod(cumulativePreTaxCashFlows),
+      postTaxStaticPaybackPeriod: safeCalculatePaybackPeriod(cumulativePostTaxCashFlows),
+      preTaxDynamicPaybackPeriod: safeCalculateDynamicPaybackPeriod(cumulativeDynamicPreTaxCashFlows),
+      postTaxDynamicPaybackPeriod: safeCalculateDynamicPaybackPeriod(cumulativeDynamicPostTaxCashFlows),
+    };
+    
+    // 缓存结果
+    setCachedFinancialIndicators(indicators);
+    setLastCalculationKey(calculationKey);
+    
+    return indicators;
+  };
+
   // 保存利润与利润分配表数据
   const saveProfitDistributionTableData = () => {
     if (!context) return;
@@ -2103,48 +2242,6 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '19', name: '息税前利润（利润总额+利息支出）', calc: (y?: number) => calculateEBIT(y) },
       { id: '20', name: '息税折旧摊销前利润（19+折旧+摊销）', calc: (y?: number) => calculateEBITDA(y) },
     ];
-
-    // 使用缓存的财务指标计算
-    const useCachedFinancialIndicators = () => {
-      // 创建一个唯一的计算键，基于所有可能影响财务指标的数据
-      const calculationKey = JSON.stringify({
-        preTaxRate,
-        postTaxRate,
-        constructionYears: context?.constructionYears,
-        operationYears: context?.operationYears,
-        // 可以根据需要添加更多依赖项
-      })
-      
-      // 如果计算键没有变化，返回缓存的结果
-      if (lastCalculationKey === calculationKey && cachedFinancialIndicators) {
-        return cachedFinancialIndicators;
-      }
-      
-      // 计算所有财务指标
-      const preTaxCashFlows = getPreTaxCashFlows();
-      const postTaxCashFlows = getPostTaxCashFlows();
-      const cumulativePreTaxCashFlows = getCumulativePreTaxCashFlows();
-      const cumulativePostTaxCashFlows = getCumulativePostTaxCashFlows();
-      const cumulativeDynamicPreTaxCashFlows = getCumulativeDynamicPreTaxCashFlows();
-      const cumulativeDynamicPostTaxCashFlows = getCumulativeDynamicPostTaxCashFlows();
-      
-      const indicators = {
-        preTaxIRR: safeCalculateIRR(preTaxCashFlows),
-        postTaxIRR: safeCalculateIRR(postTaxCashFlows),
-        preTaxNPV: safeCalculateNPV(preTaxCashFlows, preTaxRate),
-        postTaxNPV: safeCalculateNPV(postTaxCashFlows, postTaxRate),
-        preTaxStaticPaybackPeriod: safeCalculatePaybackPeriod(cumulativePreTaxCashFlows),
-        postTaxStaticPaybackPeriod: safeCalculatePaybackPeriod(cumulativePostTaxCashFlows),
-        preTaxDynamicPaybackPeriod: safeCalculateDynamicPaybackPeriod(cumulativeDynamicPreTaxCashFlows),
-        postTaxDynamicPaybackPeriod: safeCalculateDynamicPaybackPeriod(cumulativeDynamicPostTaxCashFlows),
-      };
-      
-      // 缓存结果
-      setCachedFinancialIndicators(indicators);
-      setLastCalculationKey(calculationKey);
-      
-      return indicators;
-    };
 
     return (
       <>
@@ -3720,109 +3817,13 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       </Modal>
     </>
   )
+}
+
+// ==================== 财务指标计算函数 ====================
 
 
-  // ==================== 财务指标计算函数 ====================
-
-  // 计算财务内部收益率（IRR）- 使用牛顿-拉夫逊法
-  const calculateIRR = (cashFlows: number[], initialGuess: number = 0.1): number => {
-    if (cashFlows.length === 0) return 0;
-    
-    let irr = initialGuess;
-    const maxIterations = 100;
-    const tolerance = 1e-6;
-    
-    for (let i = 0; i < maxIterations; i++) {
-      let npv = 0;
-      let dnpv = 0;
-      
-      for (let j = 0; j < cashFlows.length; j++) {
-        npv += cashFlows[j] / Math.pow(1 + irr, j);
-        dnpv -= j * cashFlows[j] / Math.pow(1 + irr, j + 1);
-      }
-      
-      const newIrr = irr - npv / dnpv;
-      
-      if (Math.abs(newIrr - irr) < tolerance) {
-        return newIrr * 100; // 转换为百分比
-      }
-      
-      irr = newIrr;
-      
-      // 防止发散
-      if (irr < -0.99) irr = -0.99;
-      if (irr > 10) irr = 10;
-    }
-    
-    return irr * 100; // 转换为百分比
-  };
-
-  // 计算财务净现值（NPV）
-  const calculateNPV = (cashFlows: number[], discountRate: number): number => {
-    if (cashFlows.length === 0) return 0;
-    
-    let npv = 0;
-    const rate = discountRate / 100; // 转换为小数
-    
-    for (let i = 0; i < cashFlows.length; i++) {
-      npv += cashFlows[i] / Math.pow(1 + rate, i);
-    }
-    
-    return npv;
-  };
-
-  // 计算静态投资回收期
-  const calculateStaticPaybackPeriod = (cumulativeCashFlows: number[]): number => {
-    if (cumulativeCashFlows.length === 0) return 0;
-    
-    for (let i = 0; i < cumulativeCashFlows.length; i++) {
-      if (cumulativeCashFlows[i] >= 0) {
-        if (i === 0) return 1;
-        
-        const prevCumulative = cumulativeCashFlows[i - 1];
-        const currentCumulative = cumulativeCashFlows[i];
-        const currentCashFlow = currentCumulative - prevCumulative;
-        
-        // 线性插值计算精确的回收期
-        if (currentCashFlow > 0) {
-          return i + Math.abs(prevCumulative) / currentCashFlow;
-        } else {
-          return i + 1;
-        }
-      }
-    }
-    
-    // 如果整个项目周期内都没有回收，返回项目周期+1
-    return cumulativeCashFlows.length + 1;
-  };
-
-  // 计算动态投资回收期
-  const calculateDynamicPaybackPeriod = (dynamicCumulativeCashFlows: number[]): number => {
-    if (dynamicCumulativeCashFlows.length === 0) return 0;
-    
-    for (let i = 0; i < dynamicCumulativeCashFlows.length; i++) {
-      if (dynamicCumulativeCashFlows[i] >= 0) {
-        if (i === 0) return 1;
-        
-        const prevCumulative = dynamicCumulativeCashFlows[i - 1];
-        const currentCumulative = dynamicCumulativeCashFlows[i];
-        const currentCashFlow = currentCumulative - prevCumulative;
-        
-        // 线性插值计算精确的回收期
-        if (currentCashFlow > 0) {
-          return i + Math.abs(prevCumulative) / currentCashFlow;
-        } else {
-          return i + 1;
-        }
-      }
-    }
-    
-    // 如果整个项目周期内都没有回收，返回项目周期+1
-    return dynamicCumulativeCashFlows.length + 1;
-  };
-
-  // 获取所得税前净现金流量数组
-  const getPreTaxCashFlows = (): number[] => {
+// 获取所得税前净现金流量数组
+const getPreTaxCashFlows = (): number[] => {
     if (!context) return [];
     
     const constructionYears = context.constructionYears;
