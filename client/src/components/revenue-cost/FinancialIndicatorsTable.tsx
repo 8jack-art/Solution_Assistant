@@ -3913,7 +3913,7 @@ const generateCashFlowTableData = (
   const preTaxRateDecimal = preTaxRate / 100;
   const postTaxRateDecimal = postTaxRate / 100;
   
-  // 合计数据
+  // 合计数据 - 修复：只计算运营期的合计，与Excel导出逻辑一致
   let totalInflow = 0;
   let totalOutflow = 0;
   let totalPreTaxCashFlow = 0;
@@ -3964,12 +3964,13 @@ const generateCashFlowTableData = (
     cumulativePreTax += preTaxCashFlow;
     cumulativePostTax += postTaxCashFlow;
 
-    // 计算动态净现金流量 - 修复为与Excel导出一致的公式
+    // 修复：动态现金流计算使用正确的公式 C-D/(1+E)^B
     // 先计算所得税前净现金流量（动态）
     const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
     const preTaxCashFlowDynamic = preTaxCashFlow / preTaxDiscountFactor;
     
     // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
+    // C：所得税前净现金流量（动态），D：调整所得税，E：所得税后折现率，B：年份
     const postTaxDiscountFactor = Math.pow(1 + postTaxRateDecimal, year);
     const postTaxCashFlowDynamic = preTaxCashFlowDynamic - adjustedIncomeTax / postTaxDiscountFactor;
 
@@ -3977,7 +3978,7 @@ const generateCashFlowTableData = (
     cumulativePreTaxDynamic += preTaxCashFlowDynamic;
     cumulativePostTaxDynamic += postTaxCashFlowDynamic;
 
-    // 累计合计
+    // 修复：累计合计只计算运营期，与Excel导出逻辑一致
     if (year > constructionYears) {
       totalInflow += totalInflowYear;
       totalOutflow += totalOutflowYear;
