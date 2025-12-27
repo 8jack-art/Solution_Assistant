@@ -1,1 +1,1 @@
-{"mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"],"env":{"DEFAULT_MINIMUM_TOKENS":""},"disabled":false,"alwaysAllow":[]}}}
+{"mcpServers":{"zread":{"type":"streamable-http","url":"https://open.bigmodel.cn/api/mcp/zread/mcp","headers":{"Authorization":"947c1e345e4a48c4ae426d554de4d9c1.wLmNkWbio474nxL4"},"alwaysAllow":["read_file","search_doc","get_repo_structure"]}}}

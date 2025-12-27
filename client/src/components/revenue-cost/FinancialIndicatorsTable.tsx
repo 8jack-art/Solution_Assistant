@@ -2791,37 +2791,31 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税前净现金流量</Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
-                  // 累计所得税前净现金流量合计 = 建设期合计 + 运营期合计
-                  let constructionPeriodTotal = 0;
-                  let operationPeriodTotal = 0;
+                  // 累计所得税前净现金流量合计 = 所得税前净现金流量合计
+                  // 与行3"所得税前净现金流量（1-2）"的合计列保持一致
+                  let totalInflow = 0;
+                  let totalOutflow = 0;
                   
                   years.forEach((year) => {
-                    let yearInflow = 0;
-                    let yearOutflow = 0;
-                    
                     if (year <= constructionYears) {
                       // 建设期
-                      yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-                      const yearTotal = yearInflow - yearOutflow;
-                      constructionPeriodTotal += yearTotal;
+                      totalOutflow += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                                  calculateSubsidyIncome(operationYear) +
-                                  calculateFixedAssetResidual(operationYear) +
-                                  calculateWorkingCapitalRecovery(operationYear);
-                      yearOutflow = calculateConstructionInvestment(year) +
-                                  calculateWorkingCapital(year) +
-                                  calculateOperatingCost(operationYear) +
-                                  calculateVatAndTaxes(operationYear) +
-                                  calculateMaintenanceInvestment(operationYear);
-                      const yearTotal = yearInflow - yearOutflow;
-                      operationPeriodTotal += yearTotal;
+                      totalInflow += calculateTaxableOperatingRevenue(operationYear) + 
+                                    calculateSubsidyIncome(operationYear) + 
+                                    calculateFixedAssetResidual(operationYear) + 
+                                    calculateWorkingCapitalRecovery(operationYear);
+                      totalOutflow += calculateConstructionInvestment(year) + 
+                                    calculateWorkingCapital(year) + 
+                                    calculateOperatingCost(operationYear) + 
+                                    calculateVatAndTaxes(operationYear) + 
+                                    calculateMaintenanceInvestment(operationYear);
                     }
                   });
                   
-                  return formatNumberNoRounding(constructionPeriodTotal + operationPeriodTotal);
+                  return formatNumberNoRounding(totalInflow - totalOutflow);
                 })()}
               </Table.Td>
               {(() => {
@@ -2954,39 +2948,33 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税后净现金流量</Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
-                  // 累计所得税后净现金流量合计 = 建设期合计 + 运营期合计
-                  let constructionPeriodTotal = 0;
-                  let operationPeriodTotal = 0;
+                  // 累计所得税后净现金流量合计 = 所得税后净现金流量合计
+                  // 与行6"所得税后净现金流量"的合计列保持一致
+                  let totalInflow = 0;
+                  let totalOutflow = 0;
+                  let totalTax = 0;
                   
                   years.forEach((year) => {
-                    let yearInflow = 0;
-                    let yearOutflow = 0;
-                    let yearTax = 0;
-                    
                     if (year <= constructionYears) {
                       // 建设期
-                      yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-                      const yearTotal = yearInflow - yearOutflow - yearTax;
-                      constructionPeriodTotal += yearTotal;
+                      totalOutflow += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                                  calculateSubsidyIncome(operationYear) +
-                                  calculateFixedAssetResidual(operationYear) +
-                                  calculateWorkingCapitalRecovery(operationYear);
-                      yearOutflow = calculateConstructionInvestment(year) +
-                                  calculateWorkingCapital(year) +
-                                  calculateOperatingCost(operationYear) +
-                                  calculateVatAndTaxes(operationYear) +
-                                  calculateMaintenanceInvestment(operationYear);
-                      yearTax = calculateAdjustedIncomeTax(operationYear);
-                      const yearTotal = yearInflow - yearOutflow - yearTax;
-                      operationPeriodTotal += yearTotal;
+                      totalInflow += calculateTaxableOperatingRevenue(operationYear) + 
+                                    calculateSubsidyIncome(operationYear) + 
+                                    calculateFixedAssetResidual(operationYear) + 
+                                    calculateWorkingCapitalRecovery(operationYear);
+                      totalOutflow += calculateConstructionInvestment(year) + 
+                                    calculateWorkingCapital(year) + 
+                                    calculateOperatingCost(operationYear) + 
+                                    calculateVatAndTaxes(operationYear) + 
+                                    calculateMaintenanceInvestment(operationYear);
+                      totalTax += calculateAdjustedIncomeTax(operationYear);
                     }
                   });
                   
-                  return formatNumberNoRounding(constructionPeriodTotal + operationPeriodTotal);
+                  return formatNumberNoRounding(totalInflow - totalOutflow - totalTax);
                 })()}
               </Table.Td>
               {(() => {
@@ -3115,9 +3103,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税前净现金流量（动态）</Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
-                  // 累计所得税前净现金流量（动态）合计 = 建设期合计 + 运营期合计
-                  let constructionPeriodTotal = 0;
-                  let operationPeriodTotal = 0;
+                  // 累计所得税前净现金流量（动态）合计 = 所得税前净现金流量（动态）合计
+                  // 与行1"所得税前净现金流量（动态）"的合计列保持一致
+                  let totalDynamicPreTaxCashFlow = 0;
                   const preTaxRateDecimal = preTaxRate / 100; // 转换为小数
                   
                   years.forEach((year) => {
@@ -3145,17 +3133,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     // 应用动态计算公式：所得税前净现金流量/(1+A)^B
                     // B从建设期第1年开始计算，所以直接使用year
                     const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
-                    const dynamicValue = yearPreTaxCashFlow / discountFactor;
-                    
-                    // 分别累加建设期和运营期的动态值
-                    if (year <= constructionYears) {
-                      constructionPeriodTotal += dynamicValue;
-                    } else {
-                      operationPeriodTotal += dynamicValue;
-                    }
+                    totalDynamicPreTaxCashFlow += yearPreTaxCashFlow / discountFactor;
                   });
                   
-                  return formatNumberNoRounding(constructionPeriodTotal + operationPeriodTotal);
+                  return formatNumberNoRounding(totalDynamicPreTaxCashFlow);
                 })()}
               </Table.Td>
               {(() => {
@@ -3304,9 +3285,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税后净现金流量（动态）</Table.Td>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                 {(() => {
-                  // 累计所得税后净现金流量（动态）合计 = 建设期合计 + 运营期合计
-                  let constructionPeriodTotal = 0;
-                  let operationPeriodTotal = 0;
+                  // 累计所得税后净现金流量（动态）合计 = 所得税后净现金流量（动态）合计
+                  // 与行3"所得税后净现金流量（动态）"的合计列保持一致
+                  let totalDynamicPostTaxCashFlow = 0;
                   const postTaxRateDecimal = postTaxRate / 100; // 转换为小数
                   
                   years.forEach((year) => {
@@ -3345,17 +3326,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     
                     // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
                     const discountFactor = Math.pow(1 + postTaxRateDecimal, year);
-                    const dynamicValue = dynamicPreTaxCashFlow - yearAdjustedTax / discountFactor;
-                    
-                    // 分别累加建设期和运营期的动态值
-                    if (year <= constructionYears) {
-                      constructionPeriodTotal += dynamicValue;
-                    } else {
-                      operationPeriodTotal += dynamicValue;
-                    }
+                    totalDynamicPostTaxCashFlow += dynamicPreTaxCashFlow - yearAdjustedTax / discountFactor;
                   });
                   
-                  return formatNumberNoRounding(constructionPeriodTotal + operationPeriodTotal);
+                  return formatNumberNoRounding(totalDynamicPostTaxCashFlow);
                 })()}
               </Table.Td>
               {(() => {
