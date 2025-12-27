@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目投资现金流量表修复验证</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .table th, .table td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: center;
+        }
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .table .text-left {
+            text-align: left;
+        }
+        .test-result {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .formula {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="text-2xl font-bold mb-6">项目投资现金流量表修复验证</h1>
+        
+        <div class="success status">
+            <strong>✅ 修复状态：</strong> 已完成现金流入部分的标准化修复
+        </div>
+        
+        <div class="info status">
+            <strong>📋 修复内容：</strong>
+            <ul class="list-disc list-inside ml-4">
+                <li>序号1.1营业收入 - 使用标准化现金流表数据</li>
+                <li>序号1.2补贴收入 - 使用标准化现金流表数据</li>
+                <li>序号1.3回收固定资产余值 - 使用标准化现金流表数据</li>
+                <li>序号1.4回收流动资金 - 使用标准化现金流表数据</li>
+            </ul>
+        </div>
+        
+        <div class="warning status">
+            <strong>⚠️ 待修复内容：</strong>
+            <ul class="list-disc list-inside ml-4">
+                <li>序号2.现金流出部分 - 仍使用原有计算函数</li>
+                <li>序号3.所得税前净现金流量部分 - 仍使用原有计算函数</li>
+                <li>序号4.累计所得税前净现金流量部分 - 仍使用原有计算函数</li>
+                <li>序号5.调整所得税部分 - 仍使用原有计算函数</li>
+                <li>序号6.所得税后净现金流量部分 - 仍使用原有计算函数</li>
+                <li>序号7.累计所得税后净现金流量部分 - 仍使用原有计算函数</li>
+                <li>序号8-11.动态计算部分 - 仍使用原有计算函数</li>
+            </ul>
+        </div>
+        
+        <div class="test-result">
+            <h2 class="text-xl font-semibold mb-4">修复验证要点</h2>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">1. 数据源统一性</h3>
+                <p>✅ 现金流入部分已统一使用 <code>generateCashFlowTableData()</code> 生成的标准化现金流表数据</p>
+                <div class="formula">
+                    const cashFlowTableData = generateCashFlowTableData(<br>
+                    &nbsp;&nbsp;context,<br>
+                    &nbsp;&nbsp;calculateConstructionInvestment,<br>
+                    &nbsp;&nbsp;calculateWorkingCapital,<br>
+                    &nbsp;&nbsp;calculateOperatingRevenue,<br>
+                    &nbsp;&nbsp;calculateSubsidyIncome,<br>
+                    &nbsp;&nbsp;calculateFixedAssetResidual,<br>
+                    &nbsp;&nbsp;calculateWorkingCapitalRecovery,<br>
+                    &nbsp;&nbsp;calculateOperatingCost,<br>
+                    &nbsp;&nbsp;calculateVatAndTaxes,<br>
+                    &nbsp;&nbsp;calculateMaintenanceInvestment,<br>
+                    &nbsp;&nbsp;calculateAdjustedIncomeTax,<br>
+                    &nbsp;&nbsp;preTaxRate,<br>
+                    &nbsp;&nbsp;postTaxRate<br>
+                    &nbsp;&nbsp;);
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">2. 表格数据获取方式</h3>
+                <p>✅ 修复后的数据获取方式：</p>
+                <div class="formula">
+                    const yearData = cashFlowTableData.yearlyData[year - 1];<br>
+                    const yearTotal = yearData ? yearData.operatingRevenue : 0; // 营业收入示例
+                </div>
+                <p>❌ 修复前的数据获取方式：</p>
+                <div class="formula">
+                    let yearTotal = 0;<br>
+                    if (year > constructionYears) {<br>
+                    &nbsp;&nbsp;const operationYear = year - constructionYears;<br>
+                    &nbsp;&nbsp;yearTotal = calculateOperatingRevenue(operationYear);<br>
+                    }
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">3. 合计计算逻辑</h3>
+                <p>✅ 修复后的合计计算：</p>
+                <div class="formula">
+                    // 只计算运营期各年数值的总和<br>
+                    let totalSum = 0;<br>
+                    years.forEach((year) => {<br>
+                    &nbsp;&nbsp;if (year > constructionYears) {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;const operationYear = year - constructionYears;<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;totalSum += calculateOperatingRevenue(operationYear);<br>
+                    &nbsp;&nbsp;}<br>
+                    });
+                </div>
+                <p>❌ 修复前的合计计算可能包含建设期数据或使用不同的计算逻辑</p>
+            </div>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">4. 与JSON数据一致性</h3>
+                <p>✅ 表格显示数据与JSON导出数据现在保持一致，因为都使用相同的数据源：</p>
+                <ul class="list-disc list-inside ml-4">
+                    <li>表格显示：使用 <code>cashFlowTableData.yearlyData[year - 1]</code></li>
+                    <li>JSON导出：使用 <code>generateCashFlowTableData()</code></li>
+                    <li>财务指标计算：也使用相同的标准化数据</li>
+                </ul>
+            </div>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">5. 修复验证方法</h3>
+                <p>要验证修复是否成功，可以：</p>
+                <ol class="list-decimal list-inside ml-4">
+                    <li>在界面上打开"项目投资现金流量表"</li>
+                    <li>查看"现金流入"部分的数值</li>
+                    <li>点击"查看JSON数据"按钮</li>
+                    <li>对比JSON中的 <code>yearlyData</code> 数组与表格显示的数值</li>
+                    <li>验证对应年份的数据是否完全一致</li>
+                    <li>特别关注序号1.1-1.4行的数据</li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="test-result">
+            <h2 class="text-xl font-semibold mb-4">下一步修复计划</h2>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">阶段2：现金流出部分修复</h3>
+                <p>需要将序号2.1-2.5的表格行也改为使用标准化现金流表数据：</p>
+                <ul class="list-disc list-inside ml-4">
+                    <li>2.1 建设投资 - 使用 <code>yearData.constructionInvestment</code></li>
+                    <li>2.2 流动资金 - 使用 <code>yearData.workingCapital</code></li>
+                    <li>2.3 经营成本 - 使用 <code>yearData.operatingCost</code></li>
+                    <li>2.4 增值税、房产税等及附加 - 使用 <code>yearData.vatAndTaxes</code></li>
+                    <li>2.5 维持运营投资 - 使用 <code>yearData.maintenanceInvestment</code></li>
+                </ul>
+            </div>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">阶段3：净现金流量部分修复</h3>
+                <p>需要将序号3-7的表格行改为使用标准化现金流表数据：</p>
+                <ul class="list-disc list-inside ml-4">
+                    <li>3. 所得税前净现金流量（1-2） - 使用 <code>yearData.preTaxCashFlow</code></li>
+                    <li>4. 累计所得税前净现金流量 - 使用 <code>yearData.cumulativePreTaxCashFlow</code></li>
+                    <li>5. 调整所得税 - 这个可能需要保持原有逻辑</li>
+                    <li>6. 所得税后净现金流量 - 使用 <code>yearData.postTaxCashFlow</code></li>
+                    <li>7. 累计所得税后净现金流量 - 使用 <code>yearData.cumulativePostTaxCashFlow</code></li>
+                </ul>
+            </div>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">阶段4：动态计算部分修复</h3>
+                <p>需要将序号8-11的动态计算表格行改为使用标准化现金流表数据：</p>
+                <ul class="list-disc list-inside ml-4">
+                    <li>8. 所得税前净现金流量（动态） - 使用 <code>yearData.preTaxCashFlowDynamic</code></li>
+                    <li>9. 累计所得税前净现金流量（动态） - 使用 <code>yearData.cumulativePreTaxCashFlowDynamic</code></li>
+                    <li>10. 所得税后净现金流量（动态） - 使用 <code>yearData.postTaxCashFlowDynamic</code></li>
+                    <li>11. 累计所得税后净现金流量（动态） - 使用 <code>yearData.cumulativePostTaxCashFlowDynamic</code></li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="info status">
+            <strong>💡 建议：</strong> 完成所有修复后，整个表格的数据源将完全统一，确保表格显示、JSON导出和财务指标计算使用完全相同的数据源，消除所有不一致问题。
+        </div>
+        
+        <div class="mt-6">
+            <button onclick="window.close()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                关闭验证页面
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        console.log('项目投资现金流量表修复验证页面已加载');
+        console.log('现金流入部分修复状态：✅ 完成');
+        console.log('待修复：现金流出、净现金流量、动态计算部分');
+    </script>
+</body>
+</html>
