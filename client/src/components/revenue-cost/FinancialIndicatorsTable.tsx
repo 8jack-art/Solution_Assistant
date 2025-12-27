@@ -3680,6 +3680,61 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               📊 项目投资现金流量表
             </Text>
             <Group gap="xs">
+              <Tooltip label="查看JSON数据">
+                <ActionIcon
+                  variant="light"
+                  color="blue"
+                  size={16}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // 准备JSON数据
+                    const cashFlowTableData = generateCashFlowTableData(
+                      context,
+                      calculateConstructionInvestment,
+                      calculateWorkingCapital,
+                      calculateOperatingRevenue,
+                      calculateSubsidyIncome,
+                      calculateFixedAssetResidual,
+                      calculateWorkingCapitalRecovery,
+                      calculateOperatingCost,
+                      calculateVatAndTaxes,
+                      calculateMaintenanceInvestment,
+                      calculateAdjustedIncomeTax,
+                      preTaxRate,
+                      postTaxRate
+                    );
+                    
+                    // 创建JSON数据
+                    const jsonData = {
+                      metadata: cashFlowTableData.metadata,
+                      yearlyData: cashFlowTableData.yearlyData,
+                      totals: cashFlowTableData.totals,
+                      financialIndicators: useCachedFinancialIndicators(),
+                      generatedAt: new Date().toISOString()
+                    };
+                    
+                    // 创建下载链接
+                    const dataStr = JSON.stringify(jsonData, null, 2);
+                    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `项目投资现金流量表数据_${context?.projectName || '项目'}_${new Date().toISOString().slice(0, 10)}.json`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    
+                    notifications.show({
+                      title: '导出成功',
+                      message: '项目投资现金流量表JSON数据已导出',
+                      color: 'green',
+                    });
+                  }}
+                >
+                  <IconCode size={16} />
+                </ActionIcon>
+              </Tooltip>
               <Tooltip label="计算指标">
                 <ActionIcon
                   variant="light"
