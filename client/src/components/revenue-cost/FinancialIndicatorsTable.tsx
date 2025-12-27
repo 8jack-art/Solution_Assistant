@@ -14,6 +14,11 @@ import {
   SegmentedControl,
   NumberInput,
   TextInput,
+  ScrollArea,
+  Paper,
+  Box,
+  Alert,
+  Loader
 } from '@mantine/core'
 import {
   IconTable,
@@ -24,7 +29,8 @@ import {
   IconCalculator,
   IconFileText,
   IconCode,
-  IconSettings
+  IconSettings,
+  IconBug
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, calculateYearlyRevenue, getProductionRateForYear, calculateOtherTaxesAndSurcharges } from '@/stores/revenueCostStore'
@@ -33,6 +39,7 @@ import * as XLSX from 'xlsx'
 import AnnualInvestmentTable from './AnnualInvestmentTable'
 import LoanRepaymentScheduleTable from './LoanRepaymentScheduleTable'
 import JsonDataViewer from './JsonDataViewer'
+import { FinancialIndicatorsDebug } from './FinancialIndicatorsDebug'
 
 // 格式化数字显示为2位小数，不四舍五入，无千分号（不修改实际值，只用于显示）
 const formatNumberNoRounding = (value: number): string => {
@@ -284,6 +291,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [jsonLoading, setJsonLoading] = useState(false)
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [jsonData, setJsonData] = useState<any>(null)
+  
+  // 调试状态
+  const [showDebugModal, setShowDebugModal] = useState(false)
+  const [debugIndicators, setDebugIndicators] = useState<any>(null)
+  const [debugCashFlowData, setDebugCashFlowData] = useState<any[]>([])
   
   // 利润与利润分配表设置状态
   const [subsidyIncome, setSubsidyIncome] = useState(0)
@@ -3513,43 +3525,75 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     setJsonError(null)
     
     try {
-      const projectId = context?.projectId
-      if (!projectId) {
-        throw new Error('项目ID不存在')
+      if (!context) {
+        throw new Error('项目上下文未加载')
       }
       
-      // 从 store 获取数据（如果已加载）
-      const { revenueTableData, costTableData, loanRepaymentTableData } = useRevenueCostStore.getState()
+      // 生成项目投资现金流量表数据
+      const cashFlowTableData = generateCashFlowTableData(
+        context,
+        calculateConstructionInvestment,
+        calculateWorkingCapital,
+        calculateOperatingRevenue,
+        calculateSubsidyIncome,
+        calculateFixedAssetResidual,
+        calculateWorkingCapitalRecovery,
+        calculateOperatingCost,
+        calculateVatAndTaxes,
+        calculateMaintenanceInvestment,
+        calculateAdjustedIncomeTax,
+        preTaxRate,
+        postTaxRate
+      );
       
-      if (revenueTableData && costTableData) {
-        setJsonData({
+      // 获取完整的项目数据作为JSON基础
+      const completeJsonData = {
+        projectContext: context,
+        revenueConfig: {
+          items: revenueItems,
+          productionRates: productionRates
+        },
+        costConfig: costConfig,
+        cashFlowTableData: cashFlowTableData, // 添加项目投资现金流量表数据
+        tableData: {
           revenueTable: revenueTableData,
           costTable: costTableData,
-          constructionInterest: investmentEstimate?.partF,
-          loanRepaymentTable: loanRepaymentTableData
-        })
-      } else {
-        // 从后端获取
-        const response = await revenueCostApi.getByProjectId(projectId)
-        if (response.success && response.data?.estimate?.model_data) {
-          const modelData = response.data.estimate.model_data
-          setJsonData({
-            revenueTable: modelData.revenueTableData,
-            costTable: modelData.costTableData,
-            constructionInterest: response.data.estimate?.partF,
-            loanRepaymentTable: modelData.loanRepaymentTableData
-          })
-        } else {
-          throw new Error('获取数据失败')
+          profitDistributionTable: profitDistributionTableData,
+          loanRepaymentTable: repaymentTableData
+        },
+        investmentData: {
+          estimate: investmentEstimate,
+          depreciationData: depreciationData
+        },
+        financialIndicators: useCachedFinancialIndicators(), // 添加财务指标计算结果
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          version: '1.0',
+          description: '完整的项目财务数据，包含所有计算所需的基础信息和结果',
+          dataSources: [
+            '项目投资现金流量表',
+            '利润与利润分配表',
+            '营业收入、营业税金及附加和增值税估算表',
+            '总成本费用估算表',
+            '借款还本付息计划表',
+            '分年度投资估算表'
+          ]
         }
       }
       
+      setJsonData(completeJsonData)
       setShowJsonViewer(true)
+      
+      notifications.show({
+        title: 'JSON数据加载成功',
+        message: `已获取完整的项目数据，包含现金流量表和财务指标`,
+        color: 'green',
+      })
     } catch (error: any) {
-      setJsonError(error.message || '获取数据失败')
+      setJsonError(error.message || '获取JSON数据失败')
       notifications.show({
         title: '错误',
-        message: error.message || '获取数据失败',
+        message: error.message || '获取JSON数据失败',
         color: 'red'
       })
     } finally {
@@ -3824,27 +3868,61 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <Text size="md">
               📊 财务计算指标表
             </Text>
-            <Tooltip label="设置">
-              <ActionIcon
-                variant="light"
-                color="blue"
-                size={16}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // 将当前值复制到临时状态
-                  setTempPreTaxRate(preTaxRate);
-                  setTempPostTaxRate(postTaxRate);
-                  // 先关闭财务指标表modal，然后打开设置modal
-                  setShowFinancialIndicatorsModal(false);
-                  // 使用setTimeout确保设置modal在财务指标表modal关闭后再打开
-                  setTimeout(() => {
-                    setShowFinancialIndicatorsSettings(true);
-                  }, 100);
-                }}
-              >
-                <IconSettings size={16} />
-              </ActionIcon>
-            </Tooltip>
+            <Group gap="xs">
+              <Tooltip label="调试计算过程">
+                <ActionIcon
+                  variant="light"
+                  color="orange"
+                  size={16}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // 准备调试数据
+                    const indicators = useCachedFinancialIndicators();
+                    const cashFlowData = generateCashFlowTableData(
+                      context,
+                      calculateConstructionInvestment,
+                      calculateWorkingCapital,
+                      calculateOperatingRevenue,
+                      calculateSubsidyIncome,
+                      calculateFixedAssetResidual,
+                      calculateWorkingCapitalRecovery,
+                      calculateOperatingCost,
+                      calculateVatAndTaxes,
+                      calculateMaintenanceInvestment,
+                      calculateAdjustedIncomeTax,
+                      preTaxRate,
+                      postTaxRate
+                    );
+                    setDebugIndicators(indicators);
+                    setDebugCashFlowData(cashFlowData.yearlyData);
+                    setShowDebugModal(true);
+                  }}
+                >
+                  <IconBug size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="设置">
+                <ActionIcon
+                  variant="light"
+                  color="blue"
+                  size={16}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // 将当前值复制到临时状态
+                    setTempPreTaxRate(preTaxRate);
+                    setTempPostTaxRate(postTaxRate);
+                    // 先关闭财务指标表modal，然后打开设置modal
+                    setShowFinancialIndicatorsModal(false);
+                    // 使用setTimeout确保设置modal在财务指标表modal关闭后再打开
+                    setTimeout(() => {
+                      setShowFinancialIndicatorsSettings(true);
+                    }, 100);
+                  }}
+                >
+                  <IconSettings size={16} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
         }
         size="420px"
@@ -4017,6 +4095,57 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         }}
       >
         <LoanRepaymentScheduleTable showCard={false} estimate={investmentEstimate} />
+      </Modal>
+
+      {/* 财务指标调试弹窗 */}
+      <Modal
+        opened={showDebugModal}
+        onClose={() => setShowDebugModal(false)}
+        centered
+        title="🔍 财务指标计算调试"
+        size="1400px"
+        styles={{
+          body: {
+            maxHeight: '85vh',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        {debugIndicators && debugCashFlowData.length > 0 && (
+          <FinancialIndicatorsDebug
+            opened={showDebugModal}
+            onClose={() => setShowDebugModal(false)}
+            indicators={{
+              preTaxIRR: debugIndicators.preTaxIRR,
+              preTaxNPV: debugIndicators.preTaxNPV,
+              preTaxStaticPaybackPeriod: debugIndicators.preTaxStaticPaybackPeriod,
+              preTaxDynamicPaybackPeriod: debugIndicators.preTaxDynamicPaybackPeriod,
+              postTaxIRR: debugIndicators.postTaxIRR,
+              postTaxNPV: debugIndicators.postTaxNPV,
+              postTaxStaticPaybackPeriod: debugIndicators.postTaxStaticPaybackPeriod,
+              postTaxDynamicPaybackPeriod: debugIndicators.postTaxDynamicPaybackPeriod
+            }}
+            cashFlowData={{
+              preTaxData: debugCashFlowData.map(cf => ({
+                year: cf.year,
+                staticCashFlow: cf.preTaxCashFlow,
+                dynamicCashFlow: cf.preTaxCashFlowDynamic,
+                cumulativeStaticCashFlow: cf.cumulativePreTaxCashFlow,
+                cumulativeDynamicCashFlow: cf.cumulativePreTaxCashFlowDynamic
+              })),
+              postData: debugCashFlowData.map(cf => ({
+                year: cf.year,
+                staticCashFlow: cf.postTaxCashFlow,
+                dynamicCashFlow: cf.postTaxCashFlowDynamic,
+                cumulativeStaticCashFlow: cf.cumulativePostTaxCashFlow,
+                cumulativeDynamicCashFlow: cf.cumulativePostTaxCashFlowDynamic
+              }))
+            }}
+            preTaxRate={preTaxRate}
+            postTaxRate={postTaxRate}
+            incomeTaxRate={incomeTaxRate}
+          />
+        )}
       </Modal>
     </>
   )

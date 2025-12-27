@@ -256,16 +256,8 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
   // 复制 JSON 数据
   const handleCopy = async () => {
     try {
-      let jsonToCopy: any
-      if (activeTab === 'revenue') {
-        jsonToCopy = data?.revenueTable
-      } else if (activeTab === 'cost') {
-        jsonToCopy = data?.costTable
-      } else if (activeTab === 'construction') {
-        jsonToCopy = data?.constructionInterest
-      } else if (activeTab === 'loan') {
-        jsonToCopy = data?.loanRepaymentTable
-      }
+      // 复制当前标签的数据，如果为空则复制完整数据
+      let jsonToCopy: any = data
       
       if (!jsonToCopy) {
         notifications.show({
@@ -281,14 +273,14 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       
       notifications.show({
         title: '复制成功',
-        message: 'JSON 数据已复制到剪贴板',
+        message: '完整项目财务数据已复制到剪贴板',
         color: 'green',
         autoClose: 2000,
       })
     } catch (error) {
       notifications.show({
         title: '复制失败',
-        message: '无法复制到剪贴板',
+        message: '无法复制到剪贴板，请检查浏览器权限',
         color: 'red',
       })
     }
