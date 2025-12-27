@@ -2247,6 +2247,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       postTaxRate,
       constructionYears: context?.constructionYears,
       operationYears: context?.operationYears,
+      revenueTableData,
+      costTableData,
+      profitDistributionTableData,
       // 可以根据需要添加更多依赖项
     })
     
@@ -4323,12 +4326,14 @@ const generateCashFlowTableData = (
     cumulativePreTax += preTaxCashFlow;
     cumulativePostTax += postTaxCashFlow;
 
-    // 计算动态净现金流量
-    const discountFactorPreTax = Math.pow(1 + preTaxRateDecimal, year);
-    const discountFactorPostTax = Math.pow(1 + postTaxRateDecimal, year);
+    // 计算动态净现金流量 - 修复为与Excel导出一致的公式
+    // 先计算所得税前净现金流量（动态）
+    const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
+    const preTaxCashFlowDynamic = preTaxCashFlow / preTaxDiscountFactor;
     
-    const preTaxCashFlowDynamic = preTaxCashFlow / discountFactorPreTax;
-    const postTaxCashFlowDynamic = preTaxCashFlowDynamic - adjustedIncomeTax / discountFactorPostTax;
+    // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
+    const postTaxDiscountFactor = Math.pow(1 + postTaxRateDecimal, year);
+    const postTaxCashFlowDynamic = preTaxCashFlowDynamic - adjustedIncomeTax / postTaxDiscountFactor;
 
     // 计算累计动态净现金流量
     cumulativePreTaxDynamic += preTaxCashFlowDynamic;
@@ -4406,7 +4411,7 @@ const calculateFinancialIndicators = (cashFlowData: CashFlowTableData): Financia
     };
   }
 
-  // 提取现金流数组
+  // 提取现金流数组 - 确保与Excel导出使用相同的数据
   const preTaxCashFlows = yearlyData.map(row => row.preTaxCashFlow);
   const postTaxCashFlows = yearlyData.map(row => row.postTaxCashFlow);
   const cumulativePreTaxFlows = yearlyData.map(row => row.cumulativePreTaxCashFlow);
@@ -4414,15 +4419,26 @@ const calculateFinancialIndicators = (cashFlowData: CashFlowTableData): Financia
   const cumulativePreTaxDynamicFlows = yearlyData.map(row => row.cumulativePreTaxCashFlowDynamic);
   const cumulativePostTaxDynamicFlows = yearlyData.map(row => row.cumulativePostTaxCashFlowDynamic);
 
+  // 计算财务指标，确保与Excel导出使用相同的计算逻辑
+  const preTaxIRR = safeCalculateIRR(preTaxCashFlows);
+  const postTaxIRR = safeCalculateIRR(postTaxCashFlows);
+  const preTaxNPV = safeCalculateNPV(preTaxCashFlows, metadata.preTaxRate);
+  const postTaxNPV = safeCalculateNPV(postTaxCashFlows, metadata.postTaxRate);
+  const preTaxStaticPaybackPeriod = safeCalculatePaybackPeriod(cumulativePreTaxFlows);
+  const postTaxStaticPaybackPeriod = safeCalculatePaybackPeriod(cumulativePostTaxFlows);
+  const preTaxDynamicPaybackPeriod = safeCalculateDynamicPaybackPeriod(cumulativePreTaxDynamicFlows);
+  const postTaxDynamicPaybackPeriod = safeCalculateDynamicPaybackPeriod(cumulativePostTaxDynamicFlows);
+
+  // 返回财务指标结果
   return {
-    preTaxIRR: safeCalculateIRR(preTaxCashFlows),
-    postTaxIRR: safeCalculateIRR(postTaxCashFlows),
-    preTaxNPV: safeCalculateNPV(preTaxCashFlows, metadata.preTaxRate),
-    postTaxNPV: safeCalculateNPV(postTaxCashFlows, metadata.postTaxRate),
-    preTaxStaticPaybackPeriod: safeCalculatePaybackPeriod(cumulativePreTaxFlows),
-    postTaxStaticPaybackPeriod: safeCalculatePaybackPeriod(cumulativePostTaxFlows),
-    preTaxDynamicPaybackPeriod: safeCalculateDynamicPaybackPeriod(cumulativePreTaxDynamicFlows),
-    postTaxDynamicPaybackPeriod: safeCalculateDynamicPaybackPeriod(cumulativePostTaxDynamicFlows),
+    preTaxIRR,
+    postTaxIRR,
+    preTaxNPV,
+    postTaxNPV,
+    preTaxStaticPaybackPeriod,
+    postTaxStaticPaybackPeriod,
+    preTaxDynamicPaybackPeriod,
+    postTaxDynamicPaybackPeriod,
   };
 };
 
