@@ -99,6 +99,51 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
   const [showConstructionDataModal, setShowConstructionDataModal] = useState(false)
   const [showJsonModal, setShowJsonModal] = useState(false)
 
+  // 从投资估算数据中读取已保存的贷款相关数据
+  const getLoanDataFromEstimate = useMemo(() => {
+    if (!estimate) {
+      return {
+        constructionInterestDetails: null,
+        loanRepaymentScheduleSimple: null
+      };
+    }
+
+    // 声明变量
+    let constructionInterestDetails: any = null;
+    let loanRepaymentScheduleSimple: any = null;
+
+    // 如果数据库中已保存建设期利息详情，优先使用
+    if (estimate.construction_interest_details) {
+      if (typeof estimate.construction_interest_details === 'string') {
+        try {
+          constructionInterestDetails = JSON.parse(estimate.construction_interest_details);
+        } catch (e) {
+          console.warn('解析建设期利息详情失败:', e);
+        }
+      } else {
+        constructionInterestDetails = estimate.construction_interest_details;
+      }
+    }
+
+    // 如果数据库中已保存还本付息计划简表，优先使用
+    if (estimate.loan_repayment_schedule_simple) {
+      if (typeof estimate.loan_repayment_schedule_simple === 'string') {
+        try {
+          loanRepaymentScheduleSimple = JSON.parse(estimate.loan_repayment_schedule_simple);
+        } catch (e) {
+          console.warn('解析还本付息计划简表失败:', e);
+        }
+      } else {
+        loanRepaymentScheduleSimple = estimate.loan_repayment_schedule_simple;
+      }
+    }
+
+    return {
+      constructionInterestDetails,
+      loanRepaymentScheduleSimple
+    };
+  }, [estimate]);
+
   // 计算借款还本付息计划表数据
   const calculateLoanRepaymentData = useMemo(() => {
     if (!context) return null;
@@ -111,8 +156,9 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     const constructionPeriod = Array(constructionYears).fill(0);
     const operationPeriod = Array(operationYears).fill(0);
 
-    // 从建设期利息详情表获取建设期数据
-    const yearlyInterestData = estimate?.partF?.分年利息 || [];
+    // 优先使用数据库中保存的数据，如果没有则从 estimate.partF 计算
+    const savedLoanData = getLoanDataFromEstimate;
+    const yearlyInterestData = savedLoanData.constructionInterestDetails?.分年数据 || estimate?.partF?.分年利息 || [];
     
     // 计算某年期末借款余额（累计借款金额）
     const calculateEndOfYearBalance = (yearIndex: number): number => {

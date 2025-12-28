@@ -136,15 +136,20 @@ const InvestmentCalculator: React.FC = () => {
     setLoading(true)
 
     try {
+      // 准备建设期利息详情数据
+      const constructionInterestDetails = prepareConstructionInterestData(calculationResult);
+      
       const response = await investmentApi.save({
         project_id: id!,
         ...formData,
+        // 添加建设期利息详情数据
+        construction_interest_details: constructionInterestDetails,
       })
       if (response.success && response.data) {
         setEstimate(response.data.estimate)
         notifications.show({
           title: '✅ 保存成功',
-          message: '投资估算已保存',
+          message: '投资估算已保存（含建设期利息详情）',
           color: 'green',
         })
       } else {
@@ -163,6 +168,49 @@ const InvestmentCalculator: React.FC = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 准备建设期利息详情数据
+  const prepareConstructionInterestData = (calcResult: any) => {
+    if (!calcResult?.estimate_data?.partF?.分年利息) {
+      return null;
+    }
+
+    const yearlyInterestData = calcResult.estimate_data.partF.分年利息;
+    const constructionYears = formData.construction_period;
+
+    // 计算各年期末借款余额
+    const calculateEndOfYearBalance = (yearIndex: number): number => {
+      let balance = 0;
+      for (let i = 0; i <= yearIndex; i++) {
+        if (yearlyInterestData[i]) {
+          balance += yearlyInterestData[i].当期借款金额 || 0;
+        }
+      }
+      return balance;
+    };
+
+    // 准备JSON数据结构（便于后续调用）
+    return {
+      基本信息: {
+        贷款总额: calcResult.estimate_data.partF.贷款总额 || 0,
+        年利率: calcResult.estimate_data.partF.年利率 || formData.loan_rate || 0,
+        建设期年限: constructionYears,
+        贷款期限: calcResult.estimate_data.partF.贷款期限 || 0
+      },
+      分年数据: yearlyInterestData.map((data: any, index: number) => ({
+        年份: index + 1,
+        期初借款余额: index === 0 ? 0 : calculateEndOfYearBalance(index - 1),
+        当期借款金额: data?.当期借款金额 || 0,
+        当期利息: data?.当期利息 || 0,
+        期末借款余额: calculateEndOfYearBalance(index)
+      })),
+      汇总信息: {
+        总借款金额: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期借款金额 || 0), 0),
+        总利息: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期利息 || 0), 0),
+        期末借款余额: calculateEndOfYearBalance(yearlyInterestData.length - 1)
+      }
+    };
   }
 
   if (!project) {

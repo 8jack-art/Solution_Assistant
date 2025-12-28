@@ -638,7 +638,7 @@ const RevenueCostModeling: React.FC = () => {
   ) ? Number(Object.keys(stepMap).find(key => stepMap[Number(key)] === currentStep)) : 0
 
   // 步骤导航处理
-  const handleNext = () => {
+  const handleNext = async () => {
     // 步骤1：AI推荐营收结构 - 检查是否锁定
     if (activeStep === 1 && !revenueStructureLocked) {
       notifications.show({
@@ -649,9 +649,176 @@ const RevenueCostModeling: React.FC = () => {
       return
     }
 
+    // 步骤0：基础数据确认 - 保存还本付息计划简表数据
+    if (activeStep === 0) {
+      await saveLoanRepaymentScheduleData();
+    }
+
     if (activeStep < STEPS.length - 1) {
       setCurrentStep(stepMap[activeStep + 1] as any)
     }
+  }
+
+  // 保存还本付息计划简表数据
+  const saveLoanRepaymentScheduleData = async () => {
+    if (!project || !repaymentTableData || repaymentTableData.length === 0) {
+      notifications.show({
+        title: '⚠️ 无数据保存',
+        message: '还款期数据为空，跳过还本付息计划保存',
+        color: 'yellow',
+      })
+      return;
+    }
+
+    try {
+      // 准备还本付息计划简表数据
+      const loanRepaymentScheduleData = prepareLoanRepaymentScheduleData();
+      
+      // 添加详细调试日志
+      console.log('🔍 准备保存还本付息计划数据');
+      console.log('📋 项目信息:', {
+        project_id: project.id,
+        project_name: project.project_name,
+        operation_years: project.operation_years,
+        loan_interest_rate: project.loan_interest_rate
+      });
+      console.log('💰 投资估算数据:', {
+        construction_cost: investmentEstimate?.construction_cost,
+        equipment_cost: investmentEstimate?.equipment_cost,
+        installation_cost: investmentEstimate?.installation_cost,
+        other_cost: investmentEstimate?.other_cost,
+        land_cost: investmentEstimate?.land_cost,
+        loan_amount: investmentEstimate?.loan_amount,
+        custom_loan_amount: investmentEstimate?.custom_loan_amount
+      });
+      console.log('📊 还本付息计划数据:', loanRepaymentScheduleData);
+      console.log('📊 还本付息表格原始数据:', repaymentTableData);
+      
+      // 调用投资估算API保存
+      // 验证和清理要发送的数据
+      const requestData = {
+        project_id: project.id,
+        // 传入现有数据以保持完整性
+        construction_cost: Number(investmentEstimate?.construction_cost) || 0,
+        equipment_cost: Number(investmentEstimate?.equipment_cost) || 0,
+        installation_cost: Number(investmentEstimate?.installation_cost) || 0,
+        other_cost: Number(investmentEstimate?.other_cost) || 0,
+        land_cost: Number(investmentEstimate?.land_cost) || 0,
+        basic_reserve_rate: 0.05,
+        price_reserve_rate: 0.03,
+        construction_period: Number(investmentEstimate?.construction_period) || 3,
+        loan_rate: Number(project.loan_interest_rate) || 0.049,
+        custom_loan_amount: investmentEstimate?.custom_loan_amount ? Number(investmentEstimate.custom_loan_amount) : undefined,
+        // 添加还本付息计划简表数据
+        loan_repayment_schedule_simple: loanRepaymentScheduleData,
+      };
+
+      console.log('🔍 发送给后端的完整数据:', JSON.stringify(requestData, null, 2));
+      console.log('🔍 数据类型验证:', {
+        project_id: typeof requestData.project_id,
+        construction_cost: typeof requestData.construction_cost,
+        equipment_cost: typeof requestData.equipment_cost,
+        installation_cost: typeof requestData.installation_cost,
+        other_cost: typeof requestData.other_cost,
+        land_cost: typeof requestData.land_cost,
+        loan_rate: typeof requestData.loan_rate,
+        loan_repayment_schedule_simple: typeof requestData.loan_repayment_schedule_simple,
+        loan_repayment_schedule_simple_value: requestData.loan_repayment_schedule_simple
+      });
+
+      const response = await investmentApi.save(requestData);
+
+      if (response.success) {
+        notifications.show({
+          title: '✅ 保存成功',
+          message: '还本付息计划简表已保存到数据库',
+          color: 'green',
+        })
+      } else {
+        notifications.show({
+          title: '❌ 保存失败',
+          message: response.error || '还本付息计划保存失败',
+          color: 'red',
+        })
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: '❌ 保存失败',
+        message: error.response?.data?.error || '还本付息计划保存失败',
+        color: 'red',
+      })
+    }
+  }
+
+  // 准备还本付息计划简表数据
+  const prepareLoanRepaymentScheduleData = () => {
+    if (!repaymentTableData || repaymentTableData.length === 0) {
+      return null;
+    }
+
+    // 提取贷款总额和利率（从还款期数据计算）
+    const loanAmount = repaymentTableData.find((row: any) => row.序号 === '2.1')?.合计 || 0;
+    const totalInterest = repaymentTableData.find((row: any) => row.序号 === '2.2')?.合计 || 0;
+    
+    // 提取还款计划数据（去除建设期空数据）
+    console.log('🔍 准备提取还款计划数据，原始表格数据:', repaymentTableData);
+    
+    const repaymentSchedule = repaymentTableData
+      .filter((row: any) => {
+        console.log(`🔍 处理行 ${row.序号}:`, {
+          运营期: row.运营期,
+          运营期长度: row.运营期?.length,
+          有运营期数据: row.运营期 && row.运营期.length > 0
+        });
+        return row.运营期 && row.运营期.length > 0;
+      })
+      .map((row: any) => {
+        const yearIndex = row.运营期.findIndex((val: number) => val > 0);
+        console.log(`🔍 处理行 ${row.序号} 的年份索引:`, yearIndex);
+        
+        const item = {
+          年份: yearIndex >= 0 ? yearIndex + 1 : 0,
+          期初借款余额: yearIndex >= 0 ? row.运营期[0] : 0,
+          当期还本: row.序号 === '2.1' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
+          当期付息: row.序号 === '2.2' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
+          当期还本付息: row.序号 === '1.2' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
+          期末借款余额: row.序号 === '1.3' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
+        };
+        
+        console.log(`🔍 行 ${row.序号} 的处理结果:`, item);
+        return item;
+      })
+      .filter((item: any) => {
+        const isValid = item.期初借款余额 > 0;
+        console.log(`🔍 过滤年份 ${item.年份}, 期初余额 ${item.期初借款余额}:`, isValid);
+        return isValid;
+      }); // 只保留有效年份的数据
+      
+    console.log('🔍 最终提取的还款计划数据:', repaymentSchedule);
+
+    return {
+      基本信息: {
+        贷款总额: loanAmount,
+        年利率: project.loan_interest_rate || 0.049,
+        贷款期限: repaymentPeriod,
+        还款方式: 'equal-principal',
+        运营期年限: project.operation_years || 0
+      },
+      还款计划: repaymentSchedule.map((item: any) => ({
+        年份: item.年份,
+        期初借款余额: item.期初借款余额,
+        当期还本: item.当期还本,
+        当期付息: item.当期付息,
+        当期还本付息: item.当期还本付息,
+        期末借款余额: item.期末借款余额,
+      })),
+      汇总信息: {
+        贷款总额: loanAmount,
+        总利息: totalInterest,
+        总还本付息: loanAmount + totalInterest,
+        还款年数: repaymentSchedule.length
+      }
+    };
   }
 
   const handleBack = () => {

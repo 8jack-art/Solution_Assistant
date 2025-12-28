@@ -16,6 +16,16 @@ export class InvestmentEstimateModel {
         if (row.estimate_data && typeof row.estimate_data === 'string') {
           row.estimate_data = JSON.parse(row.estimate_data)
         }
+        // 解析新增的JSON字段
+        if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
+          row.construction_interest_details = JSON.parse(row.construction_interest_details)
+        }
+        if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
+          row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple)
+        }
+        if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
+          row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed)
+        }
         return row
       }
       return null
@@ -38,6 +48,16 @@ export class InvestmentEstimateModel {
         if (row.estimate_data && typeof row.estimate_data === 'string') {
           row.estimate_data = JSON.parse(row.estimate_data)
         }
+        // 解析新增的JSON字段
+        if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
+          row.construction_interest_details = JSON.parse(row.construction_interest_details)
+        }
+        if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
+          row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple)
+        }
+        if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
+          row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed)
+        }
         return row
       }
       return null
@@ -58,8 +78,9 @@ export class InvestmentEstimateModel {
           construction_interest, gap_rate, construction_cost, equipment_cost, 
           installation_cost, other_cost, land_cost, basic_reserve, price_reserve, 
           construction_period, iteration_count, final_total, loan_amount, loan_rate, 
-          custom_loan_amount, custom_land_cost) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          custom_loan_amount, custom_land_cost, construction_interest_details, 
+          loan_repayment_schedule_simple, loan_repayment_schedule_detailed) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           estimateData.project_id,
@@ -81,7 +102,10 @@ export class InvestmentEstimateModel {
           estimateData.loan_amount || 0,
           estimateData.loan_rate || 0.049,
           estimateData.custom_loan_amount || null,
-          estimateData.custom_land_cost || null
+          estimateData.custom_land_cost || null,
+          estimateData.construction_interest_details ? JSON.stringify(estimateData.construction_interest_details) : null,
+          estimateData.loan_repayment_schedule_simple ? JSON.stringify(estimateData.loan_repayment_schedule_simple) : null,
+          estimateData.loan_repayment_schedule_detailed ? JSON.stringify(estimateData.loan_repayment_schedule_detailed) : null
         ]
       ) as any[]
 
@@ -97,8 +121,8 @@ export class InvestmentEstimateModel {
       // 过滤掉undefined值的字段
       const fields = Object.keys(updates).filter(key => key !== 'id' && updates[key as keyof InvestmentEstimate] !== undefined)
       const values = fields.map(field => {
-        if (field === 'estimate_data' && updates.estimate_data) {
-          return JSON.stringify(updates.estimate_data)
+        if (['estimate_data', 'construction_interest_details', 'loan_repayment_schedule_simple', 'loan_repayment_schedule_detailed'].includes(field)) {
+          return JSON.stringify((updates as any)[field])
         }
         const value = (updates as any)[field]
         // 将undefined转换为null
