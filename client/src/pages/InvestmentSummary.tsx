@@ -2119,7 +2119,7 @@ const InvestmentSummary: React.FC = () => {
 
   // 应用百分比调整
   const applyPercentageAdjustment = (percentage: number) => {
-    if (!singleItemTemp || !editingSingleItemIndex === null) return
+    if (!singleItemTemp || editingSingleItemIndex === null) return
     
     // 获取原始值（从editingSubItems中）
     const originalItem = editingSubItems[editingSingleItemIndex!]
@@ -2701,6 +2701,7 @@ const InvestmentSummary: React.FC = () => {
           ) : (
             <Stack gap="md">
               {/* 迭代信息 */}
+              {estimate ? (
 <Card 
   shadow="sm" 
   padding="md" 
@@ -2713,12 +2714,12 @@ const InvestmentSummary: React.FC = () => {
   <Group gap="30px" align="center" justify="start" style={{ width: '100%' }}>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>迭代次数</Text>
-      <Text size="lg" fw={600} c="#165DFF">{estimate.iterationCount} 次</Text>
+      <Text size="lg" fw={600} c="#165DFF">{estimate?.iterationCount || 0} 次</Text>
     </div>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>差距率</Text>
-      <Text size="lg" fw={600} c={(project?.total_investment ?? 0) > (estimate.partG?.合计 || 0) ? '#00C48C' : '#FF4D4F'}>
-        {(project?.total_investment ?? 0) > (estimate.partG?.合计 || 0) && estimate.gapRate < 0 ? '' : (project?.total_investment ?? 0) > (estimate.partG?.合计 || 0) ? '-' : '+'}{Math.abs(estimate.gapRate)?.toFixed(2) || 'N/A'}%
+      <Text size="lg" fw={600} c={(project?.total_investment ?? 0) > (estimate?.partG?.合计 || 0) ? '#00C48C' : '#FF4D4F'}>
+        {(project?.total_investment ?? 0) > (estimate?.partG?.合计 || 0) && estimate?.gapRate && estimate.gapRate < 0 ? '' : (project?.total_investment ?? 0) > (estimate?.partG?.合计 || 0) ? '-' : '+'}{estimate?.gapRate ? Math.abs(estimate.gapRate).toFixed(2) : 'N/A'}%
       </Text>
     </div>
     <div style={{ textAlign: 'center' }}>
@@ -2727,7 +2728,7 @@ const InvestmentSummary: React.FC = () => {
     </div>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
-      <Text size="lg" fw={600} c="#165DFF">{estimate.partG?.合计?.toFixed(2) || 0} 万元</Text>
+      <Text size="lg" fw={600} c="#165DFF">{estimate?.partG?.合计?.toFixed(2) || 0} 万元</Text>
     </div>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>建设期利息</Text>
@@ -2756,6 +2757,11 @@ const InvestmentSummary: React.FC = () => {
     </div>
   </Group>
 </Card>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#86909C' }}>
+                  <Text>正在加载投资估算数据...</Text>
+                </div>
+              )}
 
               {/* 投资估算简表 - 完整表格 */}
               <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
@@ -2763,145 +2769,146 @@ const InvestmentSummary: React.FC = () => {
   // 临时注释：隐藏投资估算简表标题
   <Text size="sm" c="#1D2129" fw={600} mb="md">投资估算简表</Text>
   */}
-        <Table withTableBorder withColumnBorders style={{ fontSize: '13px', tableLayout: 'fixed', width: '100%' }}>
-          <Table.Thead>
-            <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
-              <Table.Th style={{ ...columnStyles.sequence, minWidth: columnStyles.sequence.width, maxWidth: columnStyles.sequence.width }}>序号</Table.Th>
-              <Table.Th style={{ ...columnStyles.name, textAlign: 'center', minWidth: columnStyles.name.width, maxWidth: columnStyles.name.width }}>工程或费用名称</Table.Th>
-              <Table.Th style={{ ...columnStyles.construction, minWidth: columnStyles.construction.width, maxWidth: columnStyles.construction.width }}>建设工程费<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.equipment, minWidth: columnStyles.equipment.width, maxWidth: columnStyles.equipment.width }}>设备购置费<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.installation, minWidth: columnStyles.installation.width, maxWidth: columnStyles.installation.width }}>安装工程费<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.other, minWidth: columnStyles.other.width, maxWidth: columnStyles.other.width }}>其它费用<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.total, minWidth: columnStyles.total.width, maxWidth: columnStyles.total.width }}>合计<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.unit, minWidth: columnStyles.unit.width, maxWidth: columnStyles.unit.width }}>单位</Table.Th>
-              <Table.Th style={{ ...columnStyles.quantity, minWidth: columnStyles.quantity.width, maxWidth: columnStyles.quantity.width }}>数量</Table.Th>
-              <Table.Th style={{ ...columnStyles.unitPrice, minWidth: columnStyles.unitPrice.width, maxWidth: columnStyles.unitPrice.width }}>单位价值<br />（元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.ratio, minWidth: columnStyles.ratio.width, maxWidth: columnStyles.ratio.width }}>占总投资<br />比例</Table.Th>
-              <Table.Th style={{ ...columnStyles.remark, textAlign: 'center', minWidth: columnStyles.remark.width, maxWidth: columnStyles.remark.width }}>备注</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
+                {estimate && estimate.partA && estimate.partB && estimate.partC && estimate.partD && estimate.partE && estimate.partG ? (
+                  <Table withTableBorder withColumnBorders style={{ fontSize: '13px', tableLayout: 'fixed', width: '100%' }}>
+                    <Table.Thead>
+                      <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                        <Table.Th style={{ ...columnStyles.sequence, minWidth: columnStyles.sequence.width, maxWidth: columnStyles.sequence.width }}>序号</Table.Th>
+                        <Table.Th style={{ ...columnStyles.name, textAlign: 'center', minWidth: columnStyles.name.width, maxWidth: columnStyles.name.width }}>工程或费用名称</Table.Th>
+                        <Table.Th style={{ ...columnStyles.construction, minWidth: columnStyles.construction.width, maxWidth: columnStyles.construction.width }}>建设工程费<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.equipment, minWidth: columnStyles.equipment.width, maxWidth: columnStyles.equipment.width }}>设备购置费<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.installation, minWidth: columnStyles.installation.width, maxWidth: columnStyles.installation.width }}>安装工程费<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.other, minWidth: columnStyles.other.width, maxWidth: columnStyles.other.width }}>其它费用<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.total, minWidth: columnStyles.total.width, maxWidth: columnStyles.total.width }}>合计<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.unit, minWidth: columnStyles.unit.width, maxWidth: columnStyles.unit.width }}>单位</Table.Th>
+                        <Table.Th style={{ ...columnStyles.quantity, minWidth: columnStyles.quantity.width, maxWidth: columnStyles.quantity.width }}>数量</Table.Th>
+                        <Table.Th style={{ ...columnStyles.unitPrice, minWidth: columnStyles.unitPrice.width, maxWidth: columnStyles.unitPrice.width }}>单位价值<br />（元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.ratio, minWidth: columnStyles.ratio.width, maxWidth: columnStyles.ratio.width }}>占总投资<br />比例</Table.Th>
+                        <Table.Th style={{ ...columnStyles.remark, textAlign: 'center', minWidth: columnStyles.remark.width, maxWidth: columnStyles.remark.width }}>备注</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
 
-                  <Table.Tbody>
-                    {/* A部分主行 */}
-                    <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
-                      <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partA.序号}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.name }}>{estimate.partA.工程或费用名称}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.construction }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.equipment }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.installation }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.other }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
-                        {estimate.partA.合计?.toFixed(2) || '0.00'}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                                <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG?.合计 > 0
-                          ? `${(((estimate.partA.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
-                          : ''}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.remark }}>{estimate.partA.备注}</Table.Td>
-                    </Table.Tr>
-                    {/* A部分子项 */}
-                    {estimate.partA.children?.map((item, index) => (
-                      <React.Fragment key={`A-${index}`}>
-                        {/* 二级子项 */}
-                        <Table.Tr>
+                    <Table.Tbody>
+                      {/* A部分主行 */}
+                      <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
+                        <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partA.序号}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.name }}>{estimate.partA.工程或费用名称}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.construction }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.equipment }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.installation }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.other }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
+                          {estimate.partA.合计?.toFixed(2) || '0.00'}
+                        </Table.Td>
+                        <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
+                                  <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
+                          {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                            ? `${(((estimate.partA.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
+                            : ''}
+                        </Table.Td>
+                        <Table.Td style={{ ...columnStyles.remark }}>{estimate.partA.备注}</Table.Td>
+                      </Table.Tr>
+                      {/* A部分子项 */}
+                      {estimate.partA.children?.map((item, index) => (
+                        <React.Fragment key={`A-${index}`}>
+                          {/* 二级子项 */}
+                          <Table.Tr>
+                            <Table.Td style={{ ...columnStyles.sequence }}>{item.序号}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.name }}>{item.工程或费用名称}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.construction }}>{item.建设工程费?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.equipment }}>{item.设备购置费?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.installation }}>{item.安装工程费?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.total }}>{item.合计?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
+                            <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
+                            <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
+                            <Table.Td style={{ ...columnStyles.ratio }}>
+                              {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                                ? `${(((item.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
+                                : ''}
+                            </Table.Td>
+                            <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>{item.备注 || ''}</Table.Td>
+                          </Table.Tr>
+
+                          {/* 三级子项 */}
+                          {thirdLevelItems[index]?.map((subItem: any, subIndex: number) => {
+                            const totalPrice = (subItem.quantity * subItem.unit_price) / 10000
+                            const constructionCost = totalPrice * subItem.construction_ratio
+                            const equipmentCost = totalPrice * subItem.equipment_ratio
+                            const installationCost = totalPrice * subItem.installation_ratio
+                            const otherCost = totalPrice * subItem.other_ratio
+                            
+                            return (
+                              <Table.Tr key={`A-${index}-${subIndex}`}>
+                                <Table.Td style={{ ...columnStyles.sequence, fontSize: '11px' }}>{subIndex + 1}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.name, fontSize: '11px', paddingLeft: '24px' }}>{subItem.name}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.construction, fontSize: '11px' }}>{constructionCost > 0 ? constructionCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.equipment, fontSize: '11px' }}>{equipmentCost > 0 ? equipmentCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.installation, fontSize: '11px' }}>{installationCost > 0 ? installationCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.other, fontSize: '11px' }}>{otherCost > 0 ? otherCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.total, fontSize: '11px' }}>{totalPrice > 0 ? totalPrice.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.unit, fontSize: '11px' }}>{subItem.unit || ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.quantity, fontSize: '11px' }}>{formatQuantity(subItem.quantity, subItem.unit)}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.unitPrice, fontSize: '11px' }}>{subItem.unit_price > 0 ? subItem.unit_price.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.ratio, fontSize: '11px' }}>
+                                  {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                                    ? `${((totalPrice / estimate.partG?.合计) * 100).toFixed(2)}%`
+                                    : ''}
+                                </Table.Td>
+                                <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}></Table.Td>
+                              </Table.Tr>
+                            )
+                          })}
+                        </React.Fragment>
+                      ))}
+
+                      {/* B部分主行 */}
+                      <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
+                        <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partB.序号}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.name }}>{estimate.partB.工程或费用名称}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.construction }}>0.00</Table.Td>
+                        <Table.Td style={{ ...columnStyles.equipment }}>0.00</Table.Td>
+                        <Table.Td style={{ ...columnStyles.installation }}>0.00</Table.Td>
+                        <Table.Td style={{ ...columnStyles.other }}>{calculatePartBOtherTotal().toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
+                          {typeof estimate.partB.合计 === 'number' ? estimate.partB.合计.toFixed(2) : '0.00'}
+                        </Table.Td>
+                        <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
+                          {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                            ? `${(((estimate.partB.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
+                            : ''}
+                        </Table.Td>
+                        <Table.Td style={{ ...columnStyles.remark }}>{estimate.partB.备注}</Table.Td>
+                      </Table.Tr>
+                      {/* B部分子项 */}
+                      {estimate.partB.children?.map((item, index) => (
+                        <Table.Tr key={`B-${index}`}>
                           <Table.Td style={{ ...columnStyles.sequence }}>{item.序号}</Table.Td>
                           <Table.Td style={{ ...columnStyles.name }}>{item.工程或费用名称}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.construction }}>{item.建设工程费?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.equipment }}>{item.设备购置费?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.installation }}>{item.安装工程费?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.total }}>{item.合计?.toFixed(2) || '0.00'}</Table.Td>
+                          <Table.Td style={{ ...columnStyles.construction }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.equipment }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.installation }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || item.合计?.toFixed(2) || '0.00'}</Table.Td>
+                          <Table.Td style={{ ...columnStyles.total }}>
+                            {typeof item.合计 === 'number' ? item.合计.toFixed(2) : '0.00'}
+                          </Table.Td>
                           <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
                           <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                           <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                           <Table.Td style={{ ...columnStyles.ratio }}>
                             {estimate.partG?.合计 && estimate.partG?.合计 > 0
-                              ? `${(((item.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
+                              ? `${(((item.合计 || item.其它费用 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
                               : ''}
                           </Table.Td>
-                          <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>{item.备注 || ''}</Table.Td>
+                          <Table.Td style={{ ...columnStyles.remark, fontSize: '13px' }}>{item.备注}</Table.Td>
                         </Table.Tr>
-
-                        {/* 三级子项 */}
-                        {thirdLevelItems[index]?.map((subItem: any, subIndex: number) => {
-                          const totalPrice = (subItem.quantity * subItem.unit_price) / 10000
-                          const constructionCost = totalPrice * subItem.construction_ratio
-                          const equipmentCost = totalPrice * subItem.equipment_ratio
-                          const installationCost = totalPrice * subItem.installation_ratio
-                          const otherCost = totalPrice * subItem.other_ratio
-                          
-                          return (
-                            <Table.Tr key={`A-${index}-${subIndex}`}>
-                              <Table.Td style={{ ...columnStyles.sequence, fontSize: '11px' }}>{subIndex + 1}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.name, fontSize: '11px', paddingLeft: '24px' }}>{subItem.name}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.construction, fontSize: '11px' }}>{constructionCost > 0 ? constructionCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.equipment, fontSize: '11px' }}>{equipmentCost > 0 ? equipmentCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.installation, fontSize: '11px' }}>{installationCost > 0 ? installationCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.other, fontSize: '11px' }}>{otherCost > 0 ? otherCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.total, fontSize: '11px' }}>{totalPrice > 0 ? totalPrice.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.unit, fontSize: '11px' }}>{subItem.unit || ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.quantity, fontSize: '11px' }}>{formatQuantity(subItem.quantity, subItem.unit)}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.unitPrice, fontSize: '11px' }}>{subItem.unit_price > 0 ? subItem.unit_price.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.ratio, fontSize: '11px' }}>
-                                {estimate.partG?.合计 && estimate.partG?.合计 > 0
-                                  ? `${((totalPrice / estimate.partG?.合计) * 100).toFixed(2)}%`
-                                  : ''}
-                              </Table.Td>
-                              <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}></Table.Td>
-                            </Table.Tr>
-                          )
-                        })}
-                      </React.Fragment>
-                    ))}
-
-                    {/* B部分主行 */}
-                    <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
-                      <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partB.序号}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.name }}>{estimate.partB.工程或费用名称}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.construction }}>0.00</Table.Td>
-                      <Table.Td style={{ ...columnStyles.equipment }}>0.00</Table.Td>
-                      <Table.Td style={{ ...columnStyles.installation }}>0.00</Table.Td>
-                      <Table.Td style={{ ...columnStyles.other }}>{calculatePartBOtherTotal().toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
-                        {typeof estimate.partB.合计 === 'number' ? estimate.partB.合计.toFixed(2) : '0.00'}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG?.合计 > 0
-                          ? `${(((estimate.partB.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
-                          : ''}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.remark }}>{estimate.partB.备注}</Table.Td>
-                    </Table.Tr>
-                    {/* B部分子项 */}
-                    {estimate.partB.children?.map((item, index) => (
-                      <Table.Tr key={`B-${index}`}>
-                        <Table.Td style={{ ...columnStyles.sequence }}>{item.序号}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.name }}>{item.工程或费用名称}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.construction }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.equipment }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.installation }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || item.合计?.toFixed(2) || '0.00'}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.total }}>
-                          {typeof item.合计 === 'number' ? item.合计.toFixed(2) : '0.00'}
-                        </Table.Td>
-                        <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.ratio }}>
-                          {estimate.partG?.合计 && estimate.partG?.合计 > 0
-                            ? `${(((item.合计 || item.其它费用 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
-                            : ''}
-                        </Table.Td>
-                        <Table.Td style={{ ...columnStyles.remark, fontSize: '13px' }}>{item.备注}</Table.Td>
-                      </Table.Tr>
-                    ))}
+                      ))}
 
                     {/* C部分 - 白色背景 */}
                     <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
@@ -3024,6 +3031,11 @@ const InvestmentSummary: React.FC = () => {
                     </Table.Tr>
                   </Table.Tbody>
                 </Table>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#86909C' }}>
+                  <Text>正在加载投资估算数据...</Text>
+                </div>
+              )}
               </Card>
             </Stack>
           )}
