@@ -4211,7 +4211,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           },
         }}
       >
-        <LoanRepaymentScheduleTable showCard={false} estimate={investmentEstimate} />
+        <LoanRepaymentScheduleTable 
+          showCard={false} 
+          estimate={investmentEstimate} 
+          depreciationData={depreciationData}
+        />
       </Modal>
 
       {/* 财务指标调试弹窗 */}

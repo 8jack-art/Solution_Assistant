@@ -68,9 +68,14 @@ const formatNumberWithZeroBlank = (value: number): string => {
 interface LoanRepaymentScheduleTableProps {
   showCard?: boolean;
   estimate?: any; // 投资估算数据，包含建设期利息信息
+  depreciationData?: any[]; // 折旧摊销估算表数据
 }
 
-const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({ showCard = true, estimate }) => {
+const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({ 
+  showCard = true, 
+  estimate,
+  depreciationData 
+}) => {
   const {
     context,
     loanConfig,
@@ -194,8 +199,31 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     }
 
     // 计算还本付息资金来源
-    // 2.1 折旧摊销费（暂时使用模拟数据）
-    const depreciationAmortization = Array(operationYears).fill(50); // 模拟每年50万元折旧摊销费
+    // 2.1 折旧摊销费（从折旧摊销估算表获取真实数据）
+    const depreciationAmortization = Array(operationYears).fill(0).map((_, index) => {
+      // 从传入的折旧数据中获取A、D、E行的分年数据
+      let depreciationAmount = 0;
+      
+      // A行：建筑物、构筑物折旧
+      const rowA = depreciationData?.find((row: any) => row.序号 === 'A');
+      if (rowA && rowA.分年数据 && rowA.分年数据[index] !== undefined) {
+        depreciationAmount += rowA.分年数据[index];
+      }
+      
+      // D行：机器设备折旧
+      const rowD = depreciationData?.find((row: any) => row.序号 === 'D');
+      if (rowD && rowD.分年数据 && rowD.分年数据[index] !== undefined) {
+        depreciationAmount += rowD.分年数据[index];
+      }
+      
+      // E行：无形资产摊销
+      const rowE = depreciationData?.find((row: any) => row.序号 === 'E');
+      if (rowE && rowE.分年数据 && rowE.分年数据[index] !== undefined) {
+        depreciationAmount += rowE.分年数据[index];
+      }
+      
+      return depreciationAmount;
+    });
 
     // 2.2 利润（从利润与利润分配表获取）
     const profit = Array(operationYears).fill(0);
@@ -415,7 +443,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     };
 
     return tableData;
-  }, [context, loanConfig, profitDistributionTableData, estimate]);
+  }, [context, loanConfig, profitDistributionTableData, estimate, depreciationData]);
 
   // 保存借款还本付息计划表数据
   useEffect(() => {
