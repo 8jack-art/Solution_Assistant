@@ -3,6 +3,7 @@ import {
   Card,
   Stack,
   Text,
+  Title,
   Button,
   Group,
   Table,
@@ -17,10 +18,12 @@ import {
   IconDownload,
   IconSettings,
   IconFileText,
+  IconEye,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, LoanConfig, LoanRepaymentTableData } from '@/stores/revenueCostStore'
 import * as XLSX from 'xlsx'
+import ConstructionInterestModal from './ConstructionInterestModal'
 
 // 格式化数字显示为2位小数，不四舍五入，无千分号
 const formatNumberNoRounding = (value: number): string => {
@@ -76,6 +79,11 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
   estimate,
   depreciationData 
 }) => {
+  // 调试：检查接收到的 estimate 数据
+  console.log('LoanRepaymentScheduleTable - estimate:', estimate);
+  console.log('LoanRepaymentScheduleTable - estimate.partF:', estimate?.partF);
+  console.log('LoanRepaymentScheduleTable - estimate.partF.分年利息:', estimate?.partF?.分年利息);
+
   const {
     context,
     loanConfig,
@@ -86,6 +94,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
   } = useRevenueCostStore()
   
   const [showModal, setShowModal] = useState(false)
+  const [showConstructionDataModal, setShowConstructionDataModal] = useState(false)
 
   // 计算借款还本付息计划表数据
   const calculateLoanRepaymentData = useMemo(() => {
@@ -452,6 +461,48 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     }
   }, [calculateLoanRepaymentData, setLoanRepaymentTableData]);
 
+  // 准备建设期利息详情表的JSON数据
+  const getConstructionInterestData = useMemo(() => {
+    if (!estimate?.partF) return null;
+
+    const yearlyInterestData = estimate?.partF?.分年利息 || [];
+    const constructionYears = context?.constructionYears || 0;
+
+    // 计算各年期末借款余额
+    const calculateEndOfYearBalance = (yearIndex: number): number => {
+      let balance = 0;
+      for (let i = 0; i <= yearIndex; i++) {
+        if (yearlyInterestData[i]) {
+          balance += yearlyInterestData[i].当期借款金额 || 0;
+        }
+      }
+      return balance;
+    };
+
+    // 准备JSON数据结构
+    const jsonData = {
+      基本信息: {
+        贷款总额: estimate?.partF?.贷款总额 || 0,
+        年利率: estimate?.partF?.年利率 || 0,
+        建设期年限: constructionYears,
+        贷款期限: loanConfig?.loanTerm || 0
+      },
+      分年数据: yearlyInterestData.map((data: any, index: number) => ({
+        年份: index + 1,
+        期初借款余额: index === 0 ? 0 : calculateEndOfYearBalance(index - 1),
+        当期借款金额: data?.当期借款金额 || 0,
+        当期利息: data?.当期利息 || 0,
+        期末借款余额: calculateEndOfYearBalance(index)
+      })),
+      汇总信息: {
+        总借款金额: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期借款金额 || 0), 0),
+        总利息: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期利息 || 0), 0),
+        期末借款余额: calculateEndOfYearBalance(yearlyInterestData.length - 1)
+      }
+    };
+
+    return jsonData;
+  }, [estimate, context, loanConfig]);
 
   // 导出Excel
   const handleExportExcel = () => {
@@ -580,27 +631,80 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
 
   const content = (
     <>
-      {showCard && (
-        <Group justify="space-between" align="center" mb="md">
-          <Text size="md" fw={600} c="#1D2129">
+      {/* 标题和按钮区域 - 强制显示 */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '16px',
+        minHeight: '60px',
+        width: '100%',
+        position: 'relative',
+        zIndex: 100,
+        backgroundColor: 'transparent',
+        padding: '8px 0'
+      }}>
+        {showCard && (
+          <Text size="md" fw={600} c="#1D2129" style={{ flex: 1 }}>
             借款还本付息计划表
           </Text>
-          <Group gap="xs">
-            <Tooltip label="导出Excel">
-              <ActionIcon
-                variant="light"
-                color="green"
-                size="lg"
-                onClick={handleExportExcel}
-              >
-                <IconDownload size={20} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
-        </Group>
-      )}
+        )}
+        <div style={{ 
+          display: 'flex', 
+          gap: '12px',
+          flexShrink: 0,
+          position: 'relative',
+          zIndex: 101
+        }}>
+          <Tooltip label="查看建设期利息详情">
+            <ActionIcon
+              variant="light"
+              color="blue"
+              size="lg"
+              onClick={() => setShowConstructionDataModal(true)}
+              style={{ 
+                visibility: 'visible', 
+                display: 'inline-flex',
+                opacity: 1,
+                zIndex: 102,
+                position: 'relative',
+                backgroundColor: '#e3f2fd',
+                border: '1px solid #2196f3'
+              }}
+            >
+              <IconEye size={20} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="导出Excel">
+            <ActionIcon
+              variant="light"
+              color="green"
+              size="lg"
+              onClick={handleExportExcel}
+              style={{ 
+                visibility: 'visible', 
+                display: 'inline-flex',
+                opacity: 1,
+                zIndex: 102,
+                position: 'relative',
+                backgroundColor: '#e8f5e8',
+                border: '1px solid #4caf50'
+              }}
+            >
+              <IconDownload size={20} />
+            </ActionIcon>
+          </Tooltip>
+        </div>
+      </div>
 
       {renderTable()}
+
+      {/* 建设期利息详情表模态框 */}
+      <ConstructionInterestModal
+        opened={showConstructionDataModal}
+        onClose={() => setShowConstructionDataModal(false)}
+        estimate={estimate}
+      />
 
     </>
   );

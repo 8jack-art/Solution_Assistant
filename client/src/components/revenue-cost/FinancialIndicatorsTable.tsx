@@ -263,6 +263,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   investmentEstimate
 }) => {
   const { context, revenueItems, productionRates, costConfig, revenueTableData, costTableData, profitDistributionTableData } = useRevenueCostStore()
+  
+  // 调试：检查 investmentEstimate 的实际值
+  console.log('FinancialIndicatorsTable - investmentEstimate:', investmentEstimate);
+  console.log('FinancialIndicatorsTable - investmentEstimate.partF:', investmentEstimate?.partF);
+  console.log('FinancialIndicatorsTable - investmentEstimate.partF.分年利息:', investmentEstimate?.partF?.分年利息);
   const [showProfitTaxModal, setShowProfitTaxModal] = useState(false)
   
   // 表格弹窗状态
