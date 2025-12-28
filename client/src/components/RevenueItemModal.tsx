@@ -199,7 +199,7 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
           <NumberInput
             label="达产年收入（万元）"
             placeholder="自动计算"
-            value={calculateRevenueWanYuan()}
+            value={parseFloat(calculateRevenueWanYuan()) > 0 ? parseFloat(calculateRevenueWanYuan()) : undefined}
             disabled
             styles={{
               input: {
@@ -242,7 +242,7 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
           />
         </SimpleGrid>
 
-        {formData.priceIncreaseInterval > 0 && formData.priceIncreaseRate > 0 && (
+        {formData.priceIncreaseInterval > 0 && formData.priceIncreaseRate > 0 ? (
           <div style={{
             padding: '8px 12px',
             backgroundColor: '#FFF7E6',
@@ -255,7 +255,7 @@ export const RevenueItemModal: React.FC<RevenueItemModalProps> = ({
               第{formData.priceIncreaseInterval + 1}-{formData.priceIncreaseInterval * 2}年收入{(parseFloat(calculateRevenueWanYuan()) * (1 + formData.priceIncreaseRate / 100)).toFixed(2)}万元
             </Text>
           </div>
-        )}
+        ) : null}
 
         <Group justify="flex-end" gap="md" mt="md">
           <Button variant="default" onClick={onClose}>

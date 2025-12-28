@@ -307,23 +307,6 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [tempIncomeTaxRate, setTempIncomeTaxRate] = useState(25)
   const [tempStatutorySurplusRate, setTempStatutorySurplusRate] = useState(10)
   
-  // 缓存基础计算数据，避免重复计算
-  const cachedCalculationData = useMemo(() => {
-    if (!context) return null;
-    
-    const years = Array.from({ length: context.constructionYears + context.operationYears }, (_, i) => i + 1);
-    const constructionYears = context.constructionYears;
-    const operationYears = context.operationYears;
-    const totalYears = years.length;
-    
-    return {
-      years,
-      constructionYears,
-      operationYears,
-      totalYears
-    };
-  }, [context]);
-
   // 从localStorage加载设置
   useEffect(() => {
     const savedSubsidyIncome = localStorage.getItem('profitSubsidyIncome')
@@ -429,16 +412,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     },
   ]
   
-  // 缓存营业收入计算结果
-  const cachedOperatingRevenue = useMemo(() => {
-    if (!context) return { byYear: [] as number[], total: 0 };
-    
-    const byYear: number[] = [];
-    let totalSum = 0;
-    
-    for (let year = 1; year <= context.operationYears; year++) {
-      let yearRevenue = 0;
-      
+  // 计算营业收入的函数（营业收入 = 营业收入（含税） - 销项税额）
+  const calculateOperatingRevenue = (year?: number): number => {
+    if (year !== undefined) {
       // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的运营期列数据
       if (revenueTableData && revenueTableData.rows) {
         const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
@@ -447,120 +423,102 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         if (revenueRow && revenueRow.运营期 && revenueRow.运营期[year - 1] !== undefined &&
             outputTaxRow && outputTaxRow.运营期 && outputTaxRow.运营期[year - 1] !== undefined) {
           // 营业收入 = 营业收入（含税） - 销项税额
-          yearRevenue = revenueRow.运营期[year - 1] - outputTaxRow.运营期[year - 1];
+          return revenueRow.运营期[year - 1] - outputTaxRow.运营期[year - 1];
         }
       }
-      
       // 如果没有表格数据，使用原有计算逻辑作为后备
-      if (yearRevenue === 0) {
-        const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
-        yearRevenue = revenueItems.reduce((sum, item) => {
-          // 计算含税收入
-          const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
-          // 计算销项税额 = 含税收入 - 不含税收入 = 含税收入 - 含税收入/(1+税率)
-          const outputTax = taxableRevenue - taxableRevenue / (1 + item.vatRate);
-          // 不含税收入 = 含税收入 - 销项税额
-          const nonTaxRevenue = taxableRevenue - outputTax;
-          return sum + nonTaxRevenue;
-        }, 0);
-      }
-      
-      byYear.push(yearRevenue);
-      totalSum += yearRevenue;
-    }
-    
-    return { byYear, total: totalSum };
-  }, [context, revenueTableData, revenueItems, productionRates]);
-
-  // 计算营业收入的函数（使用缓存结果）
-  const calculateOperatingRevenue = (year?: number): number => {
-    if (!cachedOperatingRevenue) return 0;
-    
-    if (year !== undefined) {
-      return cachedOperatingRevenue.byYear[year - 1] ?? 0;
+      // 计算指定年份的营业收入（不含税）
+      // 利润与利润分配表的营业收入 = 营业收入估算表的营业收入 - 销项税额
+      const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
+      return revenueItems.reduce((sum, item) => {
+        // 计算含税收入
+        const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
+        // 计算销项税额 = 含税收入 - 不含税收入 = 含税收入 - 含税收入/(1+税率)
+        const outputTax = taxableRevenue - taxableRevenue / (1 + item.vatRate);
+        // 不含税收入 = 含税收入 - 销项税额
+        const nonTaxRevenue = taxableRevenue - outputTax;
+        return sum + nonTaxRevenue;
+      }, 0);
     } else {
-      return cachedOperatingRevenue.total;
+      // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的合计数据
+      if (revenueTableData && revenueTableData.rows) {
+        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+        const outputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.1');
+        
+        if (revenueRow && revenueRow.合计 !== undefined &&
+            outputTaxRow && outputTaxRow.合计 !== undefined) {
+          // 营业收入 = 营业收入（含税） - 销项税额
+          return revenueRow.合计 - outputTaxRow.合计;
+        }
+      }
+      // 如果没有表格数据，使用原有计算逻辑作为后备
+      // 计算所有年份的营业收入合计
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateOperatingRevenue(year);
+      });
+      return totalSum;
     }
   };
   
-  // 缓存含税营业收入计算结果
-  const cachedTaxableOperatingRevenue = useMemo(() => {
-    if (!context) return { byYear: [] as number[], total: 0 };
-    
-    const byYear: number[] = [];
-    let totalSum = 0;
-    
-    for (let year = 1; year <= context.operationYears; year++) {
-      let yearRevenue = 0;
-      
+  // 计算含税营业收入的函数
+  const calculateTaxableOperatingRevenue = (year?: number): number => {
+    if (year !== undefined) {
       // 从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据（含税收入）
       if (revenueTableData && revenueTableData.rows) {
         const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
         
         if (revenueRow && revenueRow.运营期 && revenueRow.运营期[year - 1] !== undefined) {
-          yearRevenue = revenueRow.运营期[year - 1];
+          return revenueRow.运营期[year - 1];
         }
       }
-      
       // 如果没有表格数据，使用原有计算逻辑作为后备
-      if (yearRevenue === 0) {
-        const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
-        yearRevenue = revenueItems.reduce((sum, item) => {
-          // 计算含税收入
-          const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
-          return sum + taxableRevenue;
-        }, 0);
+      const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
+      return revenueItems.reduce((sum, item) => {
+        // 计算含税收入
+        const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
+        return sum + taxableRevenue;
+      }, 0);
+    } else {
+      // 从 revenueTableData 中获取"营业收入"（序号1）的合计数据（含税收入）
+      if (revenueTableData && revenueTableData.rows) {
+        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
+        
+        if (revenueRow && revenueRow.合计 !== undefined) {
+          return revenueRow.合计;
+        }
       }
-      
-      byYear.push(yearRevenue);
-      totalSum += yearRevenue;
-    }
-    
-    return { byYear, total: totalSum };
-  }, [context, revenueTableData, revenueItems, productionRates]);
-
-  // 计算含税营业收入的函数（使用缓存结果）
-  const calculateTaxableOperatingRevenue = (year?: number): number => {
-    if (!cachedTaxableOperatingRevenue) return 0;
-    
-    if (year !== undefined) {
-      return cachedTaxableOperatingRevenue.byYear[year - 1] ?? 0;
-    } else {
-      return cachedTaxableOperatingRevenue.total;
+      // 如果没有表格数据，使用原有计算逻辑作为后备
+      if (!context) return 0;
+      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+      let totalSum = 0;
+      years.forEach((year) => {
+        totalSum += calculateTaxableOperatingRevenue(year);
+      });
+      return totalSum;
     }
   };
   
-  // 缓存补贴收入计算结果
-  const cachedSubsidyIncome = useMemo(() => {
-    if (!context) return { byYear: [] as number[], total: 0 };
-    
-    const byYear = Array(context.operationYears).fill(subsidyIncome);
-    const total = subsidyIncome * context.operationYears;
-    
-    return { byYear, total };
-  }, [context, subsidyIncome]);
-
-  // 计算补贴收入的函数（使用缓存结果）
+  // 计算补贴收入的函数
   const calculateSubsidyIncome = (year?: number): number => {
-    if (!cachedSubsidyIncome) return 0;
-    
+    // 使用设置的年补贴收入
     if (year !== undefined) {
-      return cachedSubsidyIncome.byYear[year - 1] ?? 0;
+      return subsidyIncome;
     } else {
-      return cachedSubsidyIncome.total;
+      // 计算所有年份的补贴收入合计
+      if (!context) return 0;
+      return subsidyIncome * context.operationYears;
     }
   };
   
-  // 缓存固定资产余值计算结果
-  const cachedFixedAssetResidual = useMemo(() => {
-    if (!context) return { byYear: [] as number[], total: 0 };
+  // 计算回收固定资产余值的函数
+  const calculateFixedAssetResidual = (year?: number): number => {
+    if (!context) return 0;
     
-    const byYear: number[] = Array(context.operationYears).fill(0);
-    let total = 0;
-    
-    // 计算运营期最后一年的固定资产余值
-    const lastYear = context.operationYears;
-    if (lastYear > 0) {
+    // 只在运营期最后一年回收
+    if (year !== undefined && year === context.operationYears) {
       // 计算固定资产余值 = 固定资产净值 + 无形资产净值
       // 固定资产净值 = 原值 - 累计折旧摊销额
       // 无形资产净值 = 原值 - 累计折旧摊销额
@@ -591,45 +549,33 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         intangibleAssetsNetValue = (rowE.原值 || 0) - totalAmortization;
       }
       
-      const residualValue = fixedAssetsNetValue + intangibleAssetsNetValue;
-      byYear[lastYear - 1] = residualValue;
-      total = residualValue;
+      return fixedAssetsNetValue + intangibleAssetsNetValue;
     }
     
-    return { byYear, total };
-  }, [context, depreciationData]);
-
-  // 计算回收固定资产余值的函数（使用缓存结果）
-  const calculateFixedAssetResidual = (year?: number): number => {
-    if (!cachedFixedAssetResidual) return 0;
-    
-    if (year !== undefined) {
-      return cachedFixedAssetResidual.byYear[year - 1] ?? 0;
-    } else {
-      return cachedFixedAssetResidual.total;
+    if (year === undefined) {
+      // 只在运营期最后一年有回收
+      return calculateFixedAssetResidual(context.operationYears);
     }
+    
+    return 0;
   };
   
-  // 缓存流动资金回收计算结果
-  const cachedWorkingCapitalRecovery = useMemo(() => {
-    if (!context) return { byYear: [] as number[], total: 0 };
-    
-    // 目前流动资金回收为0，所有年份都为0
-    const byYear = Array(context.operationYears).fill(0);
-    const total = 0;
-    
-    return { byYear, total };
-  }, [context]);
-
-  // 计算回收流动资金的函数（使用缓存结果）
+  // 计算回收流动资金的函数
   const calculateWorkingCapitalRecovery = (year?: number): number => {
-    if (!cachedWorkingCapitalRecovery) return 0;
+    if (!context) return 0;
     
-    if (year !== undefined) {
-      return cachedWorkingCapitalRecovery.byYear[year - 1] ?? 0;
-    } else {
-      return cachedWorkingCapitalRecovery.total;
+    // 只在运营期最后一年回收
+    if (year !== undefined && year === context.operationYears) {
+      // 这里应该从流动资金配置中获取，目前返回0
+      return 0;
     }
+    
+    if (year === undefined) {
+      // 只在运营期最后一年有回收
+      return calculateWorkingCapitalRecovery(context.operationYears);
+    }
+    
+    return 0;
   };
   
   // 计算建设投资的函数
@@ -1293,7 +1239,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     row1['合计'] = totalRow1;
     excelData.push(row1);
 
-    // 1.1 营业收入 - 使用标准化现金流表数据
+      // 1.1 营业收入 - 使用标准化现金流表数据
     const row1_1: any = { '序号': '1.1', '项目': '营业收入' };
     let totalRow1_1 = 0;
     years.forEach((year) => {
@@ -2186,15 +2132,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     });
   };
 
-  // 缓存利润与利润分配表格数据 - 使用useMemo避免重复计算
-  const profitDistributionTableRows = useMemo(() => {
-    if (!context) return [];
+  // 渲染利润与利润分配表格
+  const renderProfitDistributionModal = () => {
+    if (!context) return <Text c="red">项目上下文未加载</Text>
 
     const operationYears = context.operationYears;
     const years = Array.from({ length: operationYears }, (_, i) => i + 1);
 
     // 定义表格行数据
-    const tableRowsConfig = [
+    const tableRows = [
       { id: '1', name: '营业收入', calc: (y?: number) => calculateOperatingRevenue(y) },
       { id: '2', name: '税金附加等', calc: (y?: number) => calculateTaxAndSurcharges(y) },
       { id: '3', name: '总成本费用', calc: (y?: number) => calculateTotalCost(y) },
@@ -2217,24 +2163,6 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '20', name: '息税折旧摊销前利润（19+折旧+摊销）', calc: (y?: number) => calculateEBITDA(y) },
     ];
 
-    // 预计算所有行的数据
-    return tableRowsConfig.map(row => ({
-      ...row,
-      合计: row.id === '10' ? '' : row.calc(undefined),
-      运营期数据: years.map(year => ({
-        year,
-        value: row.calc(year)
-      }))
-    }));
-  }, [context, incomeTaxRate, statutorySurplusRate]);
-
-  // 渲染利润与利润分配表格
-  const renderProfitDistributionModal = () => {
-    if (!context) return <Text c="red">项目上下文未加载</Text>
-
-    const operationYears = context.operationYears;
-    const years = Array.from({ length: operationYears }, (_, i) => i + 1);
-
     return (
       <>
         <Table striped withTableBorder style={{ fontSize: '11px', tableLayout: 'auto' }}>
@@ -2254,18 +2182,22 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {profitDistributionTableRows.map((row) => (
-              <Table.Tr key={row.id}>
+            {tableRows.map((row, idx) => (
+              <Table.Tr key={idx}>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{row.id}</Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>{row.name}</Table.Td>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                  {typeof row.合计 === 'number' ? formatNumberNoRounding(row.合计) : row.合计}
+                  {row.id === '10' ? '' : formatNumberNoRounding(row.calc(undefined))}
                 </Table.Td>
-                {row.运营期数据.map((data) => (
-                  <Table.Td key={data.year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                    {formatNumberWithZeroBlank(data.value)}
-                  </Table.Td>
-                ))}
+                {years.map((year) => {
+                  // 直接显示运营期的计算值
+                  const yearValue = row.calc(year);
+                  return (
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(yearValue)}
+                    </Table.Td>
+                  );
+                })}
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -2274,12 +2206,12 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     );
   };
 
-  // 缓存项目投资现金流量表渲染数据 - 使用useMemo避免JSX中重复计算
-  const profitTaxTableData = useMemo(() => {
+  // 计算项目投资现金流量表数据 - 遵循规则：计算逻辑前置化
+  const cashFlowTableData = useMemo(() => {
     if (!context) return null;
 
     // 生成标准化的现金流表数据，确保与JSON数据和财务指标计算使用相同的数据源
-    const cashFlowTableData = generateCashFlowTableData(
+    const cashFlowData = generateCashFlowTableData(
       context,
       calculateConstructionInvestment,
       calculateWorkingCapital,
@@ -2296,608 +2228,384 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       postTaxRate
     );
 
-    const constructionYears = context.constructionYears;
-    const operationYears = context.operationYears;
+    const constructionYears = context.constructionYears ?? 0;
+    const operationYears = context.operationYears ?? 0;
     const totalYears = constructionYears + operationYears;
     const years = Array.from({ length: totalYears }, (_, i) => i + 1);
 
-    // 预计算所有行的数据
-    const preTaxRateDecimal = preTaxRate / 100;
-    const postTaxRateDecimal = postTaxRate / 100;
-
+    // 预计算表格数据，避免在JSX中进行计算
     const tableRows = [
-      // 1. 现金流入
       {
         id: '1',
         name: '现金流入',
-        total: cashFlowTableData.totals.totalInflow,
-        yearlyData: years.map(year => {
-          const yearData = cashFlowTableData.yearlyData[year - 1];
-          return { year, value: yearData ? yearData.totalInflow : 0 };
-        })
+        key: 'totalInflow',
+        isHeader: true
       },
-      // 1.1 营业收入
       {
         id: '1.1',
         name: '营业收入',
-        total: years.reduce((sum, year) => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return sum + calculateOperatingRevenue(operationYear);
-          }
-          return sum;
-        }, 0),
-        yearlyData: years.map(year => {
-          const yearData = cashFlowTableData.yearlyData[year - 1];
-          return { year, value: yearData ? yearData.operatingRevenue : 0 };
-        })
+        key: 'operatingRevenue',
+        isSubItem: true
       },
-      // 1.2 补贴收入
       {
         id: '1.2',
         name: '补贴收入',
-        total: years.reduce((sum, year) => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return sum + calculateSubsidyIncome(operationYear);
-          }
-          return sum;
-        }, 0),
-        yearlyData: years.map(year => {
-          const yearData = cashFlowTableData.yearlyData[year - 1];
-          return { year, value: yearData ? yearData.subsidyIncome : 0 };
-        })
+        key: 'subsidyIncome',
+        isSubItem: true
       },
-      // 1.3 回收固定资产余值
       {
         id: '1.3',
         name: '回收固定资产余值',
-        total: years.reduce((sum, year) => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return sum + calculateFixedAssetResidual(operationYear);
-          }
-          return sum;
-        }, 0),
-        yearlyData: years.map(year => {
-          const yearData = cashFlowTableData.yearlyData[year - 1];
-          return { year, value: yearData ? yearData.fixedAssetResidual : 0 };
-        })
+        key: 'fixedAssetResidual',
+        isSubItem: true
       },
-      // 1.4 回收流动资金
       {
         id: '1.4',
         name: '回收流动资金',
-        total: years.reduce((sum, year) => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return sum + calculateWorkingCapitalRecovery(operationYear);
-          }
-          return sum;
-        }, 0),
-        yearlyData: years.map(year => {
-          const yearData = cashFlowTableData.yearlyData[year - 1];
-          return { year, value: yearData ? yearData.workingCapitalRecovery : 0 };
-        })
+        key: 'workingCapitalRecovery',
+        isSubItem: true
       },
-      // 2. 现金流出
       {
         id: '2',
         name: '现金流出',
-        total: years.reduce((sum, year) => {
-          if (year <= constructionYears) {
-            return sum + calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-          } else {
-            const operationYear = year - constructionYears;
-            return sum + calculateConstructionInvestment(year) +
-                   calculateWorkingCapital(year) +
-                   calculateOperatingCost(operationYear) +
-                   calculateVatAndTaxes(operationYear) +
-                   calculateMaintenanceInvestment(operationYear);
-          }
-        }, 0),
-        yearlyData: years.map(year => {
-          if (year <= constructionYears) {
-            return { year, value: calculateConstructionInvestment(year) + calculateWorkingCapital(year) };
-          } else {
-            const operationYear = year - constructionYears;
-            return { year, value: calculateConstructionInvestment(year) +
-                                   calculateWorkingCapital(year) +
-                                   calculateOperatingCost(operationYear) +
-                                   calculateVatAndTaxes(operationYear) +
-                                   calculateMaintenanceInvestment(operationYear) };
-          }
-        })
+        key: 'totalOutflow',
+        isHeader: true
       },
-      // 2.1 建设投资
       {
         id: '2.1',
         name: '建设投资',
-        total: calculateConstructionInvestment(undefined),
-        yearlyData: years.map(year => ({ year, value: calculateConstructionInvestment(year) }))
+        key: 'constructionInvestment',
+        isSubItem: true
       },
-      // 2.2 流动资金
       {
         id: '2.2',
         name: '流动资金',
-        total: calculateWorkingCapital(undefined),
-        yearlyData: years.map(year => ({ year, value: calculateWorkingCapital(year) }))
+        key: 'workingCapital',
+        isSubItem: true
       },
-      // 2.3 经营成本
       {
         id: '2.3',
         name: '经营成本',
-        total: calculateOperatingCost(undefined),
-        yearlyData: years.map(year => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return { year, value: calculateOperatingCost(operationYear) };
-          }
-          return { year, value: 0 };
-        })
+        key: 'operatingCost',
+        isSubItem: true
       },
-      // 2.4 增值税、房产税等及附加
       {
         id: '2.4',
         name: '增值税、房产税等及附加',
-        total: calculateVatAndTaxes(undefined),
-        yearlyData: years.map(year => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return { year, value: calculateVatAndTaxes(operationYear) };
-          }
-          return { year, value: 0 };
-        })
+        key: 'vatAndTaxes',
+        isSubItem: true
       },
-      // 2.5 维持运营投资
       {
         id: '2.5',
         name: '维持运营投资',
-        total: calculateMaintenanceInvestment(undefined),
-        yearlyData: years.map(year => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return { year, value: calculateMaintenanceInvestment(operationYear) };
-          }
-          return { year, value: 0 };
-        })
+        key: 'maintenanceInvestment',
+        isSubItem: true
       },
-      // 3. 所得税前净现金流量（1-2）
       {
         id: '3',
         name: '所得税前净现金流量（1-2）',
-        total: years.reduce((sum, year) => {
-          let yearInflow = 0;
-          let yearOutflow = 0;
-          if (year <= constructionYears) {
-            yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-          } else {
-            const operationYear = year - constructionYears;
-            yearInflow = calculateOperatingRevenue(operationYear) +
-                        calculateSubsidyIncome(operationYear) +
-                        calculateFixedAssetResidual(operationYear) +
-                        calculateWorkingCapitalRecovery(operationYear);
-            yearOutflow = calculateConstructionInvestment(year) +
-                        calculateWorkingCapital(year) +
-                        calculateOperatingCost(operationYear) +
-                        calculateVatAndTaxes(operationYear) +
-                        calculateMaintenanceInvestment(operationYear);
-          }
-          return sum + yearInflow - yearOutflow;
-        }, 0),
-        yearlyData: years.map(year => {
-          let yearInflow = 0;
-          let yearOutflow = 0;
-          if (year <= constructionYears) {
-            yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-          } else {
-            const operationYear = year - constructionYears;
-            yearInflow = calculateOperatingRevenue(operationYear) +
-                        calculateSubsidyIncome(operationYear) +
-                        calculateFixedAssetResidual(operationYear) +
-                        calculateWorkingCapitalRecovery(operationYear);
-            yearOutflow = calculateConstructionInvestment(year) +
-                        calculateWorkingCapital(year) +
-                        calculateOperatingCost(operationYear) +
-                        calculateVatAndTaxes(operationYear) +
-                        calculateMaintenanceInvestment(operationYear);
-          }
-          return { year, value: yearInflow - yearOutflow };
-        })
+        key: 'preTaxCashFlow',
+        isHeader: true
       },
-      // 4. 累计所得税前净现金流量
       {
         id: '4',
         name: '累计所得税前净现金流量',
-        total: years.reduce((sum, year) => {
-          let yearInflow = 0;
-          let yearOutflow = 0;
-          if (year <= constructionYears) {
-            yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-          } else {
-            const operationYear = year - constructionYears;
-            yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                        calculateSubsidyIncome(operationYear) +
-                        calculateFixedAssetResidual(operationYear) +
-                        calculateWorkingCapitalRecovery(operationYear);
-            yearOutflow = calculateConstructionInvestment(year) +
-                        calculateWorkingCapital(year) +
-                        calculateOperatingCost(operationYear) +
-                        calculateVatAndTaxes(operationYear) +
-                        calculateMaintenanceInvestment(operationYear);
-          }
-          return sum + (yearInflow - yearOutflow);
-        }, 0),
-        yearlyData: (() => {
-          let cumulative = 0;
-          return years.map(year => {
-            let yearInflow = 0;
-            let yearOutflow = 0;
-            if (year <= constructionYears) {
-              yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-            } else {
-              const operationYear = year - constructionYears;
-              yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                          calculateSubsidyIncome(operationYear) +
-                          calculateFixedAssetResidual(operationYear) +
-                          calculateWorkingCapitalRecovery(operationYear);
-              yearOutflow = calculateConstructionInvestment(year) +
-                          calculateWorkingCapital(year) +
-                          calculateOperatingCost(operationYear) +
-                          calculateVatAndTaxes(operationYear) +
-                          calculateMaintenanceInvestment(operationYear);
-            }
-            cumulative += yearInflow - yearOutflow;
-            return { year, value: cumulative };
-          });
-        })()
+        key: 'cumulativePreTaxCashFlow',
+        isHeader: true
       },
-      // 5. 调整所得税
       {
         id: '5',
         name: '调整所得税',
-        total: calculateAdjustedIncomeTax(undefined),
-        yearlyData: years.map(year => {
-          if (year > constructionYears) {
-            const operationYear = year - constructionYears;
-            return { year, value: calculateAdjustedIncomeTax(operationYear) };
-          }
-          return { year, value: 0 };
-        })
+        key: 'adjustedIncomeTax',
+        isHeader: true
       },
-      // 6. 所得税后净现金流量
       {
         id: '6',
         name: '所得税后净现金流量',
-        total: years.reduce((sum, year) => {
-          let yearInflow = 0;
-          let yearOutflow = 0;
-          let yearTax = 0;
-          if (year <= constructionYears) {
-            yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-          } else {
-            const operationYear = year - constructionYears;
-            yearInflow = calculateOperatingRevenue(operationYear) +
-                        calculateSubsidyIncome(operationYear) +
-                        calculateFixedAssetResidual(operationYear) +
-                        calculateWorkingCapitalRecovery(operationYear);
-            yearOutflow = calculateConstructionInvestment(year) +
-                        calculateWorkingCapital(year) +
-                        calculateOperatingCost(operationYear) +
-                        calculateVatAndTaxes(operationYear) +
-                        calculateMaintenanceInvestment(operationYear);
-            yearTax = calculateAdjustedIncomeTax(operationYear);
-          }
-          return sum + yearInflow - yearOutflow - yearTax;
-        }, 0),
-        yearlyData: years.map(year => {
-          let yearInflow = 0;
-          let yearOutflow = 0;
-          let yearTax = 0;
-          if (year <= constructionYears) {
-            yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-          } else {
-            const operationYear = year - constructionYears;
-            yearInflow = calculateOperatingRevenue(operationYear) +
-                        calculateSubsidyIncome(operationYear) +
-                        calculateFixedAssetResidual(operationYear) +
-                        calculateWorkingCapitalRecovery(operationYear);
-            yearOutflow = calculateConstructionInvestment(year) +
-                        calculateWorkingCapital(year) +
-                        calculateOperatingCost(operationYear) +
-                        calculateVatAndTaxes(operationYear) +
-                        calculateMaintenanceInvestment(operationYear);
-            yearTax = calculateAdjustedIncomeTax(operationYear);
-          }
-          return { year, value: yearInflow - yearOutflow - yearTax };
-        })
+        key: 'postTaxCashFlow',
+        isHeader: true
       },
-      // 7. 累计所得税后净现金流量
       {
         id: '7',
         name: '累计所得税后净现金流量',
-        total: years.reduce((sum, year) => {
-          let yearInflow = 0;
-          let yearOutflow = 0;
-          let yearTax = 0;
+        key: 'cumulativePostTaxCashFlow',
+        isHeader: true
+      }
+    ];
+
+    // 为每行计算合计值
+    const rowsWithTotals = tableRows.map(row => {
+      let total = 0;
+      
+      if (row.id === '1') {
+        // 现金流入合计
+        total = cashFlowData.totals.totalInflow ?? 0;
+      } else if (row.id === '1.1') {
+        // 营业收入合计
+        let totalSum = 0;
+        years.forEach((year) => {
+          if (year > constructionYears) {
+            const operationYear = year - constructionYears;
+            totalSum += calculateOperatingRevenue(operationYear);
+          }
+        });
+        total = totalSum;
+      } else if (row.id === '1.2') {
+        // 补贴收入合计
+        let totalSum = 0;
+        years.forEach((year) => {
+          if (year > constructionYears) {
+            const operationYear = year - constructionYears;
+            totalSum += calculateSubsidyIncome(operationYear);
+          }
+        });
+        total = totalSum;
+      } else if (row.id === '1.3') {
+        // 回收固定资产余值合计
+        let totalSum = 0;
+        years.forEach((year) => {
+          if (year > constructionYears) {
+            const operationYear = year - constructionYears;
+            totalSum += calculateFixedAssetResidual(operationYear);
+          }
+        });
+        total = totalSum;
+      } else if (row.id === '1.4') {
+        // 回收流动资金合计
+        let totalSum = 0;
+        years.forEach((year) => {
+          if (year > constructionYears) {
+            const operationYear = year - constructionYears;
+            totalSum += calculateWorkingCapitalRecovery(operationYear);
+          }
+        });
+        total = totalSum;
+      } else if (row.id === '2') {
+        // 现金流出合计
+        let totalSum = 0;
+        years.forEach((year) => {
           if (year <= constructionYears) {
-            yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+            totalSum += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
           } else {
             const operationYear = year - constructionYears;
-            yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                        calculateSubsidyIncome(operationYear) +
-                        calculateFixedAssetResidual(operationYear) +
-                        calculateWorkingCapitalRecovery(operationYear);
-            yearOutflow = calculateConstructionInvestment(year) +
-                        calculateWorkingCapital(year) +
-                        calculateOperatingCost(operationYear) +
-                        calculateVatAndTaxes(operationYear) +
-                        calculateMaintenanceInvestment(operationYear);
-            yearTax = calculateAdjustedIncomeTax(operationYear);
+            totalSum += calculateConstructionInvestment(year) + 
+                       calculateWorkingCapital(year) + 
+                       calculateOperatingCost(operationYear) + 
+                       calculateVatAndTaxes(operationYear) + 
+                       calculateMaintenanceInvestment(operationYear);
           }
-          return sum + (yearInflow - yearOutflow - yearTax);
-        }, 0),
-        yearlyData: (() => {
-          let cumulative = 0;
-          return years.map(year => {
-            let yearInflow = 0;
+        });
+        total = totalSum;
+      } else if (row.id === '2.1') {
+        total = calculateConstructionInvestment(undefined) ?? 0;
+      } else if (row.id === '2.2') {
+        total = calculateWorkingCapital(undefined) ?? 0;
+      } else if (row.id === '2.3') {
+        total = calculateOperatingCost(undefined) ?? 0;
+      } else if (row.id === '2.4') {
+        total = calculateVatAndTaxes(undefined) ?? 0;
+      } else if (row.id === '2.5') {
+        total = calculateMaintenanceInvestment(undefined) ?? 0;
+      } else if (row.id === '3') {
+        // 所得税前净现金流量合计
+        let totalInflow = 0;
+        let totalOutflow = 0;
+        
+        years.forEach((year) => {
+          if (year <= constructionYears) {
+            totalOutflow += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+          } else {
+            const operationYear = year - constructionYears;
+            totalInflow += calculateOperatingRevenue(operationYear) + 
+                          calculateSubsidyIncome(operationYear) + 
+                          calculateFixedAssetResidual(operationYear) + 
+                          calculateWorkingCapitalRecovery(operationYear);
+            totalOutflow += calculateConstructionInvestment(year) + 
+                          calculateWorkingCapital(year) + 
+                          calculateOperatingCost(operationYear) + 
+                          calculateVatAndTaxes(operationYear) + 
+                          calculateMaintenanceInvestment(operationYear);
+          }
+        });
+        
+        total = totalInflow - totalOutflow;
+      } else if (row.id === '4') {
+        // 累计所得税前净现金流量合计
+        let allColumnsTotal = 0;
+        let cumulativeForTotal = 0;
+        
+        years.forEach((year) => {
+          let yearTotal = 0;
+          
+          if (year <= constructionYears) {
+            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+            yearTotal = -yearOutflow;
+          } else {
+            const operationYear = year - constructionYears;
+            const yearInflow = calculateOperatingRevenue(operationYear) + 
+                              calculateSubsidyIncome(operationYear) +
+                              calculateFixedAssetResidual(operationYear) +
+                              calculateWorkingCapitalRecovery(operationYear);
+            const yearOutflow = calculateConstructionInvestment(year) +
+                              calculateWorkingCapital(year) +
+                              calculateOperatingCost(operationYear) +
+                              calculateVatAndTaxes(operationYear) +
+                              calculateMaintenanceInvestment(operationYear);
+            yearTotal = yearInflow - yearOutflow;
+          }
+          
+          cumulativeForTotal += yearTotal;
+          allColumnsTotal += cumulativeForTotal;
+        });
+        
+        total = allColumnsTotal;
+      } else if (row.id === '5') {
+        total = calculateAdjustedIncomeTax(undefined) ?? 0;
+      } else if (row.id === '6') {
+        // 所得税后净现金流量合计
+        let totalInflow = 0;
+        let totalOutflow = 0;
+        let totalTax = 0;
+        
+        years.forEach((year) => {
+          if (year <= constructionYears) {
+            totalOutflow += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+          } else {
+            const operationYear = year - constructionYears;
+            totalInflow += calculateOperatingRevenue(operationYear) + 
+                          calculateSubsidyIncome(operationYear) + 
+                          calculateFixedAssetResidual(operationYear) + 
+                          calculateWorkingCapitalRecovery(operationYear);
+            totalOutflow += calculateConstructionInvestment(year) + 
+                          calculateWorkingCapital(year) + 
+                          calculateOperatingCost(operationYear) + 
+                          calculateVatAndTaxes(operationYear) + 
+                          calculateMaintenanceInvestment(operationYear);
+            totalTax += calculateAdjustedIncomeTax(operationYear);
+          }
+        });
+        
+        total = totalInflow - totalOutflow - totalTax;
+      } else if (row.id === '7') {
+        // 累计所得税后净现金流量合计
+        let allColumnsTotal = 0;
+        let cumulativeForTotal = 0;
+        
+        years.forEach((year) => {
+          let yearPostTaxCashFlow = 0;
+          
+          if (year <= constructionYears) {
+            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+            yearPostTaxCashFlow = -yearOutflow;
+          } else {
+            const operationYear = year - constructionYears;
+            const yearInflow = calculateOperatingRevenue(operationYear) + 
+                              calculateSubsidyIncome(operationYear) +
+                              calculateFixedAssetResidual(operationYear) +
+                              calculateWorkingCapitalRecovery(operationYear);
+            const yearOutflow = calculateConstructionInvestment(year) +
+                              calculateWorkingCapital(year) +
+                              calculateOperatingCost(operationYear) +
+                              calculateVatAndTaxes(operationYear) +
+                              calculateMaintenanceInvestment(operationYear);
+            const yearTax = calculateAdjustedIncomeTax(operationYear);
+            yearPostTaxCashFlow = yearInflow - yearOutflow - yearTax;
+          }
+          
+          cumulativeForTotal += yearPostTaxCashFlow;
+          allColumnsTotal += cumulativeForTotal;
+        });
+        
+        total = allColumnsTotal;
+      }
+
+      return {
+        ...row,
+        total,
+        yearlyData: years.map((year) => {
+          const yearData = cashFlowData.yearlyData[year - 1];
+          let value = 0;
+
+          if (row.key === 'totalInflow') {
+            value = yearData?.totalInflow ?? 0;
+          } else if (row.key === 'operatingRevenue') {
+            value = yearData?.operatingRevenue ?? 0;
+          } else if (row.key === 'subsidyIncome') {
+            value = yearData?.subsidyIncome ?? 0;
+          } else if (row.key === 'fixedAssetResidual') {
+            value = yearData?.fixedAssetResidual ?? 0;
+          } else if (row.key === 'workingCapitalRecovery') {
+            value = yearData?.workingCapitalRecovery ?? 0;
+          } else if (row.key === 'totalOutflow') {
             let yearOutflow = 0;
-            let yearTax = 0;
             if (year <= constructionYears) {
               yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
             } else {
               const operationYear = year - constructionYears;
-              yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                          calculateSubsidyIncome(operationYear) +
-                          calculateFixedAssetResidual(operationYear) +
-                          calculateWorkingCapitalRecovery(operationYear);
               yearOutflow = calculateConstructionInvestment(year) +
-                          calculateWorkingCapital(year) +
-                          calculateOperatingCost(operationYear) +
-                          calculateVatAndTaxes(operationYear) +
-                          calculateMaintenanceInvestment(operationYear);
-              yearTax = calculateAdjustedIncomeTax(operationYear);
+                           calculateWorkingCapital(year) +
+                           calculateOperatingCost(operationYear) +
+                           calculateVatAndTaxes(operationYear) +
+                           calculateMaintenanceInvestment(operationYear);
             }
-            cumulative += yearInflow - yearOutflow - yearTax;
-            return { year, value: cumulative };
-          });
-        })()
-      }
-    ];
+            value = yearOutflow;
+          } else if (row.key === 'constructionInvestment') {
+            value = calculateConstructionInvestment(year) ?? 0;
+          } else if (row.key === 'workingCapital') {
+            value = calculateWorkingCapital(year) ?? 0;
+          } else if (row.key === 'operatingCost') {
+            value = year > constructionYears ? calculateOperatingCost(year - constructionYears) ?? 0 : 0;
+          } else if (row.key === 'vatAndTaxes') {
+            value = year > constructionYears ? calculateVatAndTaxes(year - constructionYears) ?? 0 : 0;
+          } else if (row.key === 'maintenanceInvestment') {
+            value = year > constructionYears ? calculateMaintenanceInvestment(year - constructionYears) ?? 0 : 0;
+          } else if (row.key === 'preTaxCashFlow') {
+            value = yearData?.preTaxCashFlow ?? 0;
+          } else if (row.key === 'cumulativePreTaxCashFlow') {
+            value = yearData?.cumulativePreTaxCashFlow ?? 0;
+          } else if (row.key === 'adjustedIncomeTax') {
+            value = year > constructionYears ? calculateAdjustedIncomeTax(year - constructionYears) ?? 0 : 0;
+          } else if (row.key === 'postTaxCashFlow') {
+            value = yearData?.postTaxCashFlow ?? 0;
+          } else if (row.key === 'cumulativePostTaxCashFlow') {
+            value = yearData?.cumulativePostTaxCashFlow ?? 0;
+          }
 
-    // 动态计算的行数据
-    const dynamicRows = [
-      // 1. 所得税前净现金流量（动态）
-      {
-        id: '1',
-        name: '所得税前净现金流量（动态）',
-        total: years.reduce((sum, year) => {
-          let yearPreTaxCashFlow = 0;
-          if (year <= constructionYears) {
-            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-            yearPreTaxCashFlow = -yearOutflow;
-          } else {
-            const operationYear = year - constructionYears;
-            const yearInflow = calculateOperatingRevenue(operationYear) +
-                              calculateSubsidyIncome(operationYear) +
-                              calculateFixedAssetResidual(operationYear) +
-                              calculateWorkingCapitalRecovery(operationYear);
-            const yearOutflow = calculateConstructionInvestment(year) +
-                              calculateWorkingCapital(year) +
-                              calculateOperatingCost(operationYear) +
-                              calculateVatAndTaxes(operationYear) +
-                              calculateMaintenanceInvestment(operationYear);
-            yearPreTaxCashFlow = yearInflow - yearOutflow;
-          }
-          const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
-          return sum + yearPreTaxCashFlow / discountFactor;
-        }, 0),
-        yearlyData: years.map(year => {
-          let yearPreTaxCashFlow = 0;
-          if (year <= constructionYears) {
-            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-            yearPreTaxCashFlow = -yearOutflow;
-          } else {
-            const operationYear = year - constructionYears;
-            const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                              calculateSubsidyIncome(operationYear) +
-                              calculateFixedAssetResidual(operationYear) +
-                              calculateWorkingCapitalRecovery(operationYear);
-            const yearOutflow = calculateConstructionInvestment(year) +
-                              calculateWorkingCapital(year) +
-                              calculateOperatingCost(operationYear) +
-                              calculateVatAndTaxes(operationYear) +
-                              calculateMaintenanceInvestment(operationYear);
-            yearPreTaxCashFlow = yearInflow - yearOutflow;
-          }
-          const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
-          return { year, value: yearPreTaxCashFlow / discountFactor };
+          return value;
         })
-      },
-      // 2. 累计所得税前净现金流量（动态）
-      {
-        id: '2',
-        name: '累计所得税前净现金流量（动态）',
-        total: years.reduce((sum, year) => {
-          let yearPreTaxCashFlow = 0;
-          if (year <= constructionYears) {
-            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-            yearPreTaxCashFlow = -yearOutflow;
-          } else {
-            const operationYear = year - constructionYears;
-            const yearInflow = calculateOperatingRevenue(operationYear) +
-                              calculateSubsidyIncome(operationYear) +
-                              calculateFixedAssetResidual(operationYear) +
-                              calculateWorkingCapitalRecovery(operationYear);
-            const yearOutflow = calculateConstructionInvestment(year) +
-                              calculateWorkingCapital(year) +
-                              calculateOperatingCost(operationYear) +
-                              calculateVatAndTaxes(operationYear) +
-                              calculateMaintenanceInvestment(operationYear);
-            yearPreTaxCashFlow = yearInflow - yearOutflow;
-          }
-          const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
-          return sum + (yearPreTaxCashFlow / discountFactor);
-        }, 0),
-        yearlyData: (() => {
-          let cumulative = 0;
-          return years.map(year => {
-            let yearPreTaxCashFlow = 0;
-            if (year <= constructionYears) {
-              const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-              yearPreTaxCashFlow = -yearOutflow;
-            } else {
-              const operationYear = year - constructionYears;
-              const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                                calculateSubsidyIncome(operationYear) +
-                                calculateFixedAssetResidual(operationYear) +
-                                calculateWorkingCapitalRecovery(operationYear);
-              const yearOutflow = calculateConstructionInvestment(year) +
-                                calculateWorkingCapital(year) +
-                                calculateOperatingCost(operationYear) +
-                                calculateVatAndTaxes(operationYear) +
-                                calculateMaintenanceInvestment(operationYear);
-              yearPreTaxCashFlow = yearInflow - yearOutflow;
-            }
-            const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
-            const dynamicValue = yearPreTaxCashFlow / discountFactor;
-            cumulative += dynamicValue;
-            return { year, value: cumulative };
-          });
-        })()
-      },
-      // 3. 所得税后净现金流量（动态）
-      {
-        id: '3',
-        name: '所得税后净现金流量（动态）',
-        total: years.reduce((sum, year) => {
-          let yearPreTaxCashFlow = 0;
-          let yearAdjustedTax = 0;
-          if (year <= constructionYears) {
-            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-            yearPreTaxCashFlow = -yearOutflow;
-          } else {
-            const operationYear = year - constructionYears;
-            const yearInflow = calculateOperatingRevenue(operationYear) +
-                              calculateSubsidyIncome(operationYear) +
-                              calculateFixedAssetResidual(operationYear) +
-                              calculateWorkingCapitalRecovery(operationYear);
-            const yearOutflow = calculateConstructionInvestment(year) +
-                              calculateWorkingCapital(year) +
-                              calculateOperatingCost(operationYear) +
-                              calculateVatAndTaxes(operationYear) +
-                              calculateMaintenanceInvestment(operationYear);
-            yearPreTaxCashFlow = yearInflow - yearOutflow;
-            yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
-          }
-          const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
-          const postTaxDiscountFactor = Math.pow(1 + postTaxRateDecimal, year);
-          return sum + (yearPreTaxCashFlow / preTaxDiscountFactor) - (yearAdjustedTax / postTaxDiscountFactor);
-        }, 0),
-        yearlyData: years.map(year => {
-          let yearPreTaxCashFlow = 0;
-          let yearAdjustedTax = 0;
-          if (year <= constructionYears) {
-            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-            yearPreTaxCashFlow = -yearOutflow;
-          } else {
-            const operationYear = year - constructionYears;
-            const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                              calculateSubsidyIncome(operationYear) +
-                              calculateFixedAssetResidual(operationYear) +
-                              calculateWorkingCapitalRecovery(operationYear);
-            const yearOutflow = calculateConstructionInvestment(year) +
-                              calculateWorkingCapital(year) +
-                              calculateOperatingCost(operationYear) +
-                              calculateVatAndTaxes(operationYear) +
-                              calculateMaintenanceInvestment(operationYear);
-            yearPreTaxCashFlow = yearInflow - yearOutflow;
-            yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
-          }
-          const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
-          const postTaxDiscountFactor = Math.pow(1 + postTaxRateDecimal, year);
-          return { year, value: (yearPreTaxCashFlow / preTaxDiscountFactor) - (yearAdjustedTax / postTaxDiscountFactor) };
-        })
-      },
-      // 4. 累计所得税后净现金流量（动态）
-      {
-        id: '4',
-        name: '累计所得税后净现金流量（动态）',
-        total: years.reduce((sum, year) => {
-          let yearPreTaxCashFlow = 0;
-          let yearAdjustedTax = 0;
-          if (year <= constructionYears) {
-            const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-            yearPreTaxCashFlow = -yearOutflow;
-          } else {
-            const operationYear = year - constructionYears;
-            const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                              calculateSubsidyIncome(operationYear) +
-                              calculateFixedAssetResidual(operationYear) +
-                              calculateWorkingCapitalRecovery(operationYear);
-            const yearOutflow = calculateConstructionInvestment(year) +
-                              calculateWorkingCapital(year) +
-                              calculateOperatingCost(operationYear) +
-                              calculateVatAndTaxes(operationYear) +
-                              calculateMaintenanceInvestment(operationYear);
-            yearPreTaxCashFlow = yearInflow - yearOutflow;
-            yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
-          }
-          const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
-          const postTaxDiscountFactor = Math.pow(1 + postTaxRateDecimal, year);
-          return sum + (yearPreTaxCashFlow / preTaxDiscountFactor) - (yearAdjustedTax / postTaxDiscountFactor);
-        }, 0),
-        yearlyData: (() => {
-          let cumulative = 0;
-          return years.map(year => {
-            let yearPreTaxCashFlow = 0;
-            let yearAdjustedTax = 0;
-            if (year <= constructionYears) {
-              const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
-              yearPreTaxCashFlow = -yearOutflow;
-            } else {
-              const operationYear = year - constructionYears;
-              const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                                calculateSubsidyIncome(operationYear) +
-                                calculateFixedAssetResidual(operationYear) +
-                                calculateWorkingCapitalRecovery(operationYear);
-              const yearOutflow = calculateConstructionInvestment(year) +
-                                calculateWorkingCapital(year) +
-                                calculateOperatingCost(operationYear) +
-                                calculateVatAndTaxes(operationYear) +
-                                calculateMaintenanceInvestment(operationYear);
-              yearPreTaxCashFlow = yearInflow - yearOutflow;
-              yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
-            }
-            const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
-            const postTaxDiscountFactor = Math.pow(1 + postTaxRateDecimal, year);
-            const dynamicValue = (yearPreTaxCashFlow / preTaxDiscountFactor) - (yearAdjustedTax / postTaxDiscountFactor);
-            cumulative += dynamicValue;
-            return { year, value: cumulative };
-          });
-        })()
-      }
-    ];
+      };
+    });
 
     return {
+      cashFlowData,
       years,
       constructionYears,
       operationYears,
       totalYears,
-      tableRows,
-      dynamicRows
+      tableRows: rowsWithTotals
     };
-  }, [context, preTaxRate, postTaxRate]);
+  }, [
+    context,
+    calculateConstructionInvestment,
+    calculateWorkingCapital,
+    calculateOperatingRevenue,
+    calculateSubsidyIncome,
+    calculateFixedAssetResidual,
+    calculateWorkingCapitalRecovery,
+    calculateOperatingCost,
+    calculateVatAndTaxes,
+    calculateMaintenanceInvestment,
+    calculateAdjustedIncomeTax,
+    calculateOperatingCostWithoutTax,
+    preTaxRate,
+    postTaxRate
+  ]);
 
-  // 渲染项目投资现金流量表格 - 修复：使用预计算的缓存数据
+  // 渲染项目投资现金流量表格 - 遵循规则：计算逻辑前置化
   const renderProfitTaxModal = () => {
-    if (!context) return <Text c="red">项目上下文未加载</Text>
-    if (!profitTaxTableData) return null;
+    if (!context || !cashFlowTableData) return <Text c="red">项目上下文未加载</Text>
 
-    const { years, constructionYears, operationYears, totalYears, tableRows, dynamicRows } = profitTaxTableData;
-    
-    // 提前计算colSpan值，避免在JSX中进行计算
-    const colSpanValue = 3 + totalYears;
+    const { years, constructionYears, operationYears, totalYears, tableRows, cashFlowData } = cashFlowTableData;
 
     return (
       <>
@@ -2912,46 +2620,988 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             </Table.Tr>
             <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
               {years.map((year) => (
-                <Table.Th key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                <Table.Th key={`year-${year}`} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                   {year}
                 </Table.Th>
               ))}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {tableRows.map((row) => (
-              <Table.Tr key={row.id}>
-                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{row.id}</Table.Td>
-                <Table.Td style={{ border: '1px solid #dee2e6' }}>{row.name}</Table.Td>
-                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                  {formatNumberNoRounding(row.total)}
-                </Table.Td>
-                {row.yearlyData.map((data) => (
-                  <Table.Td key={data.year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                    {formatNumberWithZeroBlank(data.value)}
-                  </Table.Td>
-                ))}
-              </Table.Tr>
-            ))}
-            {/* 空行 */}
+            {/* 1. 现金流入 - 修复：使用标准化现金流表数据 */}
             <Table.Tr>
-              <Table.Td style={{ border: 'transparent', height: '20px' }} colSpan={colSpanValue}></Table.Td>
-            </Table.Tr>
-            {/* 动态计算行 */}
-            {dynamicRows.map((row) => (
-              <Table.Tr key={row.id}>
-                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{row.id}</Table.Td>
-                <Table.Td style={{ border: '1px solid #dee2e6' }}>{row.name}</Table.Td>
-                <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                  {formatNumberNoRounding(row.total)}
-                </Table.Td>
-                {row.yearlyData.map((data) => (
-                  <Table.Td key={data.year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                    {formatNumberWithZeroBlank(data.value)}
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>现金流入</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {formatNumberNoRounding(cashFlowData.totals.totalInflow)}
+              </Table.Td>
+              {years.map((year) => {
+                const yearData = cashFlowData.yearlyData[year - 1];
+                const yearTotal = yearData ? yearData.totalInflow : 0;
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
                   </Table.Td>
-                ))}
-              </Table.Tr>
-            ))}
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 1.1 营业收入 - 修复：使用标准化现金流表数据 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.1</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>营业收入</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 营业收入合计 = 各年营业收入的总和（只计算运营期）
+                  let totalSum = 0;
+                  years.forEach((year) => {
+                    if (year > constructionYears) {
+                      const operationYear = year - constructionYears;
+                      totalSum += calculateOperatingRevenue(operationYear);
+                    }
+                  });
+                  return formatNumberNoRounding(totalSum);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                const yearData = cashFlowData.yearlyData[year - 1];
+                const yearTotal = yearData ? yearData.operatingRevenue : 0;
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 1.2 补贴收入 - 修复：使用标准化现金流表数据 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.2</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>补贴收入</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 补贴收入合计 = 各年补贴收入的总和（只计算运营期）
+                  let totalSum = 0;
+                  years.forEach((year) => {
+                    if (year > constructionYears) {
+                      const operationYear = year - constructionYears;
+                      totalSum += calculateSubsidyIncome(operationYear);
+                    }
+                  });
+                  return formatNumberNoRounding(totalSum);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                const yearData = cashFlowData.yearlyData[year - 1];
+                const yearTotal = yearData ? yearData.subsidyIncome : 0;
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 1.3 回收固定资产余值 - 修复：使用标准化现金流表数据 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.3</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>回收固定资产余值</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 回收固定资产余值合计 = 各年回收固定资产余值的总和（只计算运营期）
+                  let totalSum = 0;
+                  years.forEach((year) => {
+                    if (year > constructionYears) {
+                      const operationYear = year - constructionYears;
+                      totalSum += calculateFixedAssetResidual(operationYear);
+                    }
+                  });
+                  return formatNumberNoRounding(totalSum);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                const yearData = cashFlowData.yearlyData[year - 1];
+                const yearTotal = yearData ? yearData.fixedAssetResidual : 0;
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 1.4 回收流动资金 - 修复：使用标准化现金流表数据 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.4</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>回收流动资金</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 回收流动资金合计 = 各年回收流动资金的总和（只计算运营期）
+                  let totalSum = 0;
+                  years.forEach((year) => {
+                    if (year > constructionYears) {
+                      const operationYear = year - constructionYears;
+                      totalSum += calculateWorkingCapitalRecovery(operationYear);
+                    }
+                  });
+                  return formatNumberNoRounding(totalSum);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                const yearData = cashFlowData.yearlyData[year - 1];
+                const yearTotal = yearData ? yearData.workingCapitalRecovery : 0;
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 2. 现金流出 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>现金流出</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 现金流出合计 = 建设期和运营期各年数值的总和
+                  let totalSum = 0;
+                  years.forEach((year) => {
+                    if (year <= constructionYears) {
+                      // 建设期
+                      totalSum += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      totalSum += calculateConstructionInvestment(year) + 
+                                 calculateWorkingCapital(year) + 
+                                 calculateOperatingCost(operationYear) + 
+                                 calculateVatAndTaxes(operationYear) + 
+                                 calculateMaintenanceInvestment(operationYear);
+                    }
+                  });
+                  return formatNumberNoRounding(totalSum);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                let yearTotal = 0;
+                
+                if (year <= constructionYears) {
+                  // 建设期
+                  yearTotal = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                } else {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  yearTotal = calculateConstructionInvestment(year) + 
+                             calculateWorkingCapital(year) + 
+                             calculateOperatingCost(operationYear) + 
+                             calculateVatAndTaxes(operationYear) + 
+                             calculateMaintenanceInvestment(operationYear);
+                }
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 2.1 建设投资 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.1</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>建设投资</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {formatNumberNoRounding(calculateConstructionInvestment(undefined))}
+              </Table.Td>
+              {years.map((year) => {
+                const yearTotal = calculateConstructionInvestment(year);
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 2.2 流动资金 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.2</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>流动资金</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {formatNumberNoRounding(calculateWorkingCapital(undefined))}
+              </Table.Td>
+              {years.map((year) => {
+                const yearTotal = calculateWorkingCapital(year);
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 2.3 经营成本 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.3</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>经营成本</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {formatNumberNoRounding(calculateOperatingCost(undefined))}
+              </Table.Td>
+              {years.map((year) => {
+                let yearTotal = 0;
+                
+                if (year > constructionYears) {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  yearTotal = calculateOperatingCost(operationYear);
+                }
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 2.4 增值税、房产税等及附加 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.4</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>增值税、房产税等及附加</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {formatNumberNoRounding(calculateVatAndTaxes(undefined))}
+              </Table.Td>
+              {years.map((year) => {
+                let yearTotal = 0;
+                
+                if (year > constructionYears) {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  yearTotal = calculateVatAndTaxes(operationYear);
+                }
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 2.5 维持运营投资 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.5</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>维持运营投资</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {formatNumberNoRounding(calculateMaintenanceInvestment(undefined))}
+              </Table.Td>
+              {years.map((year) => {
+                let yearTotal = 0;
+                
+                if (year > constructionYears) {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  yearTotal = calculateMaintenanceInvestment(operationYear);
+                }
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 3. 所得税前净现金流量（1-2） */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>3</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>所得税前净现金流量（1-2）</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 所得税前净现金流量合计 = 现金流入合计 - 现金流出合计
+                  let totalInflow = 0;
+                  let totalOutflow = 0;
+                  
+                  years.forEach((year) => {
+                    if (year <= constructionYears) {
+                      // 建设期
+                      totalOutflow += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      totalInflow += calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                    calculateSubsidyIncome(operationYear) + 
+                                    calculateFixedAssetResidual(operationYear) + 
+                                    calculateWorkingCapitalRecovery(operationYear);
+                      totalOutflow += calculateConstructionInvestment(year) + 
+                                    calculateWorkingCapital(year) + 
+                                    calculateOperatingCost(operationYear) + 
+                                    calculateVatAndTaxes(operationYear) + 
+                                    calculateMaintenanceInvestment(operationYear);
+                    }
+                  });
+                  
+                  return formatNumberNoRounding(totalInflow - totalOutflow);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                let yearInflow = 0;
+                let yearOutflow = 0;
+                
+                if (year <= constructionYears) {
+                  // 建设期：直接计算现金流入和流出的差值
+                  yearInflow = 0; // 建设期没有现金流入
+                  yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                } else {
+                    // 运营期：直接计算现金流入和流出的差值
+                    const operationYear = year - constructionYears;
+                    yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                calculateSubsidyIncome(operationYear) +
+                                calculateFixedAssetResidual(operationYear) +
+                                calculateWorkingCapitalRecovery(operationYear);
+                    yearOutflow = calculateConstructionInvestment(year) +
+                                calculateWorkingCapital(year) +
+                                calculateOperatingCost(operationYear) +
+                                calculateVatAndTaxes(operationYear) +
+                                calculateMaintenanceInvestment(operationYear);
+                }
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearInflow - yearOutflow)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 4. 累计所得税前净现金流量 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>4</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税前净现金流量</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 修正：与 Excel 导出逻辑保持一致，计算各年累计值的总和
+                  let allColumnsTotal = 0;
+                  let cumulativeForTotal = 0;
+                  
+                  years.forEach((year) => {
+                    let yearTotal = 0;
+                    
+                    if (year <= constructionYears) {
+                      // 建设期
+                      const yearInflow = 0; // 建设期没有现金流入
+                      const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                      yearTotal = yearInflow - yearOutflow;
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                        calculateSubsidyIncome(operationYear) +
+                                        calculateFixedAssetResidual(operationYear) +
+                                        calculateWorkingCapitalRecovery(operationYear);
+                      const yearOutflow = calculateConstructionInvestment(year) +
+                                        calculateWorkingCapital(year) +
+                                        calculateOperatingCost(operationYear) +
+                                        calculateVatAndTaxes(operationYear) +
+                                        calculateMaintenanceInvestment(operationYear);
+                      yearTotal = yearInflow - yearOutflow;
+                    }
+                    
+                    // 累计值 = 前一年累计值 + 当年数值
+                    cumulativeForTotal += yearTotal;
+                    // 合计列应该等于各列累计值的总和
+                    allColumnsTotal += cumulativeForTotal;
+                  });
+                  
+                  return formatNumberNoRounding(allColumnsTotal);
+                })()}
+              </Table.Td>
+              {(() => {
+                let cumulativeCashFlow = 0;
+                
+                return years.map((year) => {
+                  let yearInflow = 0;
+                  let yearOutflow = 0;
+                  
+                  if (year <= constructionYears) {
+                    // 建设期
+                    yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                  } else {
+                    // 运营期
+                    const operationYear = year - constructionYears;
+                      yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                                calculateSubsidyIncome(operationYear) + 
+                                calculateFixedAssetResidual(operationYear) + 
+                                calculateWorkingCapitalRecovery(operationYear);
+                    yearOutflow = calculateConstructionInvestment(year) + 
+                                calculateWorkingCapital(year) + 
+                                calculateOperatingCost(operationYear) + 
+                                calculateVatAndTaxes(operationYear) + 
+                                calculateMaintenanceInvestment(operationYear);
+                  }
+                  
+                  cumulativeCashFlow += yearInflow - yearOutflow;
+                  
+                  return (
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(cumulativeCashFlow)}
+                    </Table.Td>
+                  );
+                });
+              })()}
+            </Table.Tr>
+            
+            {/* 5. 调整所得税 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>5</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>调整所得税</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {formatNumberNoRounding(calculateAdjustedIncomeTax(undefined))}
+              </Table.Td>
+              {years.map((year) => {
+                let yearTotal = 0;
+                
+                if (year > constructionYears) {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  yearTotal = calculateAdjustedIncomeTax(operationYear);
+                }
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearTotal)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 6. 所得税后净现金流量 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>6</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>所得税后净现金流量</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 所得税后净现金流量合计 = 现金流入合计 - 现金流出合计 - 调整所得税合计
+                  let totalInflow = 0;
+                  let totalOutflow = 0;
+                  let totalTax = 0;
+                  
+                  years.forEach((year) => {
+                    if (year <= constructionYears) {
+                      // 建设期
+                      totalOutflow += calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      totalInflow += calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                    calculateSubsidyIncome(operationYear) + 
+                                    calculateFixedAssetResidual(operationYear) + 
+                                    calculateWorkingCapitalRecovery(operationYear);
+                      totalOutflow += calculateConstructionInvestment(year) + 
+                                    calculateWorkingCapital(year) + 
+                                    calculateOperatingCost(operationYear) + 
+                                    calculateVatAndTaxes(operationYear) + 
+                                    calculateMaintenanceInvestment(operationYear);
+                      totalTax += calculateAdjustedIncomeTax(operationYear);
+                    }
+                  });
+                  
+                  return formatNumberNoRounding(totalInflow - totalOutflow - totalTax);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                let yearInflow = 0;
+                let yearOutflow = 0;
+                let yearTax = 0;
+                
+                if (year <= constructionYears) {
+                  // 建设期
+                  yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                } else {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                              calculateSubsidyIncome(operationYear) + 
+                              calculateFixedAssetResidual(operationYear) + 
+                              calculateWorkingCapitalRecovery(operationYear);
+                  yearOutflow = calculateConstructionInvestment(year) + 
+                              calculateWorkingCapital(year) + 
+                              calculateOperatingCost(operationYear) + 
+                              calculateVatAndTaxes(operationYear) + 
+                              calculateMaintenanceInvestment(operationYear);
+                  yearTax = calculateAdjustedIncomeTax(operationYear);
+                }
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(yearInflow - yearOutflow - yearTax)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 7. 累计所得税后净现金流量 */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>7</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税后净现金流量</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 修正：与 Excel 导出逻辑保持一致，计算各年累计值的总和
+                  let allColumnsTotal = 0;
+                  let cumulativeForTotal = 0;
+                  
+                  years.forEach((year) => {
+                    let yearPostTaxCashFlow = 0;
+                    
+                    if (year <= constructionYears) {
+                      // 建设期
+                      const yearInflow = 0; // 建设期没有现金流入
+                      const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                      yearPostTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                        calculateSubsidyIncome(operationYear) +
+                                        calculateFixedAssetResidual(operationYear) +
+                                        calculateWorkingCapitalRecovery(operationYear);
+                      const yearOutflow = calculateConstructionInvestment(year) +
+                                        calculateWorkingCapital(year) +
+                                        calculateOperatingCost(operationYear) +
+                                        calculateVatAndTaxes(operationYear) +
+                                        calculateMaintenanceInvestment(operationYear);
+                      const yearTax = calculateAdjustedIncomeTax(operationYear);
+                      yearPostTaxCashFlow = yearInflow - yearOutflow - yearTax;
+                    }
+                    
+                    // 累计值 = 前一年累计值 + 当年数值
+                    cumulativeForTotal += yearPostTaxCashFlow;
+                    // 合计列应该等于各列累计值的总和
+                    allColumnsTotal += cumulativeForTotal;
+                  });
+                  
+                  return formatNumberNoRounding(allColumnsTotal);
+                })()}
+              </Table.Td>
+              {(() => {
+                let cumulativeCashFlow = 0;
+                
+                return years.map((year) => {
+                  let yearInflow = 0;
+                  let yearOutflow = 0;
+                  let yearTax = 0;
+                  
+                  if (year <= constructionYears) {
+                    // 建设期
+                    yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                  } else {
+                    // 运营期
+                    const operationYear = year - constructionYears;
+                    yearInflow = calculateTaxableOperatingRevenue(operationYear) + 
+                                calculateSubsidyIncome(operationYear) + 
+                                calculateFixedAssetResidual(operationYear) + 
+                                calculateWorkingCapitalRecovery(operationYear);
+                    yearOutflow = calculateConstructionInvestment(year) + 
+                                calculateWorkingCapital(year) + 
+                                calculateOperatingCost(operationYear) + 
+                                calculateVatAndTaxes(operationYear) + 
+                                calculateMaintenanceInvestment(operationYear);
+                    yearTax = calculateAdjustedIncomeTax(operationYear);
+                  }
+                  
+                  cumulativeCashFlow += yearInflow - yearOutflow - yearTax;
+                  
+                  return (
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(cumulativeCashFlow)}
+                    </Table.Td>
+                  );
+                });
+              })()}
+            </Table.Tr>
+            
+            {/* 新增的空行，边框颜色透明 */}
+            <Table.Tr>
+              <Table.Td style={{ border: 'transparent', height: '20px' }} colSpan={3 + totalYears}></Table.Td>
+            </Table.Tr>
+            
+            {/* 新增的4行动态计算的净现金流量数据 */}
+            {/* 1. 所得税前净现金流量（动态） */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>所得税前净现金流量（动态）</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 所得税前净现金流量（动态）合计 = Σ(各年所得税前净现金流量/(1+A)^B)
+                  let totalDynamicPreTaxCashFlow = 0;
+                  const preTaxRateDecimal = preTaxRate / 100; // 转换为小数
+                  
+                  years.forEach((year) => {
+                    let yearPreTaxCashFlow = 0;
+                    
+                    if (year <= constructionYears) {
+                      // 建设期
+                      const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                      yearPreTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                        calculateSubsidyIncome(operationYear) +
+                                        calculateFixedAssetResidual(operationYear) +
+                                        calculateWorkingCapitalRecovery(operationYear);
+                      const yearOutflow = calculateConstructionInvestment(year) +
+                                        calculateWorkingCapital(year) +
+                                        calculateOperatingCost(operationYear) +
+                                        calculateVatAndTaxes(operationYear) +
+                                        calculateMaintenanceInvestment(operationYear);
+                      yearPreTaxCashFlow = yearInflow - yearOutflow;
+                    }
+                    
+                    // 应用动态计算公式：所得税前净现金流量/(1+A)^B
+                    // B从建设期第1年开始计算，所以直接使用year
+                    const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                    totalDynamicPreTaxCashFlow += yearPreTaxCashFlow / discountFactor;
+                  });
+                  
+                  return formatNumberNoRounding(totalDynamicPreTaxCashFlow);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                let yearPreTaxCashFlow = 0;
+                
+                if (year <= constructionYears) {
+                  // 建设期
+                  const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                  yearPreTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                } else {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                                    calculateSubsidyIncome(operationYear) +
+                                    calculateFixedAssetResidual(operationYear) +
+                                    calculateWorkingCapitalRecovery(operationYear);
+                  const yearOutflow = calculateConstructionInvestment(year) +
+                                    calculateWorkingCapital(year) +
+                                    calculateOperatingCost(operationYear) +
+                                    calculateVatAndTaxes(operationYear) +
+                                    calculateMaintenanceInvestment(operationYear);
+                  yearPreTaxCashFlow = yearInflow - yearOutflow;
+                }
+                
+                // 应用动态计算公式：所得税前净现金流量/(1+A)^B
+                // B从建设期第1年开始计算，所以直接使用year
+                const preTaxRateDecimal = preTaxRate / 100; // 转换为小数
+                const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                const dynamicValue = yearPreTaxCashFlow / discountFactor;
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(dynamicValue)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 2. 累计所得税前净现金流量（动态） */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税前净现金流量（动态）</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 合计列等于表格中所有建设期列及运营期列的合计值
+                  let allColumnsTotal = 0;
+                  let cumulativeForTotal = 0;
+                  const preTaxRateDecimal = preTaxRate / 100;
+                  
+                  years.forEach((year) => {
+                    let yearPreTaxCashFlow = 0;
+                    
+                    if (year <= constructionYears) {
+                      // 建设期
+                      const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                      yearPreTaxCashFlow = -yearOutflow;
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                        calculateSubsidyIncome(operationYear) +
+                                        calculateFixedAssetResidual(operationYear) +
+                                        calculateWorkingCapitalRecovery(operationYear);
+                      const yearOutflow = calculateConstructionInvestment(year) +
+                                        calculateWorkingCapital(year) +
+                                        calculateOperatingCost(operationYear) +
+                                        calculateVatAndTaxes(operationYear) +
+                                        calculateMaintenanceInvestment(operationYear);
+                      yearPreTaxCashFlow = yearInflow - yearOutflow;
+                    }
+                    
+                    // 计算动态值
+                    const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                    const dynamicValue = yearPreTaxCashFlow / discountFactor;
+                    
+                    // 累计值 = 前一年累计值 + 当年动态值
+                    cumulativeForTotal += dynamicValue;
+                    allColumnsTotal += cumulativeForTotal;
+                  });
+                  
+                  return formatNumberNoRounding(allColumnsTotal);
+                })()}
+              </Table.Td>
+              {(() => {
+                let cumulativeDynamicCashFlow = 0;
+                const preTaxRateDecimal = preTaxRate / 100; // 转换为小数
+                
+                return years.map((year) => {
+                  let yearPreTaxCashFlow = 0;
+                  
+                  if (year <= constructionYears) {
+                    // 建设期
+                    const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                    yearPreTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                  } else {
+                    // 运营期
+                    const operationYear = year - constructionYears;
+                    const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                                      calculateSubsidyIncome(operationYear) +
+                                      calculateFixedAssetResidual(operationYear) +
+                                      calculateWorkingCapitalRecovery(operationYear);
+                    const yearOutflow = calculateConstructionInvestment(year) +
+                                      calculateWorkingCapital(year) +
+                                      calculateOperatingCost(operationYear) +
+                                      calculateVatAndTaxes(operationYear) +
+                                      calculateMaintenanceInvestment(operationYear);
+                    yearPreTaxCashFlow = yearInflow - yearOutflow;
+                  }
+                  
+                  // 应用动态计算公式：所得税前净现金流量/(1+A)^B
+                  // B从建设期第1年开始计算，所以直接使用year
+                  const discountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                  const dynamicValue = yearPreTaxCashFlow / discountFactor;
+                  cumulativeDynamicCashFlow += dynamicValue;
+                  
+                  return (
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(cumulativeDynamicCashFlow)}
+                    </Table.Td>
+                  );
+                });
+              })()}
+            </Table.Tr>
+            
+            {/* 3. 所得税后净现金流量（动态） */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>3</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>所得税后净现金流量（动态）</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 所得税后净现金流量（动态）合计 = Σ(C-D/(1+E)^B)
+                  let totalDynamicPostTaxCashFlow = 0;
+                  const postTaxRateDecimal = postTaxRate / 100; // 转换为小数
+                  
+                  years.forEach((year) => {
+                    let yearPreTaxCashFlow = 0; // C：所得税前净现金流量
+                    let yearAdjustedTax = 0; // D：调整所得税
+                    
+                    if (year <= constructionYears) {
+                      // 建设期
+                      const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                      yearPreTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                      yearAdjustedTax = 0; // 建设期没有调整所得税
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
+                                        calculateSubsidyIncome(operationYear) +
+                                        calculateFixedAssetResidual(operationYear) +
+                                        calculateWorkingCapitalRecovery(operationYear);
+                      const yearOutflow = calculateConstructionInvestment(year) +
+                                        calculateWorkingCapital(year) +
+                                        calculateOperatingCost(operationYear) +
+                                        calculateVatAndTaxes(operationYear) +
+                                        calculateMaintenanceInvestment(operationYear);
+                      yearPreTaxCashFlow = yearInflow - yearOutflow;
+                      yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
+                    }
+                    
+                    // 应用动态计算公式：C-D/(1+E)^B
+                    // C为所得税前净现金流量（动态），D为调整所得税
+                    // B从建设期第1年开始计算，所以直接使用year
+                    
+                    // 先计算所得税前净现金流量（动态）
+                    const preTaxRateDecimal = preTaxRate / 100; // 转换为小数
+                    const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                    const dynamicPreTaxCashFlow = yearPreTaxCashFlow / preTaxDiscountFactor;
+                    
+                    // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
+                    const discountFactor = Math.pow(1 + postTaxRateDecimal, year);
+                    totalDynamicPostTaxCashFlow += dynamicPreTaxCashFlow - yearAdjustedTax / discountFactor;
+                  });
+                  
+                  return formatNumberNoRounding(totalDynamicPostTaxCashFlow);
+                })()}
+              </Table.Td>
+              {years.map((year) => {
+                let yearPreTaxCashFlow = 0; // C：所得税前净现金流量
+                let yearAdjustedTax = 0; // D：调整所得税
+                
+                if (year <= constructionYears) {
+                  // 建设期
+                  const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                  yearPreTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                  yearAdjustedTax = 0; // 建设期没有调整所得税
+                } else {
+                  // 运营期
+                  const operationYear = year - constructionYears;
+                  const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                                    calculateSubsidyIncome(operationYear) +
+                                    calculateFixedAssetResidual(operationYear) +
+                                    calculateWorkingCapitalRecovery(operationYear);
+                  const yearOutflow = calculateConstructionInvestment(year) +
+                                    calculateWorkingCapital(year) +
+                                    calculateOperatingCost(operationYear) +
+                                    calculateVatAndTaxes(operationYear) +
+                                    calculateMaintenanceInvestment(operationYear);
+                  yearPreTaxCashFlow = yearInflow - yearOutflow;
+                  yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
+                }
+                
+                // 应用动态计算公式：C-D/(1+E)^B
+                // C为所得税前净现金流量（动态），D为调整所得税
+                // B从建设期第1年开始计算，所以直接使用year
+                
+                // 先计算所得税前净现金流量（动态）
+                const preTaxRateDecimal = preTaxRate / 100; // 转换为小数
+                const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                const dynamicPreTaxCashFlow = yearPreTaxCashFlow / preTaxDiscountFactor;
+                
+                // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
+                const postTaxRateDecimal = postTaxRate / 100; // 转换为小数
+                const discountFactor = Math.pow(1 + postTaxRateDecimal, year);
+                const dynamicValue = dynamicPreTaxCashFlow - yearAdjustedTax / discountFactor;
+                
+                return (
+                  <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                    {formatNumberWithZeroBlank(dynamicValue)}
+                  </Table.Td>
+                );
+              })}
+            </Table.Tr>
+            
+            {/* 4. 累计所得税后净现金流量（动态） */}
+            <Table.Tr>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>4</Table.Td>
+              <Table.Td style={{ border: '1px solid #dee2e6' }}>累计所得税后净现金流量（动态）</Table.Td>
+              <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                {(() => {
+                  // 修正：与 Excel 导出逻辑保持一致，计算各年累计值的总和
+                  let allColumnsTotal = 0;
+                  let cumulativeForTotal = 0;
+                  const postTaxRateDecimal = postTaxRate / 100;
+                  const preTaxRateDecimal = preTaxRate / 100;
+                  
+                  years.forEach((year) => {
+                    let yearPreTaxCashFlow = 0; // C：所得税前净现金流量
+                    let yearAdjustedTax = 0; // D：调整所得税
+                    
+                    if (year <= constructionYears) {
+                      // 建设期
+                      const yearInflow = 0; // 建设期没有现金流入
+                      const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                      yearPreTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                      yearAdjustedTax = 0; // 建设期没有调整所得税
+                    } else {
+                      // 运营期
+                      const operationYear = year - constructionYears;
+                      const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                                        calculateSubsidyIncome(operationYear) +
+                                        calculateFixedAssetResidual(operationYear) +
+                                        calculateWorkingCapitalRecovery(operationYear);
+                      const yearOutflow = calculateConstructionInvestment(year) +
+                                        calculateWorkingCapital(year) +
+                                        calculateOperatingCost(operationYear) +
+                                        calculateVatAndTaxes(operationYear) +
+                                        calculateMaintenanceInvestment(operationYear);
+                      yearPreTaxCashFlow = yearInflow - yearOutflow;
+                      yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
+                    }
+                    
+                    // 应用动态计算公式：C-D/(1+E)^B
+                    // C为所得税前净现金流量（动态），D为调整所得税
+                    // B从建设期第1年开始计算，所以直接使用year
+                    
+                    // 先计算所得税前净现金流量（动态）
+                    const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                    const dynamicPreTaxCashFlow = yearPreTaxCashFlow / preTaxDiscountFactor;
+                    
+                    // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
+                    const discountFactor = Math.pow(1 + postTaxRateDecimal, year);
+                    const dynamicValue = dynamicPreTaxCashFlow - yearAdjustedTax / discountFactor;
+                    
+                    // 累计值 = 前一年累计值 + 当年数值
+                    cumulativeForTotal += dynamicValue;
+                    // 合计列应该等于各列累计值的总和
+                    allColumnsTotal += cumulativeForTotal;
+                  });
+                  
+                  return formatNumberNoRounding(allColumnsTotal);
+                })()}
+              </Table.Td>
+              {(() => {
+                let cumulativeDynamicCashFlow = 0;
+                const postTaxRateDecimal = postTaxRate / 100;
+                
+                return years.map((year) => {
+                  let yearPreTaxCashFlow = 0; // C：所得税前净现金流量
+                  let yearAdjustedTax = 0; // D：调整所得税
+                  
+                  if (year <= constructionYears) {
+                    // 建设期
+                    const yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+                    yearPreTaxCashFlow = -yearOutflow; // 建设期只有流出，所以是负值
+                    yearAdjustedTax = 0; // 建设期没有调整所得税
+                  } else {
+                    // 运营期
+                    const operationYear = year - constructionYears;
+                    const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                                      calculateSubsidyIncome(operationYear) +
+                                      calculateFixedAssetResidual(operationYear) +
+                                      calculateWorkingCapitalRecovery(operationYear);
+                    const yearOutflow = calculateConstructionInvestment(year) +
+                                      calculateWorkingCapital(year) +
+                                      calculateOperatingCost(operationYear) +
+                                      calculateVatAndTaxes(operationYear) +
+                                      calculateMaintenanceInvestment(operationYear);
+                    yearPreTaxCashFlow = yearInflow - yearOutflow;
+                    yearAdjustedTax = calculateAdjustedIncomeTax(operationYear);
+                  }
+                  
+                  // 应用动态计算公式：C-D/(1+E)^B
+                  // B从建设期第1年开始计算，所以直接使用year
+                  
+                  // 先计算所得税前净现金流量（动态）
+                  const preTaxRateDecimal = preTaxRate / 100;
+                  const preTaxDiscountFactor = Math.pow(1 + preTaxRateDecimal, year);
+                  const dynamicPreTaxCashFlow = yearPreTaxCashFlow / preTaxDiscountFactor;
+                  
+                  // 再计算所得税后净现金流量（动态）= C-D/(1+E)^B
+                  const discountFactor = Math.pow(1 + postTaxRateDecimal, year);
+                  const dynamicValue = dynamicPreTaxCashFlow - yearAdjustedTax / discountFactor;
+                  cumulativeDynamicCashFlow += dynamicValue;
+                  
+                  return (
+                    <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                      {formatNumberWithZeroBlank(cumulativeDynamicCashFlow)}
+                    </Table.Td>
+                  );
+                });
+              })()}
+            </Table.Tr>
           </Table.Tbody>
         </Table>
       </>
