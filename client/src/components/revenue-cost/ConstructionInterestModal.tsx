@@ -223,7 +223,7 @@ const ConstructionInterestModal: React.FC<ConstructionInterestModalProps> = ({
       opened={opened}
       onClose={onClose}
       size="xl"
-      title={<Title order={5} c="#1D2129">建设期利息详情</Title>}
+      title={<Title order={4} c="#1D2129">建设期利息详情</Title>}
       styles={{
         body: {
           maxHeight: 'calc(100vh - 200px)',

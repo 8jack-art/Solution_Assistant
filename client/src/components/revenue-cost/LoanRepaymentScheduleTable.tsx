@@ -19,11 +19,13 @@ import {
   IconSettings,
   IconFileText,
   IconEye,
+  IconCode,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, LoanConfig, LoanRepaymentTableData } from '@/stores/revenueCostStore'
 import * as XLSX from 'xlsx'
 import ConstructionInterestModal from './ConstructionInterestModal'
+import JsonDataViewer from './JsonDataViewer'
 
 // 格式化数字显示为2位小数，不四舍五入，无千分号
 const formatNumberNoRounding = (value: number): string => {
@@ -95,6 +97,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
   
   const [showModal, setShowModal] = useState(false)
   const [showConstructionDataModal, setShowConstructionDataModal] = useState(false)
+  const [showJsonModal, setShowJsonModal] = useState(false)
 
   // 计算借款还本付息计划表数据
   const calculateLoanRepaymentData = useMemo(() => {
@@ -504,6 +507,15 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     return jsonData;
   }, [estimate, context, loanConfig]);
 
+  // 准备JSON查看器数据
+  const getJsonData = useMemo(() => {
+    return {
+      constructionInterest: getConstructionInterestData,
+      loanRepaymentTable: calculateLoanRepaymentData,
+      loanRepaymentScheduleDetailed: calculateLoanRepaymentData // 等额本息数据与当前表格数据相同
+    };
+  }, [getConstructionInterestData, calculateLoanRepaymentData]);
+
   // 导出Excel
   const handleExportExcel = () => {
     if (!context || !calculateLoanRepaymentData) {
@@ -694,6 +706,25 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
               <IconDownload size={20} />
             </ActionIcon>
           </Tooltip>
+          <Tooltip label="查看JSON数据">
+            <ActionIcon
+              variant="light"
+              color="orange"
+              size="lg"
+              onClick={() => setShowJsonModal(true)}
+              style={{ 
+                visibility: 'visible', 
+                display: 'inline-flex',
+                opacity: 1,
+                zIndex: 102,
+                position: 'relative',
+                backgroundColor: '#fff3e0',
+                border: '1px solid #ff9800'
+              }}
+            >
+              <IconCode size={20} />
+            </ActionIcon>
+          </Tooltip>
         </div>
       </div>
 
@@ -704,6 +735,15 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         opened={showConstructionDataModal}
         onClose={() => setShowConstructionDataModal(false)}
         estimate={estimate}
+      />
+
+      {/* JSON数据查看器模态框 */}
+      <JsonDataViewer
+        opened={showJsonModal}
+        onClose={() => setShowJsonModal(false)}
+        data={getJsonData}
+        loading={false}
+        error={null}
       />
 
     </>

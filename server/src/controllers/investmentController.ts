@@ -19,6 +19,10 @@ const saveEstimateSchema = z.object({
   loan_rate: z.number().min(0).max(1).default(0.049),
   custom_loan_amount: z.number().optional(),
   estimate_data: z.any().optional(), // 支持完整的estimate_data格式
+  // 新增贷款相关数据字段
+  construction_interest_details: z.any().optional(), // 建设期利息详情JSON
+  loan_repayment_schedule_simple: z.any().optional(), // 还本付息计划简表JSON（等额本金）
+  loan_repayment_schedule_detailed: z.any().optional(), // 还本付息计划表JSON（等额本息）
 })
 
 const calculateEstimateSchema = saveEstimateSchema.omit({ project_id: true })
@@ -88,7 +92,10 @@ export class InvestmentController {
         price_reserve_rate,
         construction_period,
         loan_rate,
-        custom_loan_amount
+        custom_loan_amount,
+        construction_interest_details,
+        loan_repayment_schedule_simple,
+        loan_repayment_schedule_detailed
       } = parsedData
 
       const project = await InvestmentProjectModel.findById(project_id)
@@ -138,7 +145,11 @@ export class InvestmentController {
           loan_amount: estimate_data.partF?.贷款总额 || 0,
           loan_rate: loan_rate,
           custom_loan_amount: custom_loan_amount || undefined,
-          custom_land_cost: undefined
+          custom_land_cost: undefined,
+          // 新增贷款相关数据字段
+          construction_interest_details,
+          loan_repayment_schedule_simple,
+          loan_repayment_schedule_detailed
         }
       } else {
         // 传统模式：使用分离的字段计算
@@ -176,7 +187,11 @@ export class InvestmentController {
           total_investment: estimateResult.totalInvestment,
           building_investment: estimateResult.buildingInvestment,
           construction_interest: estimateResult.constructionInterest,
-          gap_rate: estimateResult.gapRate
+          gap_rate: estimateResult.gapRate,
+          // 新增贷款相关数据字段
+          construction_interest_details,
+          loan_repayment_schedule_simple,
+          loan_repayment_schedule_detailed
         }
       }
 
@@ -366,7 +381,11 @@ export class InvestmentController {
         loan_amount: toDecimal(result.partF.贷款总额),
         loan_rate: toDecimal(project.loan_interest_rate),
         custom_loan_amount: finalCustomLoanAmount !== undefined ? toDecimal(finalCustomLoanAmount) : null,
-        custom_land_cost: finalCustomLandCost !== undefined ? toDecimal(finalCustomLandCost) : null
+        custom_land_cost: finalCustomLandCost !== undefined ? toDecimal(finalCustomLandCost) : null,
+        // 新增贷款相关数据字段（从请求体中获取）
+        construction_interest_details: req.body.construction_interest_details,
+        loan_repayment_schedule_simple: req.body.loan_repayment_schedule_simple,
+        loan_repayment_schedule_detailed: req.body.loan_repayment_schedule_detailed
       }
 
       let savedEstimate

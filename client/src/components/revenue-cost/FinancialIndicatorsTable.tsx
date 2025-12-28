@@ -3611,6 +3611,17 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         postTaxRate
       );
       
+      // 从投资估算数据中提取贷款相关字段
+      let constructionInterestDetails = null;
+      let loanRepaymentScheduleSimple = null;
+      let loanRepaymentScheduleDetailed = null;
+
+      if (investmentEstimate?.estimate_data) {
+        constructionInterestDetails = investmentEstimate.estimate_data.construction_interest_details || null;
+        loanRepaymentScheduleSimple = investmentEstimate.estimate_data.loan_repayment_schedule_simple || null;
+        loanRepaymentScheduleDetailed = investmentEstimate.estimate_data.loan_repayment_schedule_detailed || null;
+      }
+
       // 获取完整的项目数据作为JSON基础
       const completeJsonData = {
         projectContext: context,
@@ -3630,6 +3641,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           estimate: investmentEstimate,
           depreciationData: depreciationData
         },
+        // 添加贷款相关数据
+        constructionInterest: constructionInterestDetails,
+        loanRepaymentTable: loanRepaymentScheduleSimple,
+        loanRepaymentScheduleDetailed: loanRepaymentScheduleDetailed,
         financialIndicators: useCachedFinancialIndicators(), // 添加财务指标计算结果
         metadata: {
           generatedAt: new Date().toISOString(),
@@ -3641,7 +3656,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             '营业收入、营业税金及附加和增值税估算表',
             '总成本费用估算表',
             '借款还本付息计划表',
-            '分年度投资估算表'
+            '分年度投资估算表',
+            '建设期利息详情',
+            '还本付息计划表（等额本金）',
+            '还本付息计划表（等额本息）'
           ]
         }
       }

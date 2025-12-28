@@ -65,6 +65,10 @@ export interface InvestmentEstimate {
   loan_rate: number
   custom_loan_amount?: number | null
   custom_land_cost?: number | null
+  // 新增贷款相关数据字段
+  construction_interest_details?: any // 建设期利息详情JSON
+  loan_repayment_schedule_simple?: any // 还本付息计划简表JSON（等额本金）
+  loan_repayment_schedule_detailed?: any // 还本付息计划表JSON（等额本息）
   created_at: string
   updated_at: string
 }

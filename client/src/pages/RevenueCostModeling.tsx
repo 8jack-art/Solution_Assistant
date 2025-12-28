@@ -435,6 +435,19 @@ const RevenueCostModeling: React.FC = () => {
     })
 
     setRepaymentTableData(data)
+    
+    // 保存还本付息计划简表数据到store
+    const { setLoanRepaymentTableData } = useRevenueCostStore.getState()
+    setLoanRepaymentTableData({
+      rows: data.map(row => ({
+        序号: row.序号,
+        项目: row.项目,
+        合计: row.合计,
+        建设期: [], // 简表中建设期为空
+        运营期: row.分年数据
+      })),
+      updatedAt: new Date().toISOString()
+    })
   }, [project, investmentEstimate, repaymentPeriod])
 
   /**

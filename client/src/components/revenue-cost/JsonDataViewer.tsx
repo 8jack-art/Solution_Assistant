@@ -169,7 +169,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'revenue' | 'cost' | 'construction' | 'loan'>('revenue')
+  const [activeTab, setActiveTab] = useState<'revenue' | 'cost' | 'construction' | 'loan' | 'detailed'>('revenue')
 
   // 默认展开第一层
   React.useEffect(() => {
@@ -186,6 +186,9 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       }
       if (data.loanRepaymentTable) {
         defaultExpanded.add('loanRepaymentTable')
+      }
+      if (data.loanRepaymentScheduleDetailed) {
+        defaultExpanded.add('loanRepaymentScheduleDetailed')
       }
       setExpanded(defaultExpanded)
     }
@@ -231,6 +234,8 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       expandAllPaths(data.constructionInterest, 'constructionInterest').forEach(p => allPaths.add(p))
     } else if (activeTab === 'loan' && data.loanRepaymentTable) {
       expandAllPaths(data.loanRepaymentTable, 'loanRepaymentTable').forEach(p => allPaths.add(p))
+    } else if (activeTab === 'detailed' && data.loanRepaymentScheduleDetailed) {
+      expandAllPaths(data.loanRepaymentScheduleDetailed, 'loanRepaymentScheduleDetailed').forEach(p => allPaths.add(p))
     }
     setExpanded(allPaths)
   }
@@ -249,6 +254,9 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
     }
     if (data && data.loanRepaymentTable) {
       defaultExpanded.add('loanRepaymentTable')
+    }
+    if (data && data.loanRepaymentScheduleDetailed) {
+      defaultExpanded.add('loanRepaymentScheduleDetailed')
     }
     setExpanded(defaultExpanded)
   }
@@ -310,6 +318,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
       costTable: filterBySearchTerm(data.costTable, searchTerm),
       constructionInterest: filterBySearchTerm(data.constructionInterest, searchTerm),
       loanRepaymentTable: filterBySearchTerm(data.loanRepaymentTable, searchTerm),
+      loanRepaymentScheduleDetailed: filterBySearchTerm(data.loanRepaymentScheduleDetailed, searchTerm),
     }
   }, [data, searchTerm])
 
@@ -385,6 +394,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
               <Tabs.Tab value="cost">总成本费用估算表</Tabs.Tab>
               <Tabs.Tab value="construction">建设期利息详情</Tabs.Tab>
               <Tabs.Tab value="loan">还本付息计划简表</Tabs.Tab>
+              <Tabs.Tab value="detailed">还本付息计划表（等额本息）</Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="revenue">
@@ -467,6 +477,27 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
               ) : (
                 <Box p="xl" style={{ textAlign: 'center', color: '#86909C' }}>
                   <Text>暂无还本付息计划简表数据</Text>
+                </Box>
+              )}
+            </Tabs.Panel>
+
+            <Tabs.Panel value="detailed">
+              {filteredData?.loanRepaymentScheduleDetailed ? (
+                <ScrollArea h="calc(85vh - 180px)" offsetScrollbars>
+                  <Box p="md" style={{ backgroundColor: '#1e1e1e', borderRadius: '8px', color: '#d4d4d4', fontFamily: 'Consolas, Monaco, monospace', fontSize: '13px' }}>
+                    <JsonNode
+                      data={filteredData.loanRepaymentScheduleDetailed}
+                      searchTerm={searchTerm}
+                      level={0}
+                      expanded={expanded}
+                      onToggle={handleToggle}
+                      path="loanRepaymentScheduleDetailed"
+                    />
+                  </Box>
+                </ScrollArea>
+              ) : (
+                <Box p="xl" style={{ textAlign: 'center', color: '#86909C' }}>
+                  <Text>暂无还本付息计划表（等额本息）数据</Text>
                 </Box>
               )}
             </Tabs.Panel>

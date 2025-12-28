@@ -1848,11 +1848,16 @@ const InvestmentSummary: React.FC = () => {
       console.log('估算数据:', estimateData)
       console.log('三级子项数据:', estimateData.thirdLevelItems)
       
-      // 使用正确的API调用格式
-      const response = await investmentApi.save({
+      // 确保数据结构正确
+      const saveData = {
         project_id: id!,
         estimate_data: estimateData
-      })
+      }
+      
+      console.log('保存到数据库的数据结构:', saveData)
+      
+      // 使用正确的API调用格式
+      const response = await investmentApi.save(saveData)
       
       if (!response.success) {
         console.error('保存估算数据失败:', response.error)
