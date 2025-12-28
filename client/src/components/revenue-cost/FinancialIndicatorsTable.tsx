@@ -2153,7 +2153,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
           </Table.Thead>
           <Table.Tbody>
             {tableRows.map((row, idx) => (
-              <Table.Tr key={idx}>
+              <Table.Tr key={row.id}>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{row.id}</Table.Td>
                 <Table.Td style={{ border: '1px solid #dee2e6' }}>{row.name}</Table.Td>
                 <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
@@ -4374,7 +4374,9 @@ const generateCashFlowTableData = (
         totalOutflow: 0,
         totalPreTaxCashFlow: 0,
         totalPostTaxCashFlow: 0,
-        totalAdjustedIncomeTax: 0
+        totalAdjustedIncomeTax: 0,
+        totalPreTaxCashFlowDynamic: 0,
+        totalPostTaxCashFlowDynamic: 0
       }
     };
   }
@@ -4544,8 +4546,16 @@ const calculateFinancialIndicators = (cashFlowData: CashFlowTableData): Financia
   // 注意：NPV根据要求直接使用现金流量表中的动态现金流合计值
   const preTaxIRR = safeCalculateIRR(preTaxCashFlows);
   const postTaxIRR = safeCalculateIRR(postTaxCashFlows);
-  const preTaxNPV = cashFlowData.totals.totalPreTaxCashFlowDynamic; // 项目投资财务净现值（所得税前）采用"项目投资现金流量表"中"所得税前净现金流量（动态）"的"合计"列的值
-  const postTaxNPV = cashFlowData.totals.totalPostTaxCashFlowDynamic; // 项目投资财务净现值（所得税后）采用"项目投资现金流量表"中"所得税后净现金流量（动态）"的"合计"列的值
+  // 获取最后一年的累计所得税前净现金流量（动态）值
+  const lastYearPreTaxCumulativeDynamic = cashFlowData.yearlyData.length > 0
+    ? cashFlowData.yearlyData[cashFlowData.yearlyData.length - 1].cumulativePreTaxCashFlowDynamic
+    : 0;
+  // 获取最后一年的累计所得税后净现金流量（动态）值
+  const lastYearPostTaxCumulativeDynamic = cashFlowData.yearlyData.length > 0
+    ? cashFlowData.yearlyData[cashFlowData.yearlyData.length - 1].cumulativePostTaxCashFlowDynamic
+    : 0;
+  const preTaxNPV = lastYearPreTaxCumulativeDynamic; // 项目投资财务净现值（所得税前）采用"累计所得税前净现金流量（动态）"最后一年的值
+  const postTaxNPV = lastYearPostTaxCumulativeDynamic; // 项目投资财务净现值（所得税后）采用"累计所得税后净现金流量（动态）"最后一年的值
   const preTaxStaticPaybackPeriod = safeCalculatePaybackPeriod(cumulativePreTaxFlows);
   const postTaxStaticPaybackPeriod = safeCalculatePaybackPeriod(cumulativePostTaxFlows);
   const preTaxDynamicPaybackPeriod = safeCalculateDynamicPaybackPeriod(cumulativePreTaxDynamicFlows);
