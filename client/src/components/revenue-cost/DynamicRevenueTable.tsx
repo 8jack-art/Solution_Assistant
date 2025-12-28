@@ -482,7 +482,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
         await new Promise(resolve => setTimeout(resolve, 0))
         
         // 获取最新的状态
-        const currentState = useRevenueCostStore.getState()
+        const currentState = revenueCostStore
         console.log(`✅ 清空完成，当前剩余收入项: ${currentState.revenueItems.length} 个`)
         console.log(`➕ 开始添加 ${itemCount} 个新收入项`)
 
@@ -552,7 +552,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
       return;
     }
     
-    // 如果有收入项，也不生成
+        // 如果有收入项，也不生成
     if (revenueItems.length > 0) {
       console.log('⚠️ 已有收入项，跳过自动生成')
       console.log('📝 当前收入项:', revenueItems.map(i => i.name).join(', '))
@@ -661,6 +661,18 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     }
   }, [formatPriceInWanYuan]);
 
+  // 计算合计行的汇总数据（使用useMemo缓存）
+  const totalRowData = useMemo(() => {
+    const totalTaxableIncome = revenueItems.reduce((sum, item) => sum + calculateTaxableIncome(item), 0);
+    const totalNonTaxIncome = revenueItems.reduce((sum, item) => sum + calculateNonTaxIncome(item), 0);
+    const totalVatAmount = revenueItems.reduce((sum, item) => sum + calculateVatAmount(item), 0);
+    return {
+      totalTaxableIncome,
+      totalNonTaxIncome,
+      totalVatAmount
+    };
+  }, [revenueItems]);
+
   // 计算营业收入表数据的useMemo
   const revenueTableDataComputed = useMemo(() => {
     if (!context) return null;
@@ -678,7 +690,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     const row1 = { 序号: '1', 收入项目: '营业收入', 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
       const yearTotal = revenueItems.reduce((sum, item) => {
-        const productionRate = getProductionRateForYear(revenueCostStore.getState().productionRates, year)
+        const productionRate = getProductionRateForYear(revenueCostStore.productionRates, year)
         return sum + calculateYearlyRevenue(item, year, productionRate)
       }, 0);
       row1.运营期.push(yearTotal);
@@ -696,7 +708,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
       };
       
       years.forEach((year) => {
-        const productionRate = getProductionRateForYear(revenueCostStore.getState().productionRates, year)
+        const productionRate = getProductionRateForYear(revenueCostStore.productionRates, year)
         const revenue = calculateYearlyRevenue(item, year, productionRate);
         row.运营期.push(revenue);
         row.合计 += revenue;
@@ -708,7 +720,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     // 2. 增值税
     const row2 = { 序号: '2', 收入项目: '增值税', 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
-      const yearVat = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+      const yearVat = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
       row2.运营期.push(yearVat);
       row2.合计 += yearVat;
     });
@@ -718,7 +730,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     const row2_1 = { 序号: '2.1', 收入项目: '销项税额', 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
       const yearTotal = revenueItems.reduce((sum, item) => {
-        const productionRate = getProductionRateForYear(revenueCostStore.getState().productionRates, year)
+        const productionRate = getProductionRateForYear(revenueCostStore.productionRates, year)
         const revenue = calculateYearlyRevenue(item, year, productionRate)
         // 销项税额 = 含税收入 - 不含税收入
         return sum + (revenue - revenue / (1 + item.vatRate))
@@ -731,7 +743,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     // 2.2 进项税额
     const row2_2 = { 序号: '2.2', 收入项目: '进项税额', 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
-      const yearTotal = calculateTotalInputTaxForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+      const yearTotal = calculateTotalInputTaxForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
       row2_2.运营期.push(yearTotal);
       row2_2.合计 += yearTotal;
     });
@@ -749,7 +761,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     // 3. 其他税费及附加
     const row3 = { 序号: '3', 收入项目: '其他税费及附加', 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
-      const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+      const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
       const urbanTax = vatAmount * urbanTaxRate
       const educationTax = vatAmount * 0.05 // 教育费附加(3%+地方2%)
       const otherTaxes = urbanTax + educationTax
@@ -761,7 +773,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     // 3.1 城市建设维护税
     const row3_1 = { 序号: '3.1', 收入项目: `城市建设维护税(${(urbanTaxRate * 100).toFixed(0)}%)`, 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
-      const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+      const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
       const urbanTax = vatAmount * urbanTaxRate
       row3_1.运营期.push(urbanTax);
       row3_1.合计 += urbanTax;
@@ -771,7 +783,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     // 3.2 教育费附加(3%+地方2%)
     const row3_2 = { 序号: '3.2', 收入项目: '教育费附加(3%+地方2%)', 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
-      const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+      const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
       const educationTax = vatAmount * 0.05 // 3%+2%=5%
       row3_2.运营期.push(educationTax);
       row3_2.合计 += educationTax;
@@ -804,50 +816,52 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     return newData;
   }, [revenueTableDataComputed, lastRevenueTableCalculationKey, cachedRevenueTableData]);
 
+  // 计算总价预览（统一以万元显示）- 移到组件顶层
+  const calculatePreviewTotal = useCallback((): number => {
+    const template = formData.fieldTemplate || 'quantity-price'
+    
+    if (!formData.name || formData.name.trim() === '') return 0;
+    
+    switch (template) {
+      case 'quantity-price':
+        const quantity = formData.quantity || 0;
+        const unitPrice = formData.unitPrice || 0;
+        
+        return quantity * unitPrice; // 结果为万元（直接作为含税收入）
+        
+      case 'area-yield-price':
+        const area = formData.area || 0;
+        const yieldPerArea = formData.yieldPerArea || 0;
+        const areaUnitPrice = formData.unitPrice || 0;
+        
+        return area * yieldPerArea * areaUnitPrice; // 结果为万元（直接作为含税收入）
+        
+      case 'capacity-utilization':
+        const capacity = formData.capacity || 0;
+        const utilizationRate = formData.utilizationRate || 0;
+        const capacityUnitPrice = formData.unitPrice || 0;
+        
+        return capacity * utilizationRate * capacityUnitPrice; // 结果为万元（直接作为含税收入）
+        
+      case 'subscription':
+        const subscriptions = formData.subscriptions || 0;
+        const subscriptionUnitPrice = formData.unitPrice || 0;
+        
+        return subscriptions * subscriptionUnitPrice; // 结果为万元（直接作为含税收入）
+        
+      case 'direct-amount':
+        return formData.directAmount || 0; // 已经是万元单位（直接作为含税收入）
+        
+      default:
+        return 0;
+    }
+  }, [formData]);
+
   /**
    * 渲染编辑表单字段
    */
   const renderFormFields = useMemo(() => {
     const template = formData.fieldTemplate || 'quantity-price'
-    
-    // 计算总价预览（统一以万元显示）
-    const calculatePreviewTotal = useCallback((): number => {
-      if (!formData.name || formData.name.trim() === '') return 0;
-      
-      switch (template) {
-        case 'quantity-price':
-          const quantity = formData.quantity || 0;
-          const unitPrice = formData.unitPrice || 0;
-          
-          return quantity * unitPrice; // 结果为万元（直接作为含税收入）
-          
-        case 'area-yield-price':
-          const area = formData.area || 0;
-          const yieldPerArea = formData.yieldPerArea || 0;
-          const areaUnitPrice = formData.unitPrice || 0;
-          
-          return area * yieldPerArea * areaUnitPrice; // 结果为万元（直接作为含税收入）
-          
-        case 'capacity-utilization':
-          const capacity = formData.capacity || 0;
-          const utilizationRate = formData.utilizationRate || 0;
-          const capacityUnitPrice = formData.unitPrice || 0;
-          
-          return capacity * utilizationRate * capacityUnitPrice; // 结果为万元（直接作为含税收入）
-          
-        case 'subscription':
-          const subscriptions = formData.subscriptions || 0;
-          const subscriptionUnitPrice = formData.unitPrice || 0;
-          
-          return subscriptions * subscriptionUnitPrice; // 结果为万元（直接作为含税收入）
-          
-        case 'direct-amount':
-          return formData.directAmount || 0; // 已经是万元单位（直接作为含税收入）
-          
-        default:
-          return 0;
-      }
-    }, [template, formData]);
 
     return (
       <Stack gap="md">
@@ -1184,7 +1198,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
           marginTop: '8px'
         }}>
           <Text size="sm" c="#0C4A6E" fw={500}>
-            💡 总价预览：{(calculatePreviewTotal()).toFixed(2)} 万元
+            💡 总价预览：{calculatePreviewTotal().toFixed(2)} 万元
           </Text>
         </div>
 
@@ -1205,7 +1219,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
         )}
       </Stack>
     )
-  }, [formData, calculatePreviewTotal, formatPriceInWanYuan]);
+  }, [formData, formatPriceInWanYuan]);
 
   /**
    * 保存营业收入表数据
@@ -1254,7 +1268,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     }
 
     const years = operationYears;
-    const currentState = revenueCostStore.getState();
+    const currentState = revenueCostStore;
 
     // 准备Excel数据
     const excelData: any[] = [];
@@ -1585,17 +1599,17 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                   <Table.Td colSpan={3}></Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
                     <Text fw={600} c="#1D2129">
-                      {formatAmount(revenueItems.reduce((sum, item) => sum + calculateTaxableIncome(item), 0))}
+                      {formatAmount(totalRowData.totalTaxableIncome)}
                     </Text>
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
                     <Text fw={600} c="#165DFF">
-                      {formatAmount(revenueItems.reduce((sum, item) => sum + calculateNonTaxIncome(item), 0))}
+                      {formatAmount(totalRowData.totalNonTaxIncome)}
                     </Text>
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
                     <Text fw={600} c="#F7BA1E">
-                      {formatAmount(revenueItems.reduce((sum, item) => sum + calculateVatAmount(item), 0))}
+                      {formatAmount(totalRowData.totalVatAmount)}
                     </Text>
                   </Table.Td>
                   <Table.Td colSpan={2}></Table.Td>
@@ -1683,7 +1697,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
           if (!context) return <Text c="red">项目上下文未加载</Text>
 
           const years = operationYears;
-          const currentState = revenueCostStore.getState();
+          const currentState = revenueCostStore;
 
           return (
             <>
@@ -1751,8 +1765,8 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                           <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{`1.${idx + 1}`}</Table.Td>
                           <Table.Td style={{ border: '1px solid #dee2e6' }}>{`${item.name}（${(item.vatRate * 100).toFixed(0)}%）`}</Table.Td>
                           <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>{totalRevenue.toFixed(2)}</Table.Td>
-                          {yearlyRevenues.map((revenue, i) => (
-                            <Table.Td key={i} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                          {yearlyRevenues.map((revenue, idx) => (
+                            <Table.Td key={`${item.id}-year-${years[idx]}`} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                               {revenue.toFixed(2)}
                             </Table.Td>
                           ))}
@@ -1787,16 +1801,21 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                           // 增值税 = 销项税额 - 进项税额 - 进项税额（固定资产待抵扣）
                           const yearVat = yearOutputTax - yearInputTax - yearFixedAssetInputTax;
                           totalVat += yearVat;
+                        });
+                        return totalVat.toFixed(2);
+                      })()}
+                    </Table.Td>
+                    {years.map((year) => {
                       // 计算销项税额
                       const yearOutputTax = revenueItems.reduce((sum, item) => {
-                        const productionRate = getProductionRateForYear(revenueCostStore.getState().productionRates, year)
+                        const productionRate = getProductionRateForYear(currentState.productionRates, year)
                         const revenue = calculateYearlyRevenue(item, year, productionRate)
                         // 销项税额 = 含税收入 - 不含税收入
                         return sum + (revenue - revenue / (1 + item.vatRate))
                       }, 0);
                       
                       // 计算进项税额
-                      const yearInputTax = calculateTotalInputTaxForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                      const yearInputTax = calculateTotalInputTaxForYear(year, currentState.costConfig, currentState.productionRates, revenueItems);
                       
                       // 计算进项税额（固定资产待抵扣）
                       const yearFixedAssetInputTax = deductibleInputTax / context.operationYears; // 简化计算，按年份分摊
@@ -1823,7 +1842,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                         let totalVat = 0;
                         years.forEach((year) => {
                           const yearVat = revenueItems.reduce((sum, item) => {
-                            const productionRate = getProductionRateForYear(revenueCostStore.getState().productionRates, year)
+                            const productionRate = getProductionRateForYear(revenueCostStore.productionRates, year)
                             const revenue = calculateYearlyRevenue(item, year, productionRate)
                             // 销项税额 = 含税收入 - 不含税收入
                             return sum + (revenue - revenue / (1 + item.vatRate))
@@ -1835,7 +1854,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                     </Table.Td>
                     {years.map((year) => {
                       const yearVat = revenueItems.reduce((sum, item) => {
-                        const productionRate = getProductionRateForYear(revenueCostStore.getState().productionRates, year)
+                        const productionRate = getProductionRateForYear(revenueCostStore.productionRates, year)
                         const revenue = calculateYearlyRevenue(item, year, productionRate)
                         // 销项税额 = 含税收入 - 不含税收入
                         return sum + (revenue - revenue / (1 + item.vatRate))
@@ -1858,14 +1877,14 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                         // 计算所有年份进项税额的合计
                         let totalVat = 0;
                         years.forEach((year) => {
-                          const yearVat = calculateTotalInputTaxForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                          const yearVat = calculateTotalInputTaxForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                           totalVat += yearVat;
                         });
                         return totalVat.toFixed(2);
                       })()}
                     </Table.Td>
                     {years.map((year) => {
-                      const yearVat = calculateTotalInputTaxForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                      const yearVat = calculateTotalInputTaxForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                       return (
                         <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
                           {yearVat.toFixed(2)}
@@ -1911,7 +1930,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                         let totalVat = 0;
                         years.forEach((year) => {
                           // 使用新的增值税计算函数
-                          const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                          const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                           // 使用状态中的税率
                           const urbanTax = vatAmount * urbanTaxRate
                           const educationTax = vatAmount * 0.05 // 教育费附加(3%+地方2%)
@@ -1923,7 +1942,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                     </Table.Td>
                     {years.map((year) => {
                       // 使用新的增值税计算函数
-                      const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                      const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                       // 使用状态中的税率
                       const urbanTax = vatAmount * urbanTaxRate
                       const educationTax = vatAmount * 0.05 // 教育费附加(3%+地方2%)
@@ -1947,7 +1966,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                         let totalVat = 0;
                         years.forEach((year) => {
                           // 使用新的增值税计算函数
-                          const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                          const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                           // 使用状态中的税率
                           const urbanTax = vatAmount * urbanTaxRate
                           totalVat += urbanTax;
@@ -1957,7 +1976,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                     </Table.Td>
                     {years.map((year) => {
                       // 使用新的增值税计算函数
-                      const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                      const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                       // 使用状态中的税率
                       const urbanTax = vatAmount * urbanTaxRate
                       return (
@@ -1979,7 +1998,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                         let totalVat = 0;
                         years.forEach((year) => {
                           // 使用新的增值税计算函数
-                          const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                          const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                           // 使用状态中的税率
                           const educationTax = vatAmount * 0.05 // 3%+2%=5%
                           totalVat += educationTax;
@@ -1989,7 +2008,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                     </Table.Td>
                     {years.map((year) => {
                       // 使用新的增值税计算函数
-                      const vatAmount = calculateVatForYear(year, revenueCostStore.getState().costConfig, revenueCostStore.getState().productionRates, revenueItems);
+                      const vatAmount = calculateVatForYear(year, revenueCostStore.costConfig, revenueCostStore.productionRates, revenueItems);
                       // 使用状态中的税率
                       const educationTax = vatAmount * 0.05 // 3%+2%=5%
                       return (

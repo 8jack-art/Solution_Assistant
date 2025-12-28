@@ -307,6 +307,23 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [tempIncomeTaxRate, setTempIncomeTaxRate] = useState(25)
   const [tempStatutorySurplusRate, setTempStatutorySurplusRate] = useState(10)
   
+  // 缓存基础计算数据，避免重复计算
+  const cachedCalculationData = useMemo(() => {
+    if (!context) return null;
+    
+    const years = Array.from({ length: context.constructionYears + context.operationYears }, (_, i) => i + 1);
+    const constructionYears = context.constructionYears;
+    const operationYears = context.operationYears;
+    const totalYears = years.length;
+    
+    return {
+      years,
+      constructionYears,
+      operationYears,
+      totalYears
+    };
+  }, [context]);
+
   // 从localStorage加载设置
   useEffect(() => {
     const savedSubsidyIncome = localStorage.getItem('profitSubsidyIncome')
@@ -412,9 +429,16 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     },
   ]
   
-  // 计算营业收入的函数（营业收入 = 营业收入（含税） - 销项税额）
-  const calculateOperatingRevenue = (year?: number): number => {
-    if (year !== undefined) {
+  // 缓存营业收入计算结果
+  const cachedOperatingRevenue = useMemo(() => {
+    if (!context) return { byYear: [] as number[], total: 0 };
+    
+    const byYear: number[] = [];
+    let totalSum = 0;
+    
+    for (let year = 1; year <= context.operationYears; year++) {
+      let yearRevenue = 0;
+      
       // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的运营期列数据
       if (revenueTableData && revenueTableData.rows) {
         const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
@@ -423,102 +447,120 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         if (revenueRow && revenueRow.运营期 && revenueRow.运营期[year - 1] !== undefined &&
             outputTaxRow && outputTaxRow.运营期 && outputTaxRow.运营期[year - 1] !== undefined) {
           // 营业收入 = 营业收入（含税） - 销项税额
-          return revenueRow.运营期[year - 1] - outputTaxRow.运营期[year - 1];
+          yearRevenue = revenueRow.运营期[year - 1] - outputTaxRow.运营期[year - 1];
         }
       }
+      
       // 如果没有表格数据，使用原有计算逻辑作为后备
-      // 计算指定年份的营业收入（不含税）
-      // 利润与利润分配表的营业收入 = 营业收入估算表的营业收入 - 销项税额
-      const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
-      return revenueItems.reduce((sum, item) => {
-        // 计算含税收入
-        const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
-        // 计算销项税额 = 含税收入 - 不含税收入 = 含税收入 - 含税收入/(1+税率)
-        const outputTax = taxableRevenue - taxableRevenue / (1 + item.vatRate);
-        // 不含税收入 = 含税收入 - 销项税额
-        const nonTaxRevenue = taxableRevenue - outputTax;
-        return sum + nonTaxRevenue;
-      }, 0);
+      if (yearRevenue === 0) {
+        const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
+        yearRevenue = revenueItems.reduce((sum, item) => {
+          // 计算含税收入
+          const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
+          // 计算销项税额 = 含税收入 - 不含税收入 = 含税收入 - 含税收入/(1+税率)
+          const outputTax = taxableRevenue - taxableRevenue / (1 + item.vatRate);
+          // 不含税收入 = 含税收入 - 销项税额
+          const nonTaxRevenue = taxableRevenue - outputTax;
+          return sum + nonTaxRevenue;
+        }, 0);
+      }
+      
+      byYear.push(yearRevenue);
+      totalSum += yearRevenue;
+    }
+    
+    return { byYear, total: totalSum };
+  }, [context, revenueTableData, revenueItems, productionRates]);
+
+  // 计算营业收入的函数（使用缓存结果）
+  const calculateOperatingRevenue = (year?: number): number => {
+    if (!cachedOperatingRevenue) return 0;
+    
+    if (year !== undefined) {
+      return cachedOperatingRevenue.byYear[year - 1] ?? 0;
     } else {
-      // 从 revenueTableData 中获取"营业收入"（序号1）和"销项税额"（序号2.1）的合计数据
-      if (revenueTableData && revenueTableData.rows) {
-        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
-        const outputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.1');
-        
-        if (revenueRow && revenueRow.合计 !== undefined &&
-            outputTaxRow && outputTaxRow.合计 !== undefined) {
-          // 营业收入 = 营业收入（含税） - 销项税额
-          return revenueRow.合计 - outputTaxRow.合计;
-        }
-      }
-      // 如果没有表格数据，使用原有计算逻辑作为后备
-      // 计算所有年份的营业收入合计
-      if (!context) return 0;
-      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
-      let totalSum = 0;
-      years.forEach((year) => {
-        totalSum += calculateOperatingRevenue(year);
-      });
-      return totalSum;
+      return cachedOperatingRevenue.total;
     }
   };
   
-  // 计算含税营业收入的函数
-  const calculateTaxableOperatingRevenue = (year?: number): number => {
-    if (year !== undefined) {
+  // 缓存含税营业收入计算结果
+  const cachedTaxableOperatingRevenue = useMemo(() => {
+    if (!context) return { byYear: [] as number[], total: 0 };
+    
+    const byYear: number[] = [];
+    let totalSum = 0;
+    
+    for (let year = 1; year <= context.operationYears; year++) {
+      let yearRevenue = 0;
+      
       // 从 revenueTableData 中获取"营业收入"（序号1）的运营期列数据（含税收入）
       if (revenueTableData && revenueTableData.rows) {
         const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
         
         if (revenueRow && revenueRow.运营期 && revenueRow.运营期[year - 1] !== undefined) {
-          return revenueRow.运营期[year - 1];
+          yearRevenue = revenueRow.运营期[year - 1];
         }
       }
+      
       // 如果没有表格数据，使用原有计算逻辑作为后备
-      const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
-      return revenueItems.reduce((sum, item) => {
-        // 计算含税收入
-        const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
-        return sum + taxableRevenue;
-      }, 0);
-    } else {
-      // 从 revenueTableData 中获取"营业收入"（序号1）的合计数据（含税收入）
-      if (revenueTableData && revenueTableData.rows) {
-        const revenueRow = revenueTableData.rows.find(r => r.序号 === '1');
-        
-        if (revenueRow && revenueRow.合计 !== undefined) {
-          return revenueRow.合计;
-        }
+      if (yearRevenue === 0) {
+        const productionRate = productionRates?.find(p => p.yearIndex === year)?.rate || 1;
+        yearRevenue = revenueItems.reduce((sum, item) => {
+          // 计算含税收入
+          const taxableRevenue = calculateYearlyRevenue(item, year, productionRate);
+          return sum + taxableRevenue;
+        }, 0);
       }
-      // 如果没有表格数据，使用原有计算逻辑作为后备
-      if (!context) return 0;
-      const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
-      let totalSum = 0;
-      years.forEach((year) => {
-        totalSum += calculateTaxableOperatingRevenue(year);
-      });
-      return totalSum;
+      
+      byYear.push(yearRevenue);
+      totalSum += yearRevenue;
     }
-  };
-  
-  // 计算补贴收入的函数
-  const calculateSubsidyIncome = (year?: number): number => {
-    // 使用设置的年补贴收入
-    if (year !== undefined) {
-      return subsidyIncome;
-    } else {
-      // 计算所有年份的补贴收入合计
-      if (!context) return 0;
-      return subsidyIncome * context.operationYears;
-    }
-  };
-  
-  // 计算回收固定资产余值的函数
-  const calculateFixedAssetResidual = (year?: number): number => {
-    if (!context) return 0;
     
-    // 只在运营期最后一年回收
-    if (year !== undefined && year === context.operationYears) {
+    return { byYear, total: totalSum };
+  }, [context, revenueTableData, revenueItems, productionRates]);
+
+  // 计算含税营业收入的函数（使用缓存结果）
+  const calculateTaxableOperatingRevenue = (year?: number): number => {
+    if (!cachedTaxableOperatingRevenue) return 0;
+    
+    if (year !== undefined) {
+      return cachedTaxableOperatingRevenue.byYear[year - 1] ?? 0;
+    } else {
+      return cachedTaxableOperatingRevenue.total;
+    }
+  };
+  
+  // 缓存补贴收入计算结果
+  const cachedSubsidyIncome = useMemo(() => {
+    if (!context) return { byYear: [] as number[], total: 0 };
+    
+    const byYear = Array(context.operationYears).fill(subsidyIncome);
+    const total = subsidyIncome * context.operationYears;
+    
+    return { byYear, total };
+  }, [context, subsidyIncome]);
+
+  // 计算补贴收入的函数（使用缓存结果）
+  const calculateSubsidyIncome = (year?: number): number => {
+    if (!cachedSubsidyIncome) return 0;
+    
+    if (year !== undefined) {
+      return cachedSubsidyIncome.byYear[year - 1] ?? 0;
+    } else {
+      return cachedSubsidyIncome.total;
+    }
+  };
+  
+  // 缓存固定资产余值计算结果
+  const cachedFixedAssetResidual = useMemo(() => {
+    if (!context) return { byYear: [] as number[], total: 0 };
+    
+    const byYear: number[] = Array(context.operationYears).fill(0);
+    let total = 0;
+    
+    // 计算运营期最后一年的固定资产余值
+    const lastYear = context.operationYears;
+    if (lastYear > 0) {
       // 计算固定资产余值 = 固定资产净值 + 无形资产净值
       // 固定资产净值 = 原值 - 累计折旧摊销额
       // 无形资产净值 = 原值 - 累计折旧摊销额
@@ -549,33 +591,45 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         intangibleAssetsNetValue = (rowE.原值 || 0) - totalAmortization;
       }
       
-      return fixedAssetsNetValue + intangibleAssetsNetValue;
+      const residualValue = fixedAssetsNetValue + intangibleAssetsNetValue;
+      byYear[lastYear - 1] = residualValue;
+      total = residualValue;
     }
     
-    if (year === undefined) {
-      // 只在运营期最后一年有回收
-      return calculateFixedAssetResidual(context.operationYears);
-    }
+    return { byYear, total };
+  }, [context, depreciationData]);
+
+  // 计算回收固定资产余值的函数（使用缓存结果）
+  const calculateFixedAssetResidual = (year?: number): number => {
+    if (!cachedFixedAssetResidual) return 0;
     
-    return 0;
+    if (year !== undefined) {
+      return cachedFixedAssetResidual.byYear[year - 1] ?? 0;
+    } else {
+      return cachedFixedAssetResidual.total;
+    }
   };
   
-  // 计算回收流动资金的函数
+  // 缓存流动资金回收计算结果
+  const cachedWorkingCapitalRecovery = useMemo(() => {
+    if (!context) return { byYear: [] as number[], total: 0 };
+    
+    // 目前流动资金回收为0，所有年份都为0
+    const byYear = Array(context.operationYears).fill(0);
+    const total = 0;
+    
+    return { byYear, total };
+  }, [context]);
+
+  // 计算回收流动资金的函数（使用缓存结果）
   const calculateWorkingCapitalRecovery = (year?: number): number => {
-    if (!context) return 0;
+    if (!cachedWorkingCapitalRecovery) return 0;
     
-    // 只在运营期最后一年回收
-    if (year !== undefined && year === context.operationYears) {
-      // 这里应该从流动资金配置中获取，目前返回0
-      return 0;
+    if (year !== undefined) {
+      return cachedWorkingCapitalRecovery.byYear[year - 1] ?? 0;
+    } else {
+      return cachedWorkingCapitalRecovery.total;
     }
-    
-    if (year === undefined) {
-      // 只在运营期最后一年有回收
-      return calculateWorkingCapitalRecovery(context.operationYears);
-    }
-    
-    return 0;
   };
   
   // 计算建设投资的函数
@@ -2841,6 +2895,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     if (!profitTaxTableData) return null;
 
     const { years, constructionYears, operationYears, totalYears, tableRows, dynamicRows } = profitTaxTableData;
+    
+    // 提前计算colSpan值，避免在JSX中进行计算
+    const colSpanValue = 3 + totalYears;
 
     return (
       <>
@@ -2878,7 +2935,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             ))}
             {/* 空行 */}
             <Table.Tr>
-              <Table.Td style={{ border: 'transparent', height: '20px' }} colSpan={3 + totalYears}></Table.Td>
+              <Table.Td style={{ border: 'transparent', height: '20px' }} colSpan={colSpanValue}></Table.Td>
             </Table.Tr>
             {/* 动态计算行 */}
             {dynamicRows.map((row) => (
