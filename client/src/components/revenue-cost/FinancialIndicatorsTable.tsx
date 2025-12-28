@@ -123,6 +123,7 @@ const calculateIRR = (cashFlows: number[], initialGuess: number = 0.1): number =
 };
 
 // 计算财务净现值（NPV）
+// NPV = Σ [CFt / (1+r)^t]，其中 t 从 1 开始（第1年、第2年...）
 const calculateNPV = (cashFlows: number[], discountRate: number): number => {
   if (cashFlows.length === 0) return 0;
   
@@ -130,7 +131,8 @@ const calculateNPV = (cashFlows: number[], discountRate: number): number => {
   const rate = discountRate / 100; // 转换为小数
   
   for (let i = 0; i < cashFlows.length; i++) {
-    npv += cashFlows[i] / Math.pow(1 + rate, i);
+    // t = i + 1，因为第1年的指数是1，不是0
+    npv += cashFlows[i] / Math.pow(1 + rate, i + 1);
   }
   
   return npv;
@@ -726,25 +728,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   };
   
   // 计算经营成本的函数
+  // 直接使用总成本费用估算表中"1 营业成本"的数据
   const calculateOperatingCost = (year?: number): number => {
     if (year !== undefined) {
       // 优先从 costTableData 中获取"经营成本"（序号1）的运营期列数据
       if (costTableData && costTableData.rows) {
         const row = costTableData.rows.find(r => r.序号 === '1');
         if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
-          // 如果有 costTableData 数据，需要添加 revenueTableData 中的进项税额
-          let operatingCost = row.运营期[year - 1];
-          
-          // 从 revenueTableData 中获取进项税额（序号2.2）的运营期列数据
-          if (revenueTableData && revenueTableData.rows) {
-            const inputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.2');
-            if (inputTaxRow && inputTaxRow.运营期 && inputTaxRow.运营期[year - 1] !== undefined) {
-              // 经营成本 = 原经营成本 + 进项税额
-              operatingCost += inputTaxRow.运营期[year - 1];
-            }
-          }
-          
-          return operatingCost;
+          // 直接返回营业成本数据，不添加进项税额
+          return row.运营期[year - 1];
         }
       }
       
@@ -846,37 +838,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         otherExpensesCost = (costConfig.otherExpenses.directAmount || 0) * productionRate;
       }
       
-      // 计算基础经营成本
-      let operatingCost = rawMaterialsCost + fuelPowerCost + wagesCost + repairCost + otherExpensesCost;
-      
-      // 从 revenueTableData 中获取进项税额（序号2.2）的运营期列数据
-      if (revenueTableData && revenueTableData.rows) {
-        const inputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.2');
-        if (inputTaxRow && inputTaxRow.运营期 && inputTaxRow.运营期[year - 1] !== undefined) {
-          // 经营成本 = 基础经营成本 + 进项税额
-          operatingCost += inputTaxRow.运营期[year - 1];
-        }
-      }
-      
-      return operatingCost;
+      // 计算经营成本（不添加进项税额）
+      return rawMaterialsCost + fuelPowerCost + wagesCost + repairCost + otherExpensesCost;
     } else {
       // 优先从 costTableData 中获取"经营成本"（序号1）的合计数据
       if (costTableData && costTableData.rows) {
         const row = costTableData.rows.find(r => r.序号 === '1');
         if (row && row.合计 !== undefined) {
-          // 如果有 costTableData 数据，需要添加 revenueTableData 中的进项税额合计
-          let operatingCost = row.合计;
-          
-          // 从 revenueTableData 中获取进项税额（序号2.2）的合计数据
-          if (revenueTableData && revenueTableData.rows) {
-            const inputTaxRow = revenueTableData.rows.find(r => r.序号 === '2.2');
-            if (inputTaxRow && inputTaxRow.合计 !== undefined) {
-              // 经营成本 = 原经营成本 + 进项税额合计
-              operatingCost += inputTaxRow.合计;
-            }
-          }
-          
-          return operatingCost;
+          // 直接返回营业成本合计数据，不添加进项税额
+          return row.合计;
         }
       }
       
@@ -2845,7 +2815,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               })}
             </Table.Tr>
             
-            {/* 2.3 经营成本 */}
+            {/* 2.3 经营成本 - 使用总成本费用估算表中的"1 营业成本"数据 */}
             <Table.Tr>
               <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>2.3</Table.Td>
               <Table.Td style={{ border: '1px solid #dee2e6' }}>经营成本</Table.Td>
@@ -3034,14 +3004,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                      yearInflow = calculateTaxableOperatingRevenue(operationYear) +
-                                calculateSubsidyIncome(operationYear) + 
-                                calculateFixedAssetResidual(operationYear) + 
+                      yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入，与动态计算一致
+                                calculateSubsidyIncome(operationYear) +
+                                calculateFixedAssetResidual(operationYear) +
                                 calculateWorkingCapitalRecovery(operationYear);
-                    yearOutflow = calculateConstructionInvestment(year) + 
-                                calculateWorkingCapital(year) + 
-                                calculateOperatingCost(operationYear) + 
-                                calculateVatAndTaxes(operationYear) + 
+                    yearOutflow = calculateConstructionInvestment(year) +
+                                calculateWorkingCapital(year) +
+                                calculateOperatingCost(operationYear) +
+                                calculateVatAndTaxes(operationYear) +
                                 calculateMaintenanceInvestment(operationYear);
                   }
                   
@@ -3202,14 +3172,14 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                    yearInflow = calculateTaxableOperatingRevenue(operationYear) + 
-                                calculateSubsidyIncome(operationYear) + 
-                                calculateFixedAssetResidual(operationYear) + 
+                    yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入，与动态计算一致
+                                calculateSubsidyIncome(operationYear) +
+                                calculateFixedAssetResidual(operationYear) +
                                 calculateWorkingCapitalRecovery(operationYear);
-                    yearOutflow = calculateConstructionInvestment(year) + 
-                                calculateWorkingCapital(year) + 
-                                calculateOperatingCost(operationYear) + 
-                                calculateVatAndTaxes(operationYear) + 
+                    yearOutflow = calculateConstructionInvestment(year) +
+                                calculateWorkingCapital(year) +
+                                calculateOperatingCost(operationYear) +
+                                calculateVatAndTaxes(operationYear) +
                                 calculateMaintenanceInvestment(operationYear);
                     yearTax = calculateAdjustedIncomeTax(operationYear);
                   }
@@ -3282,7 +3252,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                  const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
                                     calculateSubsidyIncome(operationYear) +
                                     calculateFixedAssetResidual(operationYear) +
                                     calculateWorkingCapitalRecovery(operationYear);
@@ -3367,7 +3337,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                    const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                    const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
                                       calculateSubsidyIncome(operationYear) +
                                       calculateFixedAssetResidual(operationYear) +
                                       calculateWorkingCapitalRecovery(operationYear);
@@ -3458,7 +3428,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 } else {
                   // 运营期
                   const operationYear = year - constructionYears;
-                  const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                  const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
                                     calculateSubsidyIncome(operationYear) +
                                     calculateFixedAssetResidual(operationYear) +
                                     calculateWorkingCapitalRecovery(operationYear);
@@ -3518,7 +3488,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                     } else {
                       // 运营期
                       const operationYear = year - constructionYears;
-                      const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                      const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
                                         calculateSubsidyIncome(operationYear) +
                                         calculateFixedAssetResidual(operationYear) +
                                         calculateWorkingCapitalRecovery(operationYear);
@@ -3568,7 +3538,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   } else {
                     // 运营期
                     const operationYear = year - constructionYears;
-                    const yearInflow = calculateTaxableOperatingRevenue(operationYear) +
+                    const yearInflow = calculateOperatingRevenue(operationYear) + // 修复：使用不含税营业收入
                                       calculateSubsidyIncome(operationYear) +
                                       calculateFixedAssetResidual(operationYear) +
                                       calculateWorkingCapitalRecovery(operationYear);
@@ -4354,6 +4324,8 @@ interface CashFlowTableData {
     totalPreTaxCashFlow: number;
     totalPostTaxCashFlow: number;
     totalAdjustedIncomeTax: number;
+    totalPreTaxCashFlowDynamic: number; // 所得税前净现金流量（动态）合计
+    totalPostTaxCashFlowDynamic: number; // 所得税后净现金流量（动态）合计
   };
 }
 
@@ -4455,9 +4427,8 @@ const generateCashFlowTableData = (
     let adjustedIncomeTax = 0;
     
     if (year > constructionYears) {
-      // 修复：现金流量表中的经营成本应该是不含税的经营成本
-      // 使用 calculateOperatingCost 函数，但需要确保它返回不含税的经营成本
-      operatingCost = calculateOperatingCostWithoutTax(operationYear);
+      // 现金流量表中的经营成本使用总成本费用估算表中的"1 营业成本"数据
+      operatingCost = calculateOperatingCost(operationYear);
       vatAndTaxes = calculateVatAndTaxes(operationYear);
       maintenanceInvestment = calculateMaintenanceInvestment(operationYear);
       adjustedIncomeTax = calculateAdjustedIncomeTax(operationYear);
@@ -4537,7 +4508,9 @@ const generateCashFlowTableData = (
       totalOutflow,
       totalPreTaxCashFlow,
       totalPostTaxCashFlow,
-      totalAdjustedIncomeTax
+      totalAdjustedIncomeTax,
+      totalPreTaxCashFlowDynamic: cumulativePreTaxDynamic, // 所得税前净现金流量（动态）合计
+      totalPostTaxCashFlowDynamic: cumulativePostTaxDynamic // 所得税后净现金流量（动态）合计
     }
   };
 };
@@ -4555,7 +4528,7 @@ const calculateFinancialIndicators = (cashFlowData: CashFlowTableData): Financia
       preTaxStaticPaybackPeriod: 0,
       postTaxStaticPaybackPeriod: 0,
       preTaxDynamicPaybackPeriod: 0,
-      postTaxDynamicPaybackPeriod: 0,
+      postTaxDynamicPaybackPeriod: 0
     };
   }
 
@@ -4567,11 +4540,12 @@ const calculateFinancialIndicators = (cashFlowData: CashFlowTableData): Financia
   const cumulativePreTaxDynamicFlows = yearlyData.map(row => row.cumulativePreTaxCashFlowDynamic);
   const cumulativePostTaxDynamicFlows = yearlyData.map(row => row.cumulativePostTaxCashFlowDynamic);
 
-  // 计算财务指标，确保与Excel导出使用相同的计算逻辑
+  // 计算财务指标
+  // 注意：NPV根据要求直接使用现金流量表中的动态现金流合计值
   const preTaxIRR = safeCalculateIRR(preTaxCashFlows);
   const postTaxIRR = safeCalculateIRR(postTaxCashFlows);
-  const preTaxNPV = safeCalculateNPV(preTaxCashFlows, metadata.preTaxRate);
-  const postTaxNPV = safeCalculateNPV(postTaxCashFlows, metadata.postTaxRate);
+  const preTaxNPV = cashFlowData.totals.totalPreTaxCashFlowDynamic; // 项目投资财务净现值（所得税前）采用"项目投资现金流量表"中"所得税前净现金流量（动态）"的"合计"列的值
+  const postTaxNPV = cashFlowData.totals.totalPostTaxCashFlowDynamic; // 项目投资财务净现值（所得税后）采用"项目投资现金流量表"中"所得税后净现金流量（动态）"的"合计"列的值
   const preTaxStaticPaybackPeriod = safeCalculatePaybackPeriod(cumulativePreTaxFlows);
   const postTaxStaticPaybackPeriod = safeCalculatePaybackPeriod(cumulativePostTaxFlows);
   const preTaxDynamicPaybackPeriod = safeCalculateDynamicPaybackPeriod(cumulativePreTaxDynamicFlows);
