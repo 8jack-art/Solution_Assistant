@@ -760,41 +760,50 @@ const RevenueCostModeling: React.FC = () => {
     const loanAmount = repaymentTableData.find((row: any) => row.序号 === '2.1')?.合计 || 0;
     const totalInterest = repaymentTableData.find((row: any) => row.序号 === '2.2')?.合计 || 0;
     
-    // 提取还款计划数据（去除建设期空数据）
-    console.log('🔍 准备提取还款计划数据，原始表格数据:', repaymentTableData);
+    console.log('🔍 开始提取还款计划数据');
+    console.log('🔍 贷款总额:', loanAmount, '总利息:', totalInterest);
+    console.log('🔍 原始表格数据:', repaymentTableData.map(row => ({
+      序号: row.序号,
+      项目: row.项目,
+      合计: row.合计,
+      分年数据: row.分年数据
+    })));
     
-    const repaymentSchedule = repaymentTableData
-      .filter((row: any) => {
-        console.log(`🔍 处理行 ${row.序号}:`, {
-          运营期: row.运营期,
-          运营期长度: row.运营期?.length,
-          有运营期数据: row.运营期 && row.运营期.length > 0
-        });
-        return row.运营期 && row.运营期.length > 0;
-      })
-      .map((row: any) => {
-        const yearIndex = row.运营期.findIndex((val: number) => val > 0);
-        console.log(`🔍 处理行 ${row.序号} 的年份索引:`, yearIndex);
-        
-        const item = {
-          年份: yearIndex >= 0 ? yearIndex + 1 : 0,
-          期初借款余额: yearIndex >= 0 ? row.运营期[0] : 0,
-          当期还本: row.序号 === '2.1' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
-          当期付息: row.序号 === '2.2' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
-          当期还本付息: row.序号 === '1.2' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
-          期末借款余额: row.序号 === '1.3' && yearIndex >= 0 ? row.运营期.find((val: number) => val > 0) : 0,
+    // 从2号行（当期还本付息）提取每年的数据
+    const mainRow = repaymentTableData.find((row: any) => row.序号 === '2');
+    if (!mainRow || !mainRow.分年数据) {
+      console.log('🔍 未找到主行数据');
+      return null;
+    }
+    
+    // 从2.1行（还本）提取每年还本数据
+    const principalRow = repaymentTableData.find((row: any) => row.序号 === '2.1');
+    
+    // 从2.2行（付息）提取每年付息数据
+    const interestRow = repaymentTableData.find((row: any) => row.序号 === '2.2');
+    
+    // 从1号行（期初借款余额）提取每年期初余额
+    const openingRow = repaymentTableData.find((row: any) => row.序号 === '1');
+    
+    // 从3号行（期末借款余额）提取每年期末余额
+    const closingRow = repaymentTableData.find((row: any) => row.序号 === '3');
+    
+    // 构建还款计划数据
+    const repaymentSchedule = mainRow.分年数据
+      .map((value: any, yearIndex) => {
+        const year = yearIndex + 1;
+        return {
+          年份: year,
+          期初借款余额: openingRow?.分年数据[yearIndex] || 0,
+          当期还本: principalRow?.分年数据[yearIndex] || 0,
+          当期付息: interestRow?.分年数据[yearIndex] || 0,
+          当期还本付息: value || 0,
+          期末借款余额: closingRow?.分年数据[yearIndex] || 0,
         };
-        
-        console.log(`🔍 行 ${row.序号} 的处理结果:`, item);
-        return item;
       })
-      .filter((item: any) => {
-        const isValid = item.期初借款余额 > 0;
-        console.log(`🔍 过滤年份 ${item.年份}, 期初余额 ${item.期初借款余额}:`, isValid);
-        return isValid;
-      }); // 只保留有效年份的数据
+      .filter((item) => item.期初借款余额 > 0); // 只保留有效年份的数据
       
-    console.log('🔍 最终提取的还款计划数据:', repaymentSchedule);
+    console.log('🔍 提取的还款计划数据:', repaymentSchedule);
 
     return {
       基本信息: {
