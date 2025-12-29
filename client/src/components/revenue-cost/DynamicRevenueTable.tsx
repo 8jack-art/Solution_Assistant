@@ -636,7 +636,10 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     const yearFixedAssetInputTax = calculateFixedAssetInputTaxForYear(year);
     
     // 增值税 = 销项税额 - 进项税额 - 进项税额（固定资产待抵扣）
-    return yearOutputTax - yearInputTax - yearFixedAssetInputTax;
+    const vatAmount = yearOutputTax - yearInputTax - yearFixedAssetInputTax;
+    
+    // 确保增值税不为负数（当进项税大于销项税时，增值税为0）
+    return Math.max(0, vatAmount);
   };
 
   /**
@@ -2061,7 +2064,3 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
 }
 
 export default DynamicRevenueTable
-
-
-
-
