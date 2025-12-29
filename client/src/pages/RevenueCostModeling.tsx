@@ -178,6 +178,9 @@ const RevenueCostModeling: React.FC = () => {
             construction_interest: estimateData.construction_interest
           })
           setInvestmentEstimate(estimateData)
+          
+          // 检查并自动保存建设期利息详情
+          await saveConstructionInterestDetailsIfNeeded(estimateData, projectData)
         } else {
           console.warn('⚠️ 投资估算API响应异常:', estimateResponse)
         }
@@ -223,6 +226,122 @@ const RevenueCostModeling: React.FC = () => {
     }
   }, [id, navigate])
 
+  // 检查并自动保存建设期利息详情
+  const saveConstructionInterestDetailsIfNeeded = async (estimateData: any, projectData: any) => {
+    // 检查是否已有建设期利息详情
+    if (estimateData.construction_interest_details) {
+      console.log('✅ 建设期利息详情已存在，跳过保存')
+      return
+    }
+
+    // 检查是否有partF数据（建设期利息数据）
+    if (!estimateData.estimate_data?.partF) {
+      console.log('⚠️ 未找到partF数据，无法生成建设期利息详情')
+      return
+    }
+
+    try {
+      console.log('🔄 开始生成并保存建设期利息详情')
+      
+      // 准备建设期利息详情数据
+      const constructionInterestDetails = prepareConstructionInterestDetails(estimateData.estimate_data, projectData)
+      
+      // 准备保存数据
+      const saveData = {
+        project_id: projectData.id,
+        construction_cost: Number(estimateData.construction_cost) || 0,
+        equipment_cost: Number(estimateData.equipment_cost) || 0,
+        installation_cost: Number(estimateData.installation_cost) || 0,
+        other_cost: Number(estimateData.other_cost) || 0,
+        land_cost: Number(estimateData.land_cost) || 0,
+        basic_reserve_rate: 0.05,
+        price_reserve_rate: 0.03,
+        construction_period: Number(estimateData.construction_period) || 3,
+        loan_rate: Number(projectData.loan_interest_rate) || 0.049,
+        custom_loan_amount: estimateData.custom_loan_amount ? Number(estimateData.custom_loan_amount) : undefined,
+        // 添加建设期利息详情数据
+        construction_interest_details: constructionInterestDetails,
+      }
+
+      console.log('📊 准备保存的建设期利息详情:', constructionInterestDetails)
+      
+      // 调用API保存
+      const response = await investmentApi.save(saveData)
+      
+      if (response.success) {
+        console.log('✅ 建设期利息详情已成功保存到数据库')
+        notifications.show({
+          title: '数据已更新',
+          message: '建设期利息详情已自动保存',
+          color: 'green',
+        })
+        
+        // 更新本地投资估算数据
+        setInvestmentEstimate(prev => prev ? {
+          ...prev,
+          construction_interest_details: constructionInterestDetails
+        } : null)
+      } else {
+        console.error('❌ 保存建设期利息详情失败:', response.error)
+        notifications.show({
+          title: '保存失败',
+          message: response.error || '建设期利息详情保存失败',
+          color: 'red',
+        })
+      }
+    } catch (error: any) {
+      console.error('❌ 保存建设期利息详情时发生错误:', error)
+      notifications.show({
+        title: '保存失败',
+        message: error.response?.data?.error || '建设期利息详情保存失败',
+        color: 'red',
+      })
+    }
+  }
+
+  // 准备建设期利息详情数据
+  const prepareConstructionInterestDetails = (estimateData: any, projectData: any) => {
+    if (!estimateData?.partF?.分年利息) {
+      return null
+    }
+
+    const yearlyInterestData = estimateData.partF.分年利息
+    const constructionYears = projectData.construction_years || 0
+
+    // 计算各年期末借款余额
+    const calculateEndOfYearBalance = (yearIndex: number): number => {
+      let balance = 0
+      for (let i = 0; i <= yearIndex; i++) {
+        if (yearlyInterestData[i]) {
+          balance += yearlyInterestData[i].当期借款金额 || 0
+        }
+      }
+      return balance
+    }
+
+    // 准备JSON数据结构
+    return {
+      基本信息: {
+        贷款总额: estimateData.partF.贷款总额 || 0,
+        年利率: estimateData.partF.年利率 || projectData.loan_interest_rate || 0,
+        建设期年限: constructionYears,
+        贷款期限: estimateData.partF.贷款期限 || 0
+      },
+      分年数据: yearlyInterestData.map((data: any, index: number) => ({
+        年份: index + 1,
+        期初借款余额: index === 0 ? 0 : calculateEndOfYearBalance(index - 1),
+        当期借款金额: data?.当期借款金额 || 0,
+        当期利息: data?.当期利息 || 0,
+        期末借款余额: calculateEndOfYearBalance(index)
+      })),
+      汇总信息: {
+        总借款金额: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期借款金额 || 0), 0),
+        总利息: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期利息 || 0), 0),
+        期末借款余额: calculateEndOfYearBalance(yearlyInterestData.length - 1)
+      }
+    }
+  }
+
   // 计算原值和待抵扣进销项税
   useEffect(() => {
     if (!project) return
@@ -252,7 +371,7 @@ const RevenueCostModeling: React.FC = () => {
     }
     
     // 获取第二部分工程其它费用总和和土地费用
-    let partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
+    const partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
     let landCost = 0
     if (investmentEstimate.estimate_data?.partB?.children) {
       const landItem = investmentEstimate.estimate_data.partB.children.find(
