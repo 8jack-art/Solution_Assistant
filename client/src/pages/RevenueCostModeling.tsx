@@ -180,7 +180,7 @@ const RevenueCostModeling: React.FC = () => {
           setInvestmentEstimate(estimateData)
           
           // 检查并自动保存建设期利息详情
-          await saveConstructionInterestDetailsIfNeeded(estimateData, projectData)
+          await saveConstructionInterestDetailsIfNeeded(estimateData, project)
         } else {
           console.warn('⚠️ 投资估算API响应异常:', estimateResponse)
         }
@@ -227,7 +227,7 @@ const RevenueCostModeling: React.FC = () => {
   }, [id, navigate])
 
   // 检查并自动保存建设期利息详情
-  const saveConstructionInterestDetailsIfNeeded = async (estimateData: any, projectData: any) => {
+  const saveConstructionInterestDetailsIfNeeded = async (estimateData: any, project: any) => {
     // 检查是否已有建设期利息详情
     if (estimateData.construction_interest_details) {
       console.log('✅ 建设期利息详情已存在，跳过保存')
@@ -244,11 +244,11 @@ const RevenueCostModeling: React.FC = () => {
       console.log('🔄 开始生成并保存建设期利息详情')
       
       // 准备建设期利息详情数据
-      const constructionInterestDetails = prepareConstructionInterestDetails(estimateData.estimate_data, projectData)
+      const constructionInterestDetails = prepareConstructionInterestDetails(estimateData.estimate_data, project)
       
       // 准备保存数据
       const saveData = {
-        project_id: projectData.id,
+        project_id: project.id,
         construction_cost: Number(estimateData.construction_cost) || 0,
         equipment_cost: Number(estimateData.equipment_cost) || 0,
         installation_cost: Number(estimateData.installation_cost) || 0,
@@ -257,7 +257,7 @@ const RevenueCostModeling: React.FC = () => {
         basic_reserve_rate: 0.05,
         price_reserve_rate: 0.03,
         construction_period: Number(estimateData.construction_period) || 3,
-        loan_rate: Number(projectData.loan_interest_rate) || 0.049,
+        loan_rate: Number(project.loan_interest_rate) || 0.049,
         custom_loan_amount: estimateData.custom_loan_amount ? Number(estimateData.custom_loan_amount) : undefined,
         // 添加建设期利息详情数据
         construction_interest_details: constructionInterestDetails,
@@ -300,13 +300,13 @@ const RevenueCostModeling: React.FC = () => {
   }
 
   // 准备建设期利息详情数据
-  const prepareConstructionInterestDetails = (estimateData: any, projectData: any) => {
+  const prepareConstructionInterestDetails = (estimateData: any, project: any) => {
     if (!estimateData?.partF?.分年利息) {
       return null
     }
 
     const yearlyInterestData = estimateData.partF.分年利息
-    const constructionYears = projectData.construction_years || 0
+    const constructionYears = project.construction_years || 0
 
     // 计算各年期末借款余额
     const calculateEndOfYearBalance = (yearIndex: number): number => {
@@ -323,7 +323,7 @@ const RevenueCostModeling: React.FC = () => {
     return {
       基本信息: {
         贷款总额: estimateData.partF.贷款总额 || 0,
-        年利率: estimateData.partF.年利率 || projectData.loan_interest_rate || 0,
+        年利率: estimateData.partF.年利率 || project.loan_interest_rate || 0,
         建设期年限: constructionYears,
         贷款期限: estimateData.partF.贷款期限 || 0
       },
