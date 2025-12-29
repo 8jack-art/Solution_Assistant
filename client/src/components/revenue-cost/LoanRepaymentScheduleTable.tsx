@@ -375,6 +375,19 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
       return constructionTotal + operationTotal;
     };
 
+    // 计算需要的合计值
+    const ebitTotal = calculateRowTotal(constructionPeriod, ebit);
+    const interestTotal = calculateRowTotal(constructionPeriod, interestAndGuaranteeFee);
+    const interestCoverageRatioTotal = interestTotal > 0 ? ebitTotal / interestTotal : 0;
+    
+    // 计算偿债备付率需要的合计值
+    const otherInterestFundsTotal = calculateRowTotal(otherInterestFundsConstruction, otherInterestFunds);
+    const ebitdaTotal = calculateRowTotal(constructionPeriod, ebitda);
+    const incomeTaxTotal = calculateRowTotal(constructionPeriod, incomeTax);
+    const repaymentTotal = calculateRowTotal(constructionRepayment, yearlyPayment);
+    const debtServiceCoverageRatioTotal = repaymentTotal > 0 ? 
+      (otherInterestFundsTotal + ebitdaTotal - incomeTaxTotal) / repaymentTotal : 0;
+
     // 构建表格数据
     // 确保"1 借款还本付息计划"行的运营期数据正确填充
     // 从数据库读取的运营期数据应该填充到该行的运营期列
@@ -419,7 +432,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '',
           项目: '其中：还本',
-          合计: calculateRowTotal(constructionPrincipalRepayment, yearlyPrincipal),
+          合计: Math.round(calculateRowTotal(constructionPrincipalRepayment, yearlyPrincipal)),
           建设期: constructionPrincipalRepayment,
           运营期: yearlyPrincipal
         },
@@ -503,10 +516,10 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
           建设期: constructionPeriod,
           运营期: incomeTax
         },
-        // 3.3 还利息及担保费
+        // 3.3 还利息
         {
           序号: '3.3',
-          项目: '还利息及担保费',
+          项目: '还利息',
           合计: calculateRowTotal(constructionPeriod, interestAndGuaranteeFee),
           建设期: constructionPeriod,
           运营期: interestAndGuaranteeFee
@@ -515,7 +528,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '3.4',
           项目: '还本金',
-          合计: calculateRowTotal(constructionPeriod, principalRepayment),
+          合计: Math.round(calculateRowTotal(constructionPeriod, principalRepayment)),
           建设期: constructionPeriod,
           运营期: principalRepayment
         },
@@ -523,7 +536,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '3.5',
           项目: '利息备付率',
-          合计: null,
+          合计: interestCoverageRatioTotal,
           建设期: constructionPeriod,
           运营期: interestCoverageRatio
         },
@@ -531,7 +544,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '3.6',
           项目: '偿债备付率',
-          合计: null,
+          合计: debtServiceCoverageRatioTotal,
           建设期: constructionPeriod,
           运营期: debtServiceCoverageRatio
         }
@@ -616,50 +629,125 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     const operationYears = context.operationYears;
     const totalYears = constructionYears + operationYears;
 
-    // 准备Excel数据
-    const excelData: any[] = [];
-    
-    // 添加表头
-    const headerRow: any = { '序号': '', '项目': '', '合计': '' };
-    for (let i = 1; i <= constructionYears; i++) {
-      headerRow[`建设期${i}`] = '';
-    }
-    for (let i = 1; i <= operationYears; i++) {
-      headerRow[`运营期${i}`] = '';
-    }
-    excelData.push(headerRow);
-    
-    // 第二行表头
-    const headerRow2: any = { '序号': '', '项目': '', '合计': '' };
+    // 创建工作簿和工作表
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([]);
+
+    // 设置列宽
+    const colWidths = [
+      { wch: 8 },   // 序号
+      { wch: 25 },  // 项目
+      { wch: 15 },  // 合计
+      ...Array(totalYears).fill({ wch: 12 }) // 各年份
+    ];
+    ws['!cols'] = colWidths;
+
+    // 第一行表头
+    const header1 = [
+      '序号',
+      '项目',
+      '合计',
+      ...Array(constructionYears).fill('建设期'),
+      ...Array(operationYears).fill('运营期')
+    ];
+    XLSX.utils.sheet_add_aoa(ws, [header1], { origin: 'A1' });
+
+    // 第二行表头（年份）
+    const header2 = ['', '', ''];
     for (let i = 1; i <= totalYears; i++) {
-      headerRow2[`${i}`] = i;
+      header2.push(i.toString());
     }
-    excelData.push(headerRow2);
+    XLSX.utils.sheet_add_aoa(ws, [header2], { origin: 'A2' });
+
+    // 合并表头单元格
+    // 合并"建设期"和"运营期"的跨列单元格
+    if (constructionYears > 0) {
+      ws['!merges'] = ws['!merges'] || [];
+      ws['!merges'].push({ s: { r: 0, c: 3 }, e: { r: 0, c: 3 + constructionYears - 1 } }); // 建设期
+    }
+    if (operationYears > 0) {
+      ws['!merges'] = ws['!merges'] || [];
+      ws['!merges'].push({ s: { r: 0, c: 3 + constructionYears }, e: { r: 0, c: 3 + constructionYears + operationYears - 1 } }); // 运营期
+    }
 
     // 添加数据行
+    let currentRow = 3; // 从第3行开始
     calculateLoanRepaymentData.rows.forEach((row) => {
-      const dataRow: any = { 
-        '序号': row.序号, 
-        '项目': row.项目,
-        '合计': row.合计 || ''
-      };
+      const isCategoryRow = /^\d+$/.test(row.序号) && row.序号 !== '';
       
-      // 添加建设期数据
-      row.建设期.forEach((value, index) => {
-        dataRow[`建设期${index + 1}`] = formatNumberWithZeroBlank(value);
-      });
+      const dataRow = [
+        row.序号,
+        row.项目,
+        row.合计 !== null ? row.合计 : '', // 直接使用原始数值，不格式化
+        ...row.建设期.map(value => value === 0 ? '' : value), // 直接使用原始数值，只对0显示空白
+        ...row.运营期.map(value => value === 0 ? '' : value) // 直接使用原始数值，只对0显示空白
+      ];
       
-      // 添加运营期数据
-      row.运营期.forEach((value, index) => {
-        dataRow[`运营期${index + 1}`] = formatNumberWithZeroBlank(value);
-      });
+      XLSX.utils.sheet_add_aoa(ws, [dataRow], { origin: `A${currentRow}` });
       
-      excelData.push(dataRow);
+      // 设置分类标题行的样式（加粗）
+      if (isCategoryRow) {
+        for (let col = 0; col < dataRow.length; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: currentRow - 1, c: col });
+          if (!ws[cellAddress]) continue;
+          
+          ws[cellAddress].s = {
+            font: { bold: true },
+            alignment: { vertical: 'center', horizontal: 'center' }
+          };
+        }
+      }
+      
+      // 设置数字列的对齐方式（居中）
+      for (let col = 0; col < dataRow.length; col++) {
+        if (col === 0 || col === 2 || col >= 3) { // 序号、合计、各年份列
+          const cellAddress = XLSX.utils.encode_cell({ r: currentRow - 1, c: col });
+          if (!ws[cellAddress]) continue;
+          
+          if (!ws[cellAddress].s) {
+            ws[cellAddress].s = {};
+          }
+          ws[cellAddress].s.alignment = { vertical: 'center', horizontal: 'center' };
+        }
+      }
+      
+      currentRow++;
     });
 
-    // 创建工作簿和工作表
-    const ws = XLSX.utils.json_to_sheet(excelData);
-    const wb = XLSX.utils.book_new();
+    // 设置表头样式
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 3 + totalYears; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellAddress]) continue;
+        
+        ws[cellAddress].s = {
+          font: { bold: true },
+          alignment: { vertical: 'center', horizontal: 'center' },
+          fill: { fgColor: { rgb: 'F7F8FA' } }
+        };
+      }
+    }
+
+    // 添加边框样式
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellAddress]) continue;
+        
+        if (!ws[cellAddress].s) {
+          ws[cellAddress].s = {};
+        }
+        ws[cellAddress].s.border = {
+          top: { style: 'thin', color: { auto: 1 } },
+          bottom: { style: 'thin', color: { auto: 1 } },
+          left: { style: 'thin', color: { auto: 1 } },
+          right: { style: 'thin', color: { auto: 1 } }
+        };
+      }
+    }
+
+    // 添加工作表到工作簿
     XLSX.utils.book_append_sheet(wb, ws, '借款还本付息计划表');
 
     // 导出文件
