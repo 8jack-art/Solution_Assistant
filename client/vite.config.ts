@@ -26,4 +26,11 @@ export default defineConfig({
     // 排除stream模块以避免外部化警告
     exclude: ['stream'],
   },
+  define: {
+    // 抑制React Router Future Flag警告
+    'process.env.REACT_ROUTER_FUTURE_FLAGS': JSON.stringify({
+      v7_startTransition: true,
+      v7_relativeSplatPath: true
+    })
+  }
 })

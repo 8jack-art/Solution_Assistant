@@ -62,9 +62,16 @@ const TEMPLATE_LABELS: Record<FieldTemplate, string> = {
  */
 interface DynamicRevenueTableProps {
   deductibleInputTax?: number; // 从基础数据确认中获取的待抵扣进项税
+  depreciationData?: Array<{
+    序号: string
+    资产类别: string
+    原值: number
+    年折旧摊销额: number
+    分年数据: number[]
+  }>;
 }
 
-const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInputTax = 0 }) => {
+const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInputTax = 0, depreciationData = [] }) => {
   const {
     context,
     aiAnalysisResult,
@@ -2053,6 +2060,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                       )
                     })}
                   </Table.Tr>
+                  
                 </Table.Tbody>
               </Table>
             </>

@@ -7,46 +7,218 @@ const API_BASE_URL = '/api'
 
 // 数据缓存管理器
 class DataCacheManager {
-  private cache = new Map<string, { data: any; timestamp: number; ttl: number }>()
+  private cache = new Map<string, { data: any; timestamp: number; ttl: number; version: string }>()
+  private cacheVersion = Date.now().toString()
   
-  set(key: string, data: any, ttl: number = 300000) { // 默认5分钟TTL
-    this.cache.set(key, {
+  constructor() {
+    // 从localStorage恢复缓存
+    this.restoreFromLocalStorage()
+  }
+  
+  // 生成更精确的缓存键
+  private generateCacheKey(projectId: string, dataType: string = 'estimate'): string {
+    return `investment:${dataType}:${projectId}:${this.cacheVersion}`
+  }
+  
+  set(key: string, data: any, ttl: number = 1800000) { // 默认30分钟TTL
+    const cacheItem = {
       data,
       timestamp: Date.now(),
-      ttl
-    })
+      ttl,
+      version: this.cacheVersion
+    }
+    
+    this.cache.set(key, cacheItem)
+    
+    // 保存到localStorage（仅保存投资估算相关数据）
+    if (key.startsWith('investment:')) {
+      try {
+        localStorage.setItem(`cache_${key}`, JSON.stringify(cacheItem))
+        console.log(`[缓存] 已保存到localStorage: ${key}, 版本: ${this.cacheVersion}`)
+      } catch (e) {
+        console.warn('无法保存缓存到localStorage:', e)
+      }
+    }
   }
   
   get(key: string): any | null {
+    // 先从内存缓存获取
     const item = this.cache.get(key)
     
-    if (!item) {
-      return null
+    if (item) {
+      // 检查是否过期
+      if (Date.now() - item.timestamp > item.ttl) {
+        this.cache.delete(key)
+        // 也从localStorage删除
+        this.removeFromLocalStorage(key)
+        console.log(`[缓存] 内存缓存已过期: ${key}`)
+        return null
+      }
+      return item.data
     }
     
-    // 检查是否过期
-    if (Date.now() - item.timestamp > item.ttl) {
-      this.cache.delete(key)
-      return null
+    // 如果内存中没有，尝试从localStorage恢复
+    if (key.startsWith('investment:')) {
+      return this.getFromLocalStorage(key)
     }
     
-    return item.data
+    return null
+  }
+  
+  private getFromLocalStorage(key: string): any | null {
+    try {
+      const stored = localStorage.getItem(`cache_${key}`)
+      if (!stored) {
+        console.log(`[缓存] localStorage中未找到: ${key}`)
+        return null
+      }
+      
+      const cacheItem = JSON.parse(stored)
+      
+      // 检查是否过期
+      if (Date.now() - cacheItem.timestamp > cacheItem.ttl) {
+        localStorage.removeItem(`cache_${key}`)
+        console.log(`[缓存] localStorage缓存已过期: ${key}`)
+        return null
+      }
+      
+      // 恢复到内存缓存
+      this.cache.set(key, cacheItem)
+      console.log(`[缓存] 从localStorage恢复: ${key}, 版本: ${cacheItem.version}`)
+      return cacheItem.data
+    } catch (e) {
+      console.warn('无法从localStorage恢复缓存:', e)
+      return null
+    }
+  }
+  
+  private restoreFromLocalStorage() {
+    try {
+      // 恢复所有投资估算相关的缓存
+      let restoredCount = 0
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('cache_investment:')) {
+          const cacheKey = key.replace('cache_', '')
+          const data = this.getFromLocalStorage(cacheKey)
+          if (data) {
+            restoredCount++
+          }
+        }
+      }
+      console.log(`[缓存] 从localStorage恢复了${restoredCount}个缓存项`)
+    } catch (e) {
+      console.warn('无法从localStorage恢复缓存:', e)
+    }
+  }
+  
+  private removeFromLocalStorage(key: string) {
+    try {
+      localStorage.removeItem(`cache_${key}`)
+    } catch (e) {
+      console.warn('无法从localStorage删除缓存:', e)
+    }
   }
   
   invalidate(pattern: string | RegExp) {
     if (typeof pattern === 'string') {
       this.cache.delete(pattern)
+      this.removeFromLocalStorage(pattern)
+      console.log(`[缓存] 已失效缓存: ${pattern}`)
     } else {
+      let invalidatedCount = 0
       for (const key of this.cache.keys()) {
         if (pattern.test(key)) {
           this.cache.delete(key)
+          this.removeFromLocalStorage(key)
+          invalidatedCount++
         }
       }
+      console.log(`[缓存] 已失效${invalidatedCount}个匹配的缓存项`)
+    }
+  }
+  
+  // 失效特定项目的所有缓存
+  invalidateProject(projectId: string) {
+    const pattern = new RegExp(`^investment:.*:${projectId}:`)
+    this.invalidate(pattern)
+  }
+  
+  // 清理过期缓存
+  cleanupExpired() {
+    const now = Date.now()
+    let cleanedCount = 0
+    
+    // 清理内存缓存
+    for (const [key, item] of this.cache.entries()) {
+      if (now - item.timestamp > item.ttl) {
+        this.cache.delete(key)
+        this.removeFromLocalStorage(key)
+        cleanedCount++
+      }
+    }
+    
+    // 清理localStorage缓存
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('cache_investment:')) {
+        try {
+          const cacheItem = JSON.parse(localStorage.getItem(key) || '{}')
+          if (now - cacheItem.timestamp > cacheItem.ttl) {
+            localStorage.removeItem(key)
+            cleanedCount++
+          }
+        } catch (e) {
+          // 清理损坏的缓存项
+          localStorage.removeItem(key)
+          cleanedCount++
+        }
+      }
+    }
+    
+    if (cleanedCount > 0) {
+      console.log(`[缓存] 清理了${cleanedCount}个过期缓存项`)
     }
   }
   
   clear() {
+    // 清除所有投资估算相关的localStorage缓存
+    let clearedCount = 0
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('cache_investment:')) {
+        localStorage.removeItem(key)
+        clearedCount++
+      }
+    }
     this.cache.clear()
+    console.log(`[缓存] 已清除所有缓存，包括${clearedCount}个localStorage项`)
+  }
+  
+  // 获取缓存状态信息（用于调试）
+  getCacheInfo(): { memory: number; localStorage: number; details: any[] } {
+    const memoryItems = Array.from(this.cache.entries()).map(([key, item]) => ({
+      key,
+      timestamp: item.timestamp,
+      ttl: item.ttl,
+      version: item.version,
+      expired: Date.now() - item.timestamp > item.ttl,
+      remainingTTL: Math.max(0, item.ttl - (Date.now() - item.timestamp))
+    }))
+    
+    let localStorageCount = 0
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('cache_investment:')) {
+        localStorageCount++
+      }
+    }
+    
+    return {
+      memory: this.cache.size,
+      localStorage: localStorageCount,
+      details: memoryItems
+    }
   }
 }
 
@@ -213,6 +385,7 @@ export const investmentApi = {
     if (options?.useCache !== false) {
       const cachedData = dataCache.get(cacheKey)
       if (cachedData) {
+        console.log(`[API] 使用缓存数据: ${cacheKey}`)
         return Promise.resolve(cachedData)
       }
     }
@@ -227,6 +400,7 @@ export const investmentApi = {
       // 缓存结果
       if (options?.useCache !== false && response.success) {
         dataCache.set(cacheKey, response)
+        console.log(`[API] 已缓存数据: ${cacheKey}`)
       }
       
       return response

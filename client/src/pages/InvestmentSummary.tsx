@@ -920,16 +920,21 @@ const InvestmentSummary: React.FC = () => {
     abortControllerRef.current = new AbortController()
     
     setLoading(true)
+    console.log(`[数据加载] 开始加载项目${id}的投资估算数据`)
+    
     try {
       // 加载项目信息
       const projectResponse = await projectApi.getById(id!)
       if (projectResponse.success && projectResponse.data?.project) {
         const projectData = projectResponse.data.project
         setProject(projectData)
+        console.log(`[数据加载] 项目信息加载成功:`, projectData.project_name)
         
         // 先检查是否已有投资估算（无论是否autoGenerateRequested，都需要先加载已有数据）
+        console.log(`[数据加载] 开始加载投资估算数据...`)
         const estimateResponse = await investmentApi.getByProjectId(id!, {
-          signal: abortControllerRef.current.signal
+          signal: abortControllerRef.current.signal,
+          useCache: true // 明确启用缓存
         })
         let existingThirdLevelItems: Record<number, any[]> = {}
         
@@ -937,16 +942,33 @@ const InvestmentSummary: React.FC = () => {
           // 使用estimate_data字段作为详细数据
           const estimateData = estimateResponse.data.estimate.estimate_data
           
+          // 数据完整性检查
+          if (!estimateData || !estimateData.partA || !estimateData.partG) {
+            console.warn('[数据加载] 投资估算数据不完整:', estimateData)
+            throw new Error('投资估算数据不完整')
+          }
+          
+          console.log(`[数据加载] 投资估算数据加载成功，迭代次数: ${estimateData.iterationCount || '未知'}`)
+          
           // 恢复三级子项数据（如果存在）- 先保存到局部变量
           if (estimateData.thirdLevelItems) {
             existingThirdLevelItems = estimateData.thirdLevelItems
             setThirdLevelItems(existingThirdLevelItems)
-            console.log('已恢复三级子项数据:', existingThirdLevelItems)
+            console.log(`[数据加载] 已恢复${Object.keys(existingThirdLevelItems).length}个三级子项数据`)
           }
           
-          // 如果需要自动生成，则重新生成（但保留三级子项）
-          if (autoGenerateRequested && !autoGenerateHandled) {
+          // 检查是否需要自动生成（修复逻辑：只有确实没有数据时才自动生成）
+          const shouldAutoGenerate = autoGenerateRequested &&
+                                !autoGenerateHandled &&
+                                (!estimateData ||
+                                 !estimateData.partA ||
+                                 !estimateData.partG ||
+                                 !estimateData.partA.children ||
+                                 estimateData.partA.children.length === 0)
+          
+          if (shouldAutoGenerate) {
             setAutoGenerateHandled(true)
+            console.log(`[数据加载] 确实没有估算数据，开始自动生成投资估算（保留三级子项）`)
             // 直接在这里实现生成逻辑（保留三级子项）
             setGenerating(true)
             try {
@@ -957,7 +979,7 @@ const InvestmentSummary: React.FC = () => {
                 installation_cost: item.安装工程费 || 0,
                 other_cost: item.其它费用 || 0,
                 remark: item.备注 || ''
-              }))
+              })) || []
               
               const landCostFromProject = projectData.land_cost ?? 0
               const response = await investmentApi.generateSummary(id!, tableItems, undefined, landCostFromProject)
@@ -975,21 +997,33 @@ const InvestmentSummary: React.FC = () => {
                   project_id: id!,
                   estimate_data: estimateWithThirdLevel
                 })
+                console.log(`[数据加载] 自动生成完成，已保存三级子项`)
               }
             } catch (e: any) {
               // 忽略被取消的请求
               if (e.name !== 'AbortError') {
-                console.error('生成估算失败:', e)
+                console.error('[数据加载] 生成估算失败:', e)
+                notifications.show({
+                  title: '❌ 生成失败',
+                  message: '自动生成投资估算失败，请稍后重试',
+                  color: 'red',
+                  autoClose: 6000,
+                })
               }
             } finally {
               setGenerating(false)
             }
             return
+          } else if (autoGenerateRequested && !autoGenerateHandled) {
+            console.log(`[数据加载] 已有完整估算数据，跳过自动生成`)
+            setAutoGenerateHandled(true)
           }
           
           // 使用 setTimeout 确保状态更新触发渲染
           setTimeout(() => setEstimate(estimateData), 0)
+          console.log(`[数据加载] 投资估算数据已设置到组件状态`)
         } else {
+          console.log(`[数据加载] 未找到投资估算数据，${autoGenerateRequested ? '将自动生成' : '显示空状态'}`)
           // 没有估算，自动生成（传递项目数据）
           if (autoGenerateRequested && !autoGenerateHandled) {
             setAutoGenerateHandled(true)
@@ -997,9 +1031,11 @@ const InvestmentSummary: React.FC = () => {
           await generateEstimate(false, projectData)
         }
       } else {
+        const errorMsg = projectResponse.error || '加载项目失败'
+        console.error(`[数据加载] 项目信息加载失败:`, errorMsg)
         notifications.show({
           title: '❌ 加载失败',
-          message: projectResponse.error || '加载项目失败',
+          message: errorMsg,
           color: 'red',
           autoClose: 6000,
         })
@@ -1007,15 +1043,41 @@ const InvestmentSummary: React.FC = () => {
     } catch (error: any) {
       // 忽略被取消的请求
       if (error.name !== 'AbortError') {
-        notifications.show({
-          title: '❌ 加载失败',
-          message: error.response?.data?.error || '加载项目失败',
-          color: 'red',
-          autoClose: 6000,
-        })
+        const errorMsg = error.response?.data?.error || error.message || '加载项目失败'
+        console.error(`[数据加载] 数据加载异常:`, error)
+        
+        // 尝试从缓存恢复数据（降级策略）
+        const cacheKey = `investment:${id}`
+        const cachedData = (window as any).dataCache?.get?.(cacheKey)
+        
+        if (cachedData) {
+          console.log(`[数据加载] 从缓存恢复数据成功`)
+          notifications.show({
+            title: '⚠️ 使用缓存数据',
+            message: '网络异常，已从缓存恢复数据',
+            color: 'orange',
+            autoClose: 4000,
+          })
+          
+          if (cachedData.success && cachedData.data?.estimate) {
+            const estimateData = cachedData.data.estimate.estimate_data
+            if (estimateData.thirdLevelItems) {
+              setThirdLevelItems(estimateData.thirdLevelItems)
+            }
+            setTimeout(() => setEstimate(estimateData), 0)
+          }
+        } else {
+          notifications.show({
+            title: '❌ 加载失败',
+            message: errorMsg,
+            color: 'red',
+            autoClose: 6000,
+          })
+        }
       }
     } finally {
       setLoading(false)
+      console.log(`[数据加载] 数据加载流程完成`)
     }
   }
 
