@@ -2,40 +2,179 @@ import { pool } from '../db/config.js';
 import { randomUUID } from 'crypto';
 export class InvestmentEstimateModel {
     static async findById(id) {
-        try {
-            const [rows] = await pool.execute('SELECT * FROM investment_estimates WHERE id = ?', [id]);
-            if (rows.length > 0) {
-                const row = rows[0];
-                // 解析JSON字段
-                if (row.estimate_data && typeof row.estimate_data === 'string') {
-                    row.estimate_data = JSON.parse(row.estimate_data);
+        if (!id) {
+            console.warn('[InvestmentEstimate] 无效的ID:', id);
+            return null;
+        }
+        let retryCount = 0;
+        const maxRetries = 2;
+        while (retryCount <= maxRetries) {
+            try {
+                console.log(`[InvestmentEstimate] 查询ID${id}投资估算数据 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+                const [rows] = await pool.execute({
+                    sql: 'SELECT * FROM investment_estimates WHERE id = ?',
+                    values: [id],
+                    timeout: 30000 // 30秒超时
+                });
+                if (rows.length === 0) {
+                    console.log(`[InvestmentEstimate] 未找到ID为${id}的投资估算数据`);
+                    return null;
                 }
+                const row = rows[0];
+                console.log(`[InvestmentEstimate] 找到ID${id}的投资估算数据，开始解析JSON字段`);
+                // 安全解析JSON字段，添加错误处理
+                try {
+                    if (row.estimate_data && typeof row.estimate_data === 'string') {
+                        row.estimate_data = JSON.parse(row.estimate_data);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析estimate_data JSON失败，ID${id}:`, jsonError);
+                    // 返回基本结构，避免完全失败
+                    row.estimate_data = {
+                        id: id,
+                        parseError: true,
+                        rawData: row.estimate_data
+                    };
+                }
+                try {
+                    if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
+                        row.construction_interest_details = JSON.parse(row.construction_interest_details);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析construction_interest_details JSON失败，ID${id}:`, jsonError);
+                    row.construction_interest_details = null;
+                }
+                try {
+                    if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
+                        row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析loan_repayment_schedule_simple JSON失败，ID${id}:`, jsonError);
+                    row.loan_repayment_schedule_simple = null;
+                }
+                try {
+                    if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
+                        row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析loan_repayment_schedule_detailed JSON失败，ID${id}:`, jsonError);
+                    row.loan_repayment_schedule_detailed = null;
+                }
+                console.log(`[InvestmentEstimate] 成功加载ID为${id}的投资估算数据`);
                 return row;
             }
-            return null;
+            catch (error) {
+                retryCount++;
+                console.error(`[InvestmentEstimate] 查询失败 (尝试 ${retryCount}/${maxRetries + 1})，ID${id}:`, error);
+                // 如果是超时错误，记录详细信息
+                if (error.code === 'ETIMEDOUT' || error.code === 'QUERY_TIMEOUT' || error.message === '查询超时') {
+                    console.error(`[InvestmentEstimate] 数据库查询超时，ID: ${id}，尝试: ${retryCount}`);
+                }
+                if (retryCount <= maxRetries) {
+                    // 指数退避重试
+                    const delay = 1000 * Math.pow(2, retryCount - 1);
+                    console.log(`[InvestmentEstimate] ${delay}ms后重试查询ID${id}`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                // 最后一次重试失败，返回null而不是抛出错误
+                console.error(`[InvestmentEstimate] 查询ID${id}投资估算最终失败，已重试${maxRetries}次`);
+                return null;
+            }
         }
-        catch (error) {
-            console.error('查找投资估算失败:', error);
-            return null;
-        }
+        return null;
     }
     static async findByProjectId(projectId) {
-        try {
-            const [rows] = await pool.execute('SELECT * FROM investment_estimates WHERE project_id = ?', [projectId]);
-            if (rows.length > 0) {
-                const row = rows[0];
-                // 解析JSON字段
-                if (row.estimate_data && typeof row.estimate_data === 'string') {
-                    row.estimate_data = JSON.parse(row.estimate_data);
+        if (!projectId) {
+            console.warn('[InvestmentEstimate] 项目ID为空');
+            return null;
+        }
+        let retryCount = 0;
+        const maxRetries = 2;
+        while (retryCount <= maxRetries) {
+            try {
+                console.log(`[InvestmentEstimate] 查询项目${projectId}投资估算数据 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+                // 添加查询超时设置（30秒）
+                const [rows] = await pool.execute({
+                    sql: 'SELECT * FROM investment_estimates WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1',
+                    values: [projectId],
+                    timeout: 30000 // 30秒超时
+                });
+                if (rows.length === 0) {
+                    console.log(`[InvestmentEstimate] 未找到项目${projectId}的投资估算数据`);
+                    return null;
                 }
+                const row = rows[0];
+                console.log(`[InvestmentEstimate] 找到项目${projectId}的投资估算数据，开始解析JSON字段`);
+                // 安全解析JSON字段，添加错误处理
+                try {
+                    if (row.estimate_data && typeof row.estimate_data === 'string') {
+                        row.estimate_data = JSON.parse(row.estimate_data);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析estimate_data JSON失败，项目${projectId}:`, jsonError);
+                    // 返回基本结构，避免完全失败
+                    row.estimate_data = {
+                        projectId: projectId,
+                        parseError: true,
+                        rawData: row.estimate_data
+                    };
+                }
+                try {
+                    if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
+                        row.construction_interest_details = JSON.parse(row.construction_interest_details);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析construction_interest_details JSON失败，项目${projectId}:`, jsonError);
+                    row.construction_interest_details = null;
+                }
+                try {
+                    if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
+                        row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析loan_repayment_schedule_simple JSON失败，项目${projectId}:`, jsonError);
+                    row.loan_repayment_schedule_simple = null;
+                }
+                try {
+                    if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
+                        row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed);
+                    }
+                }
+                catch (jsonError) {
+                    console.error(`[InvestmentEstimate] 解析loan_repayment_schedule_detailed JSON失败，项目${projectId}:`, jsonError);
+                    row.loan_repayment_schedule_detailed = null;
+                }
+                console.log(`[InvestmentEstimate] 成功加载项目${projectId}的投资估算数据`);
                 return row;
             }
-            return null;
+            catch (error) {
+                retryCount++;
+                console.error(`[InvestmentEstimate] 查询失败 (尝试 ${retryCount}/${maxRetries + 1})，项目${projectId}:`, error);
+                // 如果是超时错误，记录详细信息
+                if (error.code === 'ETIMEDOUT' || error.code === 'QUERY_TIMEOUT' || error.message === '查询超时') {
+                    console.error(`[InvestmentEstimate] 数据库查询超时，项目ID: ${projectId}，尝试: ${retryCount}`);
+                }
+                if (retryCount <= maxRetries) {
+                    // 指数退避重试
+                    const delay = 1000 * Math.pow(2, retryCount - 1);
+                    console.log(`[InvestmentEstimate] ${delay}ms后重试查询项目${projectId}`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                // 最后一次重试失败，返回null而不是抛出错误
+                console.error(`[InvestmentEstimate] 查询项目${projectId}投资估算最终失败，已重试${maxRetries}次`);
+                return null;
+            }
         }
-        catch (error) {
-            console.error('查找项目投资估算失败:', error);
-            return null;
-        }
+        return null;
     }
     static async create(estimateData) {
         try {
@@ -46,8 +185,9 @@ export class InvestmentEstimateModel {
           construction_interest, gap_rate, construction_cost, equipment_cost, 
           installation_cost, other_cost, land_cost, basic_reserve, price_reserve, 
           construction_period, iteration_count, final_total, loan_amount, loan_rate, 
-          custom_loan_amount, custom_land_cost) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+          custom_loan_amount, custom_land_cost, construction_interest_details, 
+          loan_repayment_schedule_simple, loan_repayment_schedule_detailed) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
                 id,
                 estimateData.project_id,
                 estimateData.estimate_data ? JSON.stringify(estimateData.estimate_data) : null,
@@ -68,7 +208,10 @@ export class InvestmentEstimateModel {
                 estimateData.loan_amount || 0,
                 estimateData.loan_rate || 0.049,
                 estimateData.custom_loan_amount || null,
-                estimateData.custom_land_cost || null
+                estimateData.custom_land_cost || null,
+                estimateData.construction_interest_details ? JSON.stringify(estimateData.construction_interest_details) : null,
+                estimateData.loan_repayment_schedule_simple ? JSON.stringify(estimateData.loan_repayment_schedule_simple) : null,
+                estimateData.loan_repayment_schedule_detailed ? JSON.stringify(estimateData.loan_repayment_schedule_detailed) : null
             ]);
             return await this.findById(id);
         }
@@ -82,8 +225,8 @@ export class InvestmentEstimateModel {
             // 过滤掉undefined值的字段
             const fields = Object.keys(updates).filter(key => key !== 'id' && updates[key] !== undefined);
             const values = fields.map(field => {
-                if (field === 'estimate_data' && updates.estimate_data) {
-                    return JSON.stringify(updates.estimate_data);
+                if (['estimate_data', 'construction_interest_details', 'loan_repayment_schedule_simple', 'loan_repayment_schedule_detailed'].includes(field)) {
+                    return JSON.stringify(updates[field]);
                 }
                 const value = updates[field];
                 // 将undefined转换为null

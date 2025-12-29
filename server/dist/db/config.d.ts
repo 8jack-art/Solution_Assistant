@@ -10,6 +10,9 @@ export declare const dbConfig: {
     queueLimit: number;
     enableKeepAlive: boolean;
     keepAliveInitialDelay: number;
+    connectTimeout: number;
+    acquireTimeout: number;
+    timeout: number;
 };
 export declare const pool: mysql.Pool;
 export declare function testConnection(): Promise<boolean>;

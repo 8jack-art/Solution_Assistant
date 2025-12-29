@@ -1,7 +1,7 @@
+import express from 'express'
 import { ProjectController } from '../controllers/projectController.js'
 import { authenticateToken } from '../middleware/auth.js'
 
-const express = require('express')
 const router = express.Router()
 
 router.use(authenticateToken)

@@ -1,7 +1,7 @@
+import express from 'express'
 import { AuthController } from '../controllers/authController.js'
 import { authenticateToken } from '../middleware/auth.js'
 
-const express = require('express')
 const router = express.Router()
 
 router.post('/login', AuthController.login)

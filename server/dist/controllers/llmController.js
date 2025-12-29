@@ -67,8 +67,13 @@ export class LLMController {
                 });
             }
             const configData = createConfigSchema.parse(req.body);
+            // 确保所有必需字段都正确传递给模型
             const config = await LLMConfigModel.create({
-                ...configData,
+                name: configData.name,
+                provider: configData.provider,
+                api_key: configData.api_key,
+                base_url: configData.base_url,
+                model: configData.model,
                 user_id: userId,
                 is_default: configData.is_default ?? false
             });
@@ -564,7 +569,7 @@ export class LLMController {
                         return res.status(400).json({
                             success: false,
                             error: '无效的响应格式',
-                            message: 'LLM返回的数据格式不正确'
+                            message: 'LLM返回的内容不是有效的JSON格式'
                         });
                     }
                     res.json({
@@ -670,7 +675,7 @@ export class LLMController {
                         return res.status(400).json({
                             success: false,
                             error: '无效的响应格式',
-                            message: 'LLM返回的数据格式不正确'
+                            message: 'LLM返回的内容不是有效的JSON格式'
                         });
                     }
                     res.json({

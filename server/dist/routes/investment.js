@@ -1,7 +1,7 @@
-import { Router } from 'express';
+import express from 'express';
 import { InvestmentController } from '../controllers/investmentController.js';
 import { authenticateToken } from '../middleware/auth.js';
-const router = Router();
+const router = express.Router();
 router.use(authenticateToken);
 router.post('/calculate', InvestmentController.calculate);
 router.post('/save', InvestmentController.save);

@@ -1,12 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
-import { ApiResponse } from '../types/index.js';
-export interface AuthRequest extends Request {
-    user?: {
-        userId: string;
-        username: string;
-        isAdmin: boolean;
-    };
-}
-export declare function authenticateToken(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction): any;
-export declare function requireAdmin(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction): any;
+import { Response, NextFunction } from 'express';
+import { AuthRequest } from '../types/index.js';
+export declare function authenticateToken(req: AuthRequest, res: Response, next: NextFunction): Response<any, Record<string, any>>;
+export declare function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): Response<any, Record<string, any>>;
 //# sourceMappingURL=auth.d.ts.map

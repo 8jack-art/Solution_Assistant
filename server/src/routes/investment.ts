@@ -1,7 +1,7 @@
+import express from 'express'
 import { InvestmentController } from '../controllers/investmentController.js'
 import { authenticateToken } from '../middleware/auth.js'
 
-const express = require('express')
 const router = express.Router()
 
 router.use(authenticateToken)

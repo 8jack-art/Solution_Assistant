@@ -1,3 +1,5 @@
+import { Request } from 'express'
+
 // 用户接口
 export interface User {
   id: string
@@ -120,10 +122,6 @@ export interface JwtPayload {
 }
 
 // 认证请求接口
-export interface AuthRequest {
+export interface AuthRequest extends Request {
   user?: JwtPayload
-  body?: any
-  params?: any
-  query?: any
-  headers?: any
 }

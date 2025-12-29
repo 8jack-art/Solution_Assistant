@@ -1,7 +1,7 @@
-import { Router } from 'express';
+import express from 'express';
 import { ProjectController } from '../controllers/projectController.js';
 import { authenticateToken } from '../middleware/auth.js';
-const router = Router();
+const router = express.Router();
 router.use(authenticateToken);
 router.post('/', ProjectController.create);
 router.get('/', ProjectController.getByUserId);

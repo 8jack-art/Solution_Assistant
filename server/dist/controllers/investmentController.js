@@ -5,16 +5,21 @@ import { estimateInvestment } from '../lib/investmentEstimator.js';
 import { calculateInvestmentEstimate } from '../lib/investmentCalculator.js';
 const saveEstimateSchema = z.object({
     project_id: z.string(),
-    construction_cost: z.number().min(0),
-    equipment_cost: z.number().min(0),
-    installation_cost: z.number().min(0),
-    other_cost: z.number().min(0),
-    land_cost: z.number().min(0),
+    construction_cost: z.number().min(0).optional(),
+    equipment_cost: z.number().min(0).optional(),
+    installation_cost: z.number().min(0).optional(),
+    other_cost: z.number().min(0).optional(),
+    land_cost: z.number().min(0).optional(),
     basic_reserve_rate: z.number().min(0).max(1).default(0.05),
     price_reserve_rate: z.number().min(0).max(1).default(0.03),
     construction_period: z.number().int().min(1).max(10).default(3),
     loan_rate: z.number().min(0).max(1).default(0.049),
     custom_loan_amount: z.number().optional(),
+    estimate_data: z.any().optional(), // 支持完整的estimate_data格式
+    // 新增贷款相关数据字段
+    construction_interest_details: z.any().optional(), // 建设期利息详情JSON
+    loan_repayment_schedule_simple: z.any().optional(), // 还本付息计划简表JSON（等额本金）
+    loan_repayment_schedule_detailed: z.any().optional(), // 还本付息计划表JSON（等额本息）
 });
 const calculateEstimateSchema = saveEstimateSchema.omit({ project_id: true });
 export class InvestmentController {
@@ -64,7 +69,8 @@ export class InvestmentController {
                     error: '用户未认证'
                 });
             }
-            const { project_id, construction_cost, equipment_cost, installation_cost, other_cost, land_cost, basic_reserve_rate, price_reserve_rate, construction_period, loan_rate, custom_loan_amount } = saveEstimateSchema.parse(req.body);
+            const parsedData = saveEstimateSchema.parse(req.body);
+            const { project_id, estimate_data, construction_cost, equipment_cost, installation_cost, other_cost, land_cost, basic_reserve_rate, price_reserve_rate, construction_period, loan_rate, custom_loan_amount, construction_interest_details, loan_repayment_schedule_simple, loan_repayment_schedule_detailed } = parsedData;
             const project = await InvestmentProjectModel.findById(project_id);
             if (!project) {
                 return res.status(404).json({
@@ -84,40 +90,78 @@ export class InvestmentController {
                     error: '项目已锁定，无法保存估算'
                 });
             }
-            const estimateParams = {
-                constructionCost: construction_cost,
-                equipmentCost: equipment_cost,
-                installationCost: installation_cost,
-                otherCost: other_cost,
-                landCost: land_cost,
-                basicReserveRate: basic_reserve_rate,
-                priceReserveRate: price_reserve_rate,
-                constructionPeriod: construction_period,
-                loanRate: loan_rate,
-                customLoanAmount: custom_loan_amount
-            };
-            const estimateResult = estimateInvestment(estimateParams);
-            const estimateData = {
-                project_id,
-                construction_cost,
-                equipment_cost,
-                installation_cost,
-                other_cost,
-                land_cost,
-                basic_reserve: estimateResult.basicReserve,
-                price_reserve: estimateResult.priceReserve,
-                construction_period,
-                iteration_count: estimateResult.iterationCount,
-                final_total: estimateResult.totalInvestment,
-                loan_amount: estimateResult.loanAmount,
-                loan_rate: loan_rate,
-                custom_loan_amount: custom_loan_amount || undefined,
-                estimate_data: estimateResult,
-                total_investment: estimateResult.totalInvestment,
-                building_investment: estimateResult.buildingInvestment,
-                construction_interest: estimateResult.constructionInterest,
-                gap_rate: estimateResult.gapRate
-            };
+            let estimateData;
+            if (estimate_data) {
+                // 如果提供了完整的estimate_data，直接使用它
+                estimateData = {
+                    project_id,
+                    estimate_data,
+                    // 从estimate_data中提取关键字段用于兼容性
+                    total_investment: estimate_data.partG?.合计 || 0,
+                    building_investment: estimate_data.partE?.合计 || 0,
+                    construction_interest: estimate_data.partF?.合计 || 0,
+                    gap_rate: (estimate_data.gapRate || 0) / 100, // 转换为小数形式
+                    construction_cost: estimate_data.partA?.children?.find((i) => i.序号 === '一')?.建设工程费 || 0,
+                    equipment_cost: estimate_data.partA?.children?.find((i) => i.序号 === '一')?.设备购置费 || 0,
+                    installation_cost: estimate_data.partA?.children?.find((i) => i.序号 === '一')?.安装工程费 || 0,
+                    other_cost: estimate_data.partA?.children?.find((i) => i.序号 === '一')?.其它费用 || 0,
+                    land_cost: estimate_data.partA?.children?.find((i) => i.序号 === '一')?.土地费用 || 0,
+                    basic_reserve: estimate_data.partD?.合计 || 0,
+                    price_reserve: 0,
+                    construction_period: construction_period,
+                    iteration_count: estimate_data.iterationCount || 1,
+                    final_total: estimate_data.partG?.合计 || 0,
+                    loan_amount: estimate_data.partF?.贷款总额 || 0,
+                    loan_rate: loan_rate,
+                    custom_loan_amount: custom_loan_amount || undefined,
+                    custom_land_cost: undefined,
+                    // 新增贷款相关数据字段
+                    construction_interest_details,
+                    loan_repayment_schedule_simple,
+                    loan_repayment_schedule_detailed
+                };
+            }
+            else {
+                // 传统模式：使用分离的字段计算
+                const estimateParams = {
+                    constructionCost: construction_cost,
+                    equipmentCost: equipment_cost,
+                    installationCost: installation_cost,
+                    otherCost: other_cost,
+                    landCost: land_cost,
+                    basicReserveRate: basic_reserve_rate,
+                    priceReserveRate: price_reserve_rate,
+                    constructionPeriod: construction_period,
+                    loanRate: loan_rate,
+                    customLoanAmount: custom_loan_amount
+                };
+                const estimateResult = estimateInvestment(estimateParams);
+                estimateData = {
+                    project_id,
+                    construction_cost,
+                    equipment_cost,
+                    installation_cost,
+                    other_cost,
+                    land_cost,
+                    basic_reserve: estimateResult.basicReserve,
+                    price_reserve: estimateResult.priceReserve,
+                    construction_period,
+                    iteration_count: estimateResult.iterationCount,
+                    final_total: estimateResult.totalInvestment,
+                    loan_amount: estimateResult.loanAmount,
+                    loan_rate: loan_rate,
+                    custom_loan_amount: custom_loan_amount || undefined,
+                    estimate_data: estimateResult,
+                    total_investment: estimateResult.totalInvestment,
+                    building_investment: estimateResult.buildingInvestment,
+                    construction_interest: estimateResult.constructionInterest,
+                    gap_rate: estimateResult.gapRate,
+                    // 新增贷款相关数据字段
+                    construction_interest_details,
+                    loan_repayment_schedule_simple,
+                    loan_repayment_schedule_detailed
+                };
+            }
             const existingEstimate = await InvestmentEstimateModel.findByProjectId(project_id);
             let savedEstimate;
             if (existingEstimate) {
@@ -286,7 +330,11 @@ export class InvestmentController {
                 loan_amount: toDecimal(result.partF.贷款总额),
                 loan_rate: toDecimal(project.loan_interest_rate),
                 custom_loan_amount: finalCustomLoanAmount !== undefined ? toDecimal(finalCustomLoanAmount) : null,
-                custom_land_cost: finalCustomLandCost !== undefined ? toDecimal(finalCustomLandCost) : null
+                custom_land_cost: finalCustomLandCost !== undefined ? toDecimal(finalCustomLandCost) : null,
+                // 新增贷款相关数据字段（从请求体中获取）
+                construction_interest_details: req.body.construction_interest_details,
+                loan_repayment_schedule_simple: req.body.loan_repayment_schedule_simple,
+                loan_repayment_schedule_detailed: req.body.loan_repayment_schedule_detailed
             };
             let savedEstimate;
             if (existingEstimate) {

@@ -58,6 +58,9 @@ export interface InvestmentEstimate {
     loan_rate: number;
     custom_loan_amount?: number | null;
     custom_land_cost?: number | null;
+    construction_interest_details?: any;
+    loan_repayment_schedule_simple?: any;
+    loan_repayment_schedule_detailed?: any;
     created_at: string;
     updated_at: string;
 }

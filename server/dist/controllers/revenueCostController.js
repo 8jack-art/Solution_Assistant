@@ -299,7 +299,12 @@ export class RevenueCostController {
                 });
             }
             // 准备工程项数据（如果有）
-            const engineeringItems = params.engineeringItems || [];
+            const engineeringItems = (params.engineeringItems || [])
+                .filter(item => item.name !== undefined && item.amount !== undefined)
+                .map(item => ({
+                name: item.name,
+                amount: item.amount
+            }));
             // 构建LLM提示
             const messages = analyzeRevenueStructurePrompt(project.project_name, params.projectInfo || project.project_info || '', project.total_investment, engineeringItems);
             console.log('🤖 调用LLM分析营收结构...');

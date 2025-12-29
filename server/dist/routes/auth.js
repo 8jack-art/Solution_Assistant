@@ -1,7 +1,7 @@
-import { Router } from 'express';
+import express from 'express';
 import { AuthController } from '../controllers/authController.js';
 import { authenticateToken } from '../middleware/auth.js';
-const router = Router();
+const router = express.Router();
 router.post('/login', AuthController.login);
 router.post('/register', AuthController.register);
 router.get('/me', authenticateToken, AuthController.getCurrentUser);

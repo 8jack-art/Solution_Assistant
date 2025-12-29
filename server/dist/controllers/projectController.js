@@ -37,11 +37,31 @@ export class ProjectController {
                 });
             }
             const projectData = createProjectSchema.parse(req.body);
+            // 确保所有必需字段都正确传递给模型
             const project = await InvestmentProjectModel.create({
-                ...projectData,
+                project_name: projectData.project_name,
+                total_investment: projectData.total_investment,
+                project_info: projectData.project_info || null,
+                construction_years: projectData.construction_years,
+                operation_years: projectData.operation_years,
+                loan_ratio: projectData.loan_ratio,
+                loan_interest_rate: projectData.loan_interest_rate,
                 user_id: userId,
                 status: 'draft',
-                is_locked: false
+                is_locked: false,
+                // 设置默认值以满足类型要求
+                land_mode: projectData.land_mode || 'A',
+                land_area: projectData.land_area || 0,
+                land_unit_price: projectData.land_unit_price || 0,
+                land_lease_area: projectData.land_lease_area || 0,
+                land_lease_unit_price: projectData.land_lease_unit_price || 0,
+                land_purchase_area: projectData.land_purchase_area || 0,
+                land_purchase_unit_price: projectData.land_purchase_unit_price || 0,
+                land_cost: projectData.land_cost || 0,
+                land_remark: projectData.land_remark || null,
+                seedling_compensation: projectData.seedling_compensation || 0,
+                lease_seedling_compensation: projectData.lease_seedling_compensation || 0,
+                locked_at: null
             });
             if (!project) {
                 return res.status(500).json({

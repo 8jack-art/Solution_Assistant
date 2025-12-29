@@ -1,8 +1,8 @@
-const express = require('express')
-const cors = require('cors')
-const helmet = require('helmet')
-const rateLimit = require('express-rate-limit')
-const dotenv = require('dotenv')
+import express from 'express'
+import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
+import dotenv from 'dotenv'
 import { testConnection } from './db/config.js'
 import { initDatabase } from './db/init.js'
 
