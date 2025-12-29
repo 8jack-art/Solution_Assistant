@@ -22,4 +22,8 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // 排除stream模块以避免外部化警告
+    exclude: ['stream'],
+  },
 })

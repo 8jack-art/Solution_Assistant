@@ -323,8 +323,9 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
       }
     }
 
-    // 2.4 其他还利息资金（暂时为0）
-    const otherInterestFunds = Array(operationYears).fill(0);
+    // 2.4 其他还利息资金（建设期引用付息数据，运营期为0）
+    const otherInterestFunds = Array(operationYears).fill(0); // 运营期为0
+    const otherInterestFundsConstruction = constructionInterestPayment; // 建设期引用付息数据
 
     // 计算指标
     // 3.1 息税折旧摊销前利润
@@ -367,6 +368,13 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
       }
     }
 
+    // 计算某行所有年份的合计值
+    const calculateRowTotal = (constructionPeriod: number[], operationPeriod: number[]): number => {
+      const constructionTotal = constructionPeriod.reduce((sum, value) => sum + (value || 0), 0);
+      const operationTotal = operationPeriod.reduce((sum, value) => sum + (value || 0), 0);
+      return constructionTotal + operationTotal;
+    };
+
     // 构建表格数据
     // 确保"1 借款还本付息计划"行的运营期数据正确填充
     // 从数据库读取的运营期数据应该填充到该行的运营期列
@@ -403,7 +411,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '1.2',
           项目: '当期还本付息',
-          合计: null,
+          合计: calculateRowTotal(constructionRepayment, yearlyPayment),
           建设期: constructionRepayment,
           运营期: yearlyPayment
         },
@@ -411,7 +419,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '',
           项目: '其中：还本',
-          合计: null,
+          合计: calculateRowTotal(constructionPrincipalRepayment, yearlyPrincipal),
           建设期: constructionPrincipalRepayment,
           运营期: yearlyPrincipal
         },
@@ -419,7 +427,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '',
           项目: '付息',
-          合计: null,
+          合计: calculateRowTotal(constructionInterestPayment, yearlyInterest),
           建设期: constructionInterestPayment,
           运营期: yearlyInterest
         },
@@ -443,7 +451,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '2.1',
           项目: '折旧摊销费',
-          合计: null,
+          合计: calculateRowTotal(constructionPeriod, depreciationAmortization),
           建设期: constructionPeriod,
           运营期: depreciationAmortization
         },
@@ -451,7 +459,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '2.2',
           项目: '利润',
-          合计: null,
+          合计: calculateRowTotal(constructionPeriod, profit),
           建设期: constructionPeriod,
           运营期: profit
         },
@@ -459,7 +467,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '2.3',
           项目: '息税前利润',
-          合计: null,
+          合计: calculateRowTotal(constructionPeriod, ebit),
           建设期: constructionPeriod,
           运营期: ebit
         },
@@ -467,8 +475,8 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '2.4',
           项目: '其他还利息资金',
-          合计: null,
-          建设期: constructionPeriod,
+          合计: calculateRowTotal(otherInterestFundsConstruction, otherInterestFunds),
+          建设期: otherInterestFundsConstruction,
           运营期: otherInterestFunds
         },
         // 3 计算指标（分类标题行，建设期和运营期为空）
@@ -483,7 +491,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '3.1',
           项目: '息税折旧摊销前利润',
-          合计: null,
+          合计: calculateRowTotal(constructionPeriod, ebitda),
           建设期: constructionPeriod,
           运营期: ebitda
         },
@@ -491,7 +499,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '3.2',
           项目: '所得税',
-          合计: null,
+          合计: calculateRowTotal(constructionPeriod, incomeTax),
           建设期: constructionPeriod,
           运营期: incomeTax
         },
@@ -499,7 +507,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '3.3',
           项目: '还利息及担保费',
-          合计: null,
+          合计: calculateRowTotal(constructionPeriod, interestAndGuaranteeFee),
           建设期: constructionPeriod,
           运营期: interestAndGuaranteeFee
         },
@@ -507,7 +515,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
         {
           序号: '3.4',
           项目: '还本金',
-          合计: null,
+          合计: calculateRowTotal(constructionPeriod, principalRepayment),
           建设期: constructionPeriod,
           运营期: principalRepayment
         },
