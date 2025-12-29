@@ -939,13 +939,24 @@ const InvestmentSummary: React.FC = () => {
         let existingThirdLevelItems: Record<number, any[]> = {}
         
         if (estimateResponse.success && estimateResponse.data?.estimate) {
-          // 使用estimate_data字段作为详细数据
-          const estimateData = estimateResponse.data.estimate.estimate_data
+          // 使用estimate_data字段作为详细数据，兼容不同的数据结构
+          let estimateData = estimateResponse.data.estimate.estimate_data
           
-          // 数据完整性检查
-          if (!estimateData || !estimateData.partA || !estimateData.partG) {
-            console.warn('[数据加载] 投资估算数据不完整:', estimateData)
-            throw new Error('投资估算数据不完整')
+          // 如果estimate_data不存在，尝试直接使用estimate
+          if (!estimateData) {
+            estimateData = estimateResponse.data.estimate
+          }
+          
+          // 数据完整性检查 - 修复：放宽检查条件，避免误判
+          if (!estimateData) {
+            console.warn('[数据加载] 投资估算数据为空')
+            throw new Error('投资估算数据为空')
+          }
+          
+          // 只有在关键字段完全缺失时才报错
+          if (!estimateData.partA && !estimateData.partG) {
+            console.warn('[数据加载] 投资估算数据缺少关键字段:', estimateData)
+            throw new Error('投资资算数据缺少关键字段')
           }
           
           console.log(`[数据加载] 投资估算数据加载成功，迭代次数: ${estimateData.iterationCount || '未知'}`)

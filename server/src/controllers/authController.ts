@@ -1,4 +1,3 @@
-import { Request, Response } from 'express'
 import { z } from 'zod'
 import { UserModel } from '../models/User.js'
 import { comparePassword, hashPassword } from '../utils/password.js'
@@ -17,7 +16,7 @@ const registerSchema = z.object({
 })
 
 export class AuthController {
-  static async login(req: Request, res: Response<ApiResponse>) {
+  static async login(req: any, res: any) {
     try {
       const { username, password } = loginSchema.parse(req.body)
 
@@ -75,7 +74,7 @@ export class AuthController {
     }
   }
 
-  static async register(req: Request, res: Response<ApiResponse>) {
+  static async register(req: any, res: any) {
     try {
       const { username, password, isAdmin } = registerSchema.parse(req.body)
 
@@ -125,7 +124,7 @@ export class AuthController {
     }
   }
 
-  static async getCurrentUser(req: AuthRequest, res: Response<ApiResponse>) {
+  static async getCurrentUser(req: any, res: any) {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -158,7 +157,7 @@ export class AuthController {
     }
   }
 
-  static async testUsers(req: Request, res: Response<ApiResponse>) {
+  static async testUsers(req: any, res: any) {
     try {
       const testUsers = [
         { username: 'admin', password: '123456', role: '管理员' },

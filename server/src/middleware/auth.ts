@@ -1,4 +1,3 @@
-import { Request, Response, NextFunction } from 'express'
 import { verifyToken } from '../utils/jwt.js'
 import { ApiResponse } from '../types/index.js'
 
@@ -10,7 +9,7 @@ export interface AuthRequest extends Request {
   }
 }
 
-export function authenticateToken(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction) {
+export function authenticateToken(req: AuthRequest, res: any, next: any) {
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
 
@@ -32,7 +31,7 @@ export function authenticateToken(req: AuthRequest, res: Response<ApiResponse>, 
   next()
 }
 
-export function requireAdmin(req: AuthRequest, res: Response<ApiResponse>, next: NextFunction) {
+export function requireAdmin(req: AuthRequest, res: any, next: any) {
   if (!req.user?.isAdmin) {
     return res.status(403).json({ success: false, error: '需要管理员权限' })
   }

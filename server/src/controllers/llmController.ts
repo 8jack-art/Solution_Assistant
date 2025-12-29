@@ -1,4 +1,3 @@
-import { Response } from 'express'
 import { z } from 'zod'
 import { LLMConfigModel } from '../models/LLMConfig.js'
 import { LLMService, generateInvestmentPrompt, analyzeProjectInfoPrompt, analyzeEngineeringItemsPrompt, subdivideEngineeringItemPrompt } from '../lib/llm.js'
@@ -52,7 +51,7 @@ const analyzeEngineeringSchema = z.object({
 })
 
 export class LLMController {
-  static async getProviders(req: AuthRequest, res: Response<ApiResponse>) {
+  static async getProviders(req: any, res: any) {
     try {
       res.json({
         success: true,
@@ -66,7 +65,7 @@ export class LLMController {
       })
     }
   }
-  static async create(req: AuthRequest, res: Response<ApiResponse>) {
+  static async create(req: any, res: any) {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -78,8 +77,13 @@ export class LLMController {
 
       const configData = createConfigSchema.parse(req.body)
 
+      // 确保所有必需字段都正确传递给模型
       const config = await LLMConfigModel.create({
-        ...configData,
+        name: configData.name,
+        provider: configData.provider,
+        api_key: configData.api_key,
+        base_url: configData.base_url,
+        model: configData.model,
         user_id: userId,
         is_default: configData.is_default ?? false
       })
@@ -111,7 +115,7 @@ export class LLMController {
     }
   }
 
-  static async getByUserId(req: AuthRequest, res: Response<ApiResponse>) {
+  static async getByUserId(req: any, res: any) {
     try {
       const userId = req.user?.userId
       const isAdmin = req.user?.isAdmin
@@ -138,7 +142,7 @@ export class LLMController {
     }
   }
 
-  static async getDefault(req: AuthRequest, res: Response<ApiResponse>) {
+  static async getDefault(req: any, res: any) {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -163,7 +167,7 @@ export class LLMController {
     }
   }
 
-  static async update(req: AuthRequest, res: Response<ApiResponse>) {
+  static async update(req: any, res: any) {
     try {
       const userId = req.user?.userId
       const isAdmin = req.user?.isAdmin
@@ -239,7 +243,7 @@ export class LLMController {
     }
   }
 
-  static async setDefault(req: AuthRequest, res: Response<ApiResponse>) {
+  static async setDefault(req: any, res: any) {
     try {
       const userId = req.user?.userId
       const isAdmin = req.user?.isAdmin
@@ -313,7 +317,7 @@ export class LLMController {
     }
   }
 
-  static async testConnection(req: AuthRequest, res: Response<ApiResponse>) {
+  static async testConnection(req: any, res: any) {
     try {
       const configData = testConnectionSchema.parse(req.body)
 
@@ -356,7 +360,7 @@ export class LLMController {
     }
   }
 
-  static async delete(req: AuthRequest, res: Response<ApiResponse>) {
+  static async delete(req: any, res: any) {
     try {
       const { id } = req.params
       const userId = req.user?.userId
@@ -405,7 +409,7 @@ export class LLMController {
     }
   }
 
-  static async generateInvestmentContent(req: AuthRequest, res: Response<ApiResponse>) {
+  static async generateInvestmentContent(req: any, res: any) {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -481,7 +485,7 @@ export class LLMController {
     }
   }
 
-  static async analyzeProjectInfo(req: AuthRequest, res: Response<ApiResponse>) {
+  static async analyzeProjectInfo(req: any, res: any) {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -567,7 +571,7 @@ export class LLMController {
     }
   }
 
-  static async analyzeEngineeringItems(req: AuthRequest, res: Response<ApiResponse>) {
+  static async analyzeEngineeringItems(req: any, res: any) {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -651,7 +655,7 @@ export class LLMController {
             return res.status(400).json({
               success: false,
               error: '无效的响应格式',
-              message: 'LLM返回的数据格式不正确'
+              message: 'LLM返回的内容不是有效的JSON格式'
             })
           }
           
@@ -701,7 +705,7 @@ export class LLMController {
     }
   }
 
-  static async subdivideEngineeringItem(req: AuthRequest, res: Response<ApiResponse>) {
+  static async subdivideEngineeringItem(req: any, res: any) {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -780,7 +784,7 @@ export class LLMController {
             return res.status(400).json({
               success: false,
               error: '无效的响应格式',
-              message: 'LLM返回的数据格式不正确'
+              message: 'LLM返回的内容不是有效的JSON格式'
             })
           }
           

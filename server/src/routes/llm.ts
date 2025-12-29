@@ -1,8 +1,8 @@
-import { Router } from 'express'
 import { LLMController } from '../controllers/llmController.js'
 import { authenticateToken } from '../middleware/auth.js'
 
-const router = Router()
+const express = require('express')
+const router = express.Router()
 
 // 不需要认证的路由
 router.get('/providers', LLMController.getProviders)

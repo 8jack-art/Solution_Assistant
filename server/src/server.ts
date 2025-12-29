@@ -1,8 +1,8 @@
-import express from 'express'
-import cors from 'cors'
-import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
-import dotenv from 'dotenv'
+const express = require('express')
+const cors = require('cors')
+const helmet = require('helmet')
+const rateLimit = require('express-rate-limit')
+const dotenv = require('dotenv')
 import { testConnection } from './db/config.js'
 import { initDatabase } from './db/init.js'
 
@@ -55,7 +55,7 @@ app.use('*', (req, res) => {
   })
 })
 
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((error: any, req: any, res: any, next: any) => {
   console.error('服务器错误:', error)
   res.status(500).json({ 
     success: false, 

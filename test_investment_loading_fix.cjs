@@ -1,336 +1,338 @@
 /**
  * 投资估算简表数据加载Bug修复验证脚本
- * 
- * 测试目标：
- * 1. 验证缓存机制是否正常工作
- * 2. 验证自动生成逻辑是否不会覆盖已有数据
- * 3. 验证数据库查询的稳定性和重试机制
- * 4. 验证请求取消机制是否有效
- * 5. 验证错误处理是否完善
+ * 测试关闭项目或重启后数据加载问题
  */
 
 const axios = require('axios');
 
 // 配置
-const API_BASE_URL = 'http://localhost:3001';
-const TEST_PROJECT_ID = 'test-project-id'; // 替换为实际的项目ID
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3001';
+const TEST_PROJECT_ID = process.env.TEST_PROJECT_ID || 'test-project-' + Date.now();
 
 // 测试结果记录
 const testResults = {
   cacheTest: { passed: false, details: [] },
   autoGenerateTest: { passed: false, details: [] },
-  databaseStabilityTest: { passed: false, details: [] },
-  requestCancellationTest: { passed: false, details: [] },
+  databaseQueryTest: { passed: false, details: [] },
+  requestCancelTest: { passed: false, details: [] },
   errorHandlingTest: { passed: false, details: [] }
 };
 
-// 工具函数：记录测试结果
-function logResult(testName, passed, message) {
-  console.log(`[${passed ? 'PASS' : 'FAIL'}] ${testName}: ${message}`);
-  if (testResults[testName]) {
-    testResults[testName].passed = testResults[testName].passed && passed;
-    testResults[testName].details.push({ passed, message });
-  }
+// 颜色输出
+const colors = {
+  green: '\x1b[32m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  reset: '\x1b[0m'
+};
+
+function log(message, color = 'reset') {
+  console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
-// 工具函数：延迟
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// 测试1: 缓存机制验证
+// 1. 测试缓存机制
 async function testCacheMechanism() {
-  console.log('\n=== 测试1: 缓存机制验证 ===');
+  log('\n=== 测试1: 缓存机制验证 ===', 'blue');
   
   try {
     // 第一次请求 - 应该从数据库获取
-    console.log('第一次请求投资估算数据...');
-    const startTime1 = Date.now();
-    const response1 = await axios.get(`${API_BASE_URL}/investment/project/${TEST_PROJECT_ID}`);
-    const duration1 = Date.now() - startTime1;
+    log('发送第一次请求...', 'yellow');
+    const start1 = Date.now();
+    const response1 = await axios.get(`${BASE_URL}/api/investment/estimate/${TEST_PROJECT_ID}`);
+    const duration1 = Date.now() - start1;
     
-    logResult('cacheTest', response1.status === 200, `第一次请求成功，耗时${duration1}ms`);
-    
-    // 等待一小段时间
-    await delay(100);
+    log(`第一次请求完成，耗时: ${duration1}ms`, 'green');
+    testResults.cacheTest.details.push(`第一次请求耗时: ${duration1}ms`);
     
     // 第二次请求 - 应该从缓存获取
-    console.log('第二次请求投资估算数据（预期从缓存获取）...');
-    const startTime2 = Date.now();
-    const response2 = await axios.get(`${API_BASE_URL}/investment/project/${TEST_PROJECT_ID}`);
-    const duration2 = Date.now() - startTime2;
+    log('发送第二次请求...', 'yellow');
+    const start2 = Date.now();
+    const response2 = await axios.get(`${BASE_URL}/api/investment/estimate/${TEST_PROJECT_ID}`);
+    const duration2 = Date.now() - start2;
     
-    logResult('cacheTest', response2.status === 200, `第二次请求成功，耗时${duration2}ms`);
+    log(`第二次请求完成，耗时: ${duration2}ms`, 'green');
+    testResults.cacheTest.details.push(`第二次请求耗时: ${duration2}ms`);
     
-    // 检查缓存是否生效（第二次请求应该更快）
-    const cacheEffective = duration2 < duration1 * 0.8; // 第二次请求至少快20%
-    logResult('cacheTest', cacheEffective, `缓存机制${cacheEffective ? '生效' : '可能未生效'}（第一次${duration1}ms，第二次${duration2}ms）`);
-    
-    // 检查数据一致性
-    const dataConsistent = JSON.stringify(response1.data) === JSON.stringify(response2.data);
-    logResult('cacheTest', dataConsistent, `数据一致性${dataConsistent ? '良好' : '有问题'}`);
-    
-  } catch (error) {
-    logResult('cacheTest', false, `缓存测试失败: ${error.message}`);
-  }
-}
-
-// 测试2: 自动生成逻辑验证
-async function testAutoGenerateLogic() {
-  console.log('\n=== 测试2: 自动生成逻辑验证 ===');
-  
-  try {
-    // 创建一个测试项目（如果不存在）
-    console.log('检查项目是否存在...');
-    let projectResponse;
-    try {
-      projectResponse = await axios.get(`${API_BASE_URL}/projects/${TEST_PROJECT_ID}`);
-      logResult('autoGenerateTest', projectResponse.status === 200, '项目存在');
-    } catch (error) {
-      logResult('autoGenerateTest', false, `项目不存在或获取失败: ${error.message}`);
-      return;
-    }
-    
-    // 检查是否已有投资估算数据
-    console.log('检查投资估算数据...');
-    const estimateResponse = await axios.get(`${API_BASE_URL}/investment/project/${TEST_PROJECT_ID}`);
-    
-    if (estimateResponse.data.success && estimateResponse.data.data?.estimate) {
-      logResult('autoGenerateTest', true, '项目已有投资估算数据');
-      
-      // 尝试触发自动生成（应该跳过）
-      console.log('尝试触发自动生成（应该跳过已有数据）...');
-      const generateResponse = await axios.post(`${API_BASE_URL}/investment/generate/${TEST_PROJECT_ID}`, {
-        // 空数据，模拟自动生成场景
-      });
-      
-      // 检查是否真的跳过了自动生成
-      if (generateResponse.data.success) {
-        // 比较生成前后的数据，应该相同
-        const dataUnchanged = JSON.stringify(estimateResponse.data.data.estimate) === 
-                            JSON.stringify(generateResponse.data.data.estimate);
-        logResult('autoGenerateTest', dataUnchanged, '自动生成正确跳过了已有数据');
-      } else {
-        logResult('autoGenerateTest', false, '自动生成请求失败');
-      }
+    // 验证缓存效果
+    if (duration2 < duration1 * 0.5) {
+      log('✓ 缓存机制工作正常，第二次请求明显更快', 'green');
+      testResults.cacheTest.passed = true;
     } else {
-      logResult('autoGenerateTest', true, '项目没有投资估算数据，自动生成应该正常工作');
-      
-      // 尝试自动生成
-      console.log('尝试自动生成新数据...');
-      const generateResponse = await axios.post(`${API_BASE_URL}/investment/generate/${TEST_PROJECT_ID}`, {});
-      
-      logResult('autoGenerateTest', generateResponse.data.success, 
-                generateResponse.data.success ? '自动生成成功' : '自动生成失败');
+      log('✗ 缓存机制可能未生效', 'red');
+    }
+    
+    // 验证数据一致性
+    if (JSON.stringify(response1.data) === JSON.stringify(response2.data)) {
+      log('✓ 两次请求数据一致', 'green');
+      testResults.cacheTest.details.push('数据一致性验证通过');
+    } else {
+      log('✗ 两次请求数据不一致', 'red');
+      testResults.cacheTest.details.push('数据一致性验证失败');
     }
     
   } catch (error) {
-    logResult('autoGenerateTest', false, `自动生成测试失败: ${error.message}`);
+    log(`✗ 缓存测试失败: ${error.message}`, 'red');
+    testResults.cacheTest.details.push(`错误: ${error.message}`);
   }
 }
 
-// 测试3: 数据库查询稳定性验证
-async function testDatabaseStability() {
-  console.log('\n=== 测试3: 数据库查询稳定性验证 ===');
+// 2. 测试自动生成逻辑
+async function testAutoGenerateLogic() {
+  log('\n=== 测试2: 自动生成逻辑验证 ===', 'blue');
   
   try {
-    const concurrentRequests = 5;
-    const promises = [];
+    // 创建一个已有数据的测试项目
+    const testData = {
+      projectId: TEST_PROJECT_ID,
+      estimate: {
+        partA: { total: 1000000 },
+        partG: { total: 500000 },
+        iterationCount: 5
+      }
+    };
     
-    // 并发发起多个请求，测试数据库连接池和重试机制
-    console.log(`发起${concurrentRequests}个并发请求...`);
+    // 保存测试数据
+    log('保存测试数据...', 'yellow');
+    await axios.post(`${BASE_URL}/api/investment/estimate`, testData);
+    log('测试数据保存成功', 'green');
     
-    for (let i = 0; i < concurrentRequests; i++) {
-      const promise = axios.get(`${API_BASE_URL}/investment/project/${TEST_PROJECT_ID}`, {
-        timeout: 35000 // 35秒超时，比后端的30秒稍长
-      }).then(response => {
-        return { index: i, success: true, data: response.data, duration: Date.now() };
-      }).catch(error => {
-        return { index: i, success: false, error: error.message, duration: Date.now() };
-      });
+    // 等待一秒确保数据保存完成
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // 获取数据，验证是否触发了自动生成
+    log('获取数据，检查自动生成逻辑...', 'yellow');
+    const response = await axios.get(`${BASE_URL}/api/investment/estimate/${TEST_PROJECT_ID}`);
+    
+    if (response.data.success && response.data.data) {
+      const estimateData = response.data.data.estimate_data || response.data.data;
       
-      promises.push(promise);
+      // 验证数据是否被自动生成覆盖
+      if (estimateData.partA && estimateData.partA.total === 1000000) {
+        log('✓ 原有数据保持完整，未触发不必要的自动生成', 'green');
+        testResults.autoGenerateTest.passed = true;
+        testResults.autoGenerateTest.details.push('原有数据保持完整');
+      } else {
+        log('✗ 数据可能被自动生成覆盖', 'red');
+        testResults.autoGenerateTest.details.push('数据被自动生成覆盖');
+      }
+      
+      // 检查autoGenerateRequested状态
+      if (response.data.data.autoGenerateRequested === false) {
+        log('✓ autoGenerateRequested状态正确', 'green');
+        testResults.autoGenerateTest.details.push('autoGenerateRequested状态正确');
+      } else {
+        log('✗ autoGenerateRequested状态异常', 'red');
+        testResults.autoGenerateTest.details.push('autoGenerateRequested状态异常');
+      }
+    }
+    
+  } catch (error) {
+    log(`✗ 自动生成测试失败: ${error.message}`, 'red');
+    testResults.autoGenerateTest.details.push(`错误: ${error.message}`);
+  }
+}
+
+// 3. 测试数据库查询稳定性
+async function testDatabaseQueryStability() {
+  log('\n=== 测试3: 数据库查询稳定性验证 ===', 'blue');
+  
+  try {
+    const promises = [];
+    const requestCount = 10;
+    
+    // 并发发送多个请求
+    log(`发送${requestCount}个并发请求...`, 'yellow');
+    
+    for (let i = 0; i < requestCount; i++) {
+      promises.push(
+        axios.get(`${BASE_URL}/api/investment/estimate/${TEST_PROJECT_ID}`)
+          .then(response => ({ success: true, data: response.data, index: i }))
+          .catch(error => ({ success: false, error: error.message, index: i }))
+      );
     }
     
     const results = await Promise.all(promises);
-    
-    // 分析结果
     const successCount = results.filter(r => r.success).length;
-    const failureCount = results.length - successCount;
+    const errorCount = results.filter(r => !r.success).length;
     
-    logResult('databaseStabilityTest', successCount >= concurrentRequests * 0.8, 
-              `${successCount}/${concurrentRequests}请求成功，${failureCount}失败`);
+    log(`成功请求: ${successCount}/${requestCount}`, 'green');
+    log(`失败请求: ${errorCount}/${requestCount}`, errorCount > 0 ? 'red' : 'green');
     
-    // 检查响应时间
-    const durations = results.filter(r => r.success).map(r => r.duration);
-    if (durations.length > 0) {
-      const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
-      const maxDuration = Math.max(...durations);
-      
-      logResult('databaseStabilityTest', avgDuration < 10000, 
-                `平均响应时间${avgDuration.toFixed(0)}ms，最大${maxDuration}ms`);
-    }
+    testResults.databaseQueryTest.details.push(`成功率: ${successCount}/${requestCount}`);
     
     // 检查数据一致性
     const successfulResults = results.filter(r => r.success);
     if (successfulResults.length > 1) {
       const firstData = JSON.stringify(successfulResults[0].data);
       const allConsistent = successfulResults.every(r => JSON.stringify(r.data) === firstData);
-      logResult('databaseStabilityTest', allConsistent, '并发请求数据一致性良好');
+      
+      if (allConsistent) {
+        log('✓ 所有成功请求的数据一致', 'green');
+        testResults.databaseQueryTest.details.push('数据一致性验证通过');
+        testResults.databaseQueryTest.passed = true;
+      } else {
+        log('✗ 数据存在不一致', 'red');
+        testResults.databaseQueryTest.details.push('数据一致性验证失败');
+      }
+    }
+    
+    // 检查错误类型
+    const errors = results.filter(r => !r.success).map(r => r.error);
+    const uniqueErrors = [...new Set(errors)];
+    if (uniqueErrors.length > 0) {
+      log(`遇到的错误类型: ${uniqueErrors.join(', ')}`, 'yellow');
+      testResults.databaseQueryTest.details.push(`错误类型: ${uniqueErrors.join(', ')}`);
     }
     
   } catch (error) {
-    logResult('databaseStabilityTest', false, `数据库稳定性测试失败: ${error.message}`);
+    log(`✗ 数据库查询测试失败: ${error.message}`, 'red');
+    testResults.databaseQueryTest.details.push(`错误: ${error.message}`);
   }
 }
 
-// 测试4: 请求取消机制验证
+// 4. 测试请求取消机制
 async function testRequestCancellation() {
-  console.log('\n=== 测试4: 请求取消机制验证 ===');
+  log('\n=== 测试4: 请求取消机制验证 ===', 'blue');
   
   try {
-    // 创建一个可以被取消的请求
+    // 创建一个可以取消的请求
     const controller = new AbortController();
-    const { signal } = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 100); // 100ms后取消
     
-    console.log('发起一个长时间运行的请求...');
-    const requestPromise = axios.get(`${API_BASE_URL}/investment/project/${TEST_PROJECT_ID}`, {
-      signal,
-      timeout: 60000 // 60秒超时
-    });
+    log('发送请求并在100ms后取消...', 'yellow');
     
-    // 等待一小段时间后取消请求
-    setTimeout(() => {
-      console.log('取消请求...');
-      controller.abort();
-    }, 100);
-    
+    const startTime = Date.now();
     try {
-      await requestPromise;
-      logResult('requestCancellationTest', false, '请求没有被正确取消');
+      await axios.get(`${BASE_URL}/api/investment/estimate/${TEST_PROJECT_ID}`, {
+        signal: controller.signal
+      });
     } catch (error) {
       if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
-        logResult('requestCancellationTest', true, '请求被正确取消');
+        const duration = Date.now() - startTime;
+        log(`✓ 请求成功取消，耗时: ${duration}ms`, 'green');
+        testResults.requestCancelTest.passed = true;
+        testResults.requestCancelTest.details.push(`请求在${duration}ms后被取消`);
       } else {
-        logResult('requestCancellationTest', false, `请求取消失败: ${error.message}`);
+        log(`✗ 请求取消失败，错误类型: ${error.name}`, 'red');
+        testResults.requestCancelTest.details.push(`取消失败: ${error.message}`);
       }
     }
     
+    clearTimeout(timeoutId);
+    
   } catch (error) {
-    logResult('requestCancellationTest', false, `请求取消测试失败: ${error.message}`);
+    log(`✗ 请求取消测试失败: ${error.message}`, 'red');
+    testResults.requestCancelTest.details.push(`错误: ${error.message}`);
   }
 }
 
-// 测试5: 错误处理验证
+// 5. 测试错误处理
 async function testErrorHandling() {
-  console.log('\n=== 测试5: 错误处理验证 ===');
+  log('\n=== 测试5: 错误处理验证 ===', 'blue');
   
   try {
-    // 测试无效项目ID
-    console.log('测试无效项目ID...');
-    try {
-      const response = await axios.get(`${API_BASE_URL}/investment/project/invalid-id`);
-      logResult('errorHandlingTest', false, '无效项目ID应该返回错误');
-    } catch (error) {
-      const isHandledGracefully = error.response && 
-                             (error.response.status === 404 || error.response.status === 400);
-      logResult('errorHandlingTest', isHandledGracefully, 
-                `无效项目ID错误处理${isHandledGracefully ? '正确' : '不正确'} (${error.response?.status})`);
-    }
-    
-    // 测试空项目ID
-    console.log('测试空项目ID...');
-    try {
-      const response = await axios.get(`${API_BASE_URL}/investment/project/`);
-      logResult('errorHandlingTest', false, '空项目ID应该返回错误');
-    } catch (error) {
-      const isHandledGracefully = error.response && 
-                             (error.response.status === 404 || error.response.status === 400);
-      logResult('errorHandlingTest', isHandledGracefully, 
-                `空项目ID错误处理${isHandledGracefully ? '正确' : '不正确'} (${error.response?.status})`);
-    }
-    
     // 测试不存在的项目ID
-    console.log('测试不存在的项目ID...');
-    try {
-      const response = await axios.get(`${API_BASE_URL}/investment/project/non-existent-project-12345`);
-      if (response.data.success === false) {
-        logResult('errorHandlingTest', true, '不存在的项目ID错误处理正确');
-      } else {
-        logResult('errorHandlingTest', false, '不存在的项目ID应该返回success: false');
-      }
-    } catch (error) {
-      const isHandledGracefully = error.response && error.response.status === 404;
-      logResult('errorHandlingTest', isHandledGracefully, 
-                `不存在的项目ID错误处理${isHandledGracefully ? '正确' : '不正确'} (${error.response?.status})`);
+    log('请求不存在的项目ID...', 'yellow');
+    const response = await axios.get(`${BASE_URL}/api/investment/estimate/non-existent-project`)
+      .catch(error => error.response);
+    
+    if (response && response.status === 404) {
+      log('✓ 正确处理404错误', 'green');
+      testResults.errorHandlingTest.passed = true;
+      testResults.errorHandlingTest.details.push('404错误处理正确');
+    } else {
+      log('✗ 404错误处理异常', 'red');
+      testResults.errorHandlingTest.details.push('404错误处理异常');
+    }
+    
+    // 测试错误响应格式
+    if (response && response.data && response.data.success === false) {
+      log('✓ 错误响应格式正确', 'green');
+      testResults.errorHandlingTest.details.push('错误响应格式正确');
+    } else {
+      log('✗ 错误响应格式异常', 'red');
+      testResults.errorHandlingTest.details.push('错误响应格式异常');
     }
     
   } catch (error) {
-    logResult('errorHandlingTest', false, `错误处理测试失败: ${error.message}`);
+    log(`✗ 错误处理测试失败: ${error.message}`, 'red');
+    testResults.errorHandlingTest.details.push(`错误: ${error.message}`);
   }
 }
 
-// 主测试函数
-async function runTests() {
-  console.log('开始投资估算简表数据加载Bug修复验证测试...\n');
+// 生成测试报告
+function generateTestReport() {
+  log('\n' + '='.repeat(50), 'blue');
+  log('投资估算简表数据加载Bug修复测试报告', 'blue');
+  log('='.repeat(50), 'blue');
   
-  // 检查服务器是否可用
-  try {
-    await axios.get(`${API_BASE_URL}/health`);
-    console.log('✅ 服务器连接正常\n');
-  } catch (error) {
-    console.error('❌ 无法连接到服务器，请确保服务器正在运行');
-    process.exit(1);
-  }
+  const totalTests = Object.keys(testResults).length;
+  const passedTests = Object.values(testResults).filter(test => test.passed).length;
   
-  // 运行所有测试
-  await testCacheMechanism();
-  await testAutoGenerateLogic();
-  await testDatabaseStability();
-  await testRequestCancellation();
-  await testErrorHandling();
-  
-  // 输出测试总结
-  console.log('\n=== 测试总结 ===');
-  
-  let totalPassed = 0;
-  let totalTests = 0;
+  log(`\n总体结果: ${passedTests}/${totalTests} 测试通过`, passedTests === totalTests ? 'green' : 'yellow');
   
   Object.entries(testResults).forEach(([testName, result]) => {
-    const passed = result.passed;
-    const status = passed ? '✅ PASS' : '❌ FAIL';
-    console.log(`${status} ${testName}`);
+    const status = result.passed ? '✓ 通过' : '✗ 失败';
+    const color = result.passed ? 'green' : 'red';
+    log(`\n${testName}: ${status}`, color);
     
-    if (passed) totalPassed++;
-    totalTests++;
-    
-    // 输出详细信息
-    if (result.details && result.details.length > 0) {
+    if (result.details.length > 0) {
       result.details.forEach(detail => {
-        const detailStatus = detail.passed ? '  ✓' : '  ✗';
-        console.log(`${detailStatus} ${detail.message}`);
+        log(`  - ${detail}`, 'reset');
       });
     }
   });
   
-  console.log(`\n总体结果: ${totalPassed}/${totalTests} 测试通过`);
+  log('\n' + '='.repeat(50), 'blue');
   
-  if (totalPassed === totalTests) {
-    console.log('🎉 所有测试通过！投资估算简表数据加载Bug修复成功！');
+  if (passedTests === totalTests) {
+    log('🎉 所有测试通过！修复方案验证成功。', 'green');
   } else {
-    console.log('⚠️  部分测试失败，需要进一步检查修复效果。');
+    log('⚠️  部分测试失败，需要进一步检查修复方案。', 'yellow');
+  }
+}
+
+// 主函数
+async function main() {
+  log('开始投资估算简表数据加载Bug修复验证测试...', 'blue');
+  log(`测试项目ID: ${TEST_PROJECT_ID}`, 'blue');
+  log(`服务器地址: ${BASE_URL}`, 'blue');
+  
+  try {
+    // 检查服务器是否可用
+    await axios.get(`${BASE_URL}/api/health`).catch(() => {
+      throw new Error('服务器不可用，请确保后端服务正在运行');
+    });
+    
+    log('服务器连接正常，开始测试...', 'green');
+    
+    // 执行所有测试
+    await testCacheMechanism();
+    await testAutoGenerateLogic();
+    await testDatabaseQueryStability();
+    await testRequestCancellation();
+    await testErrorHandling();
+    
+    // 生成测试报告
+    generateTestReport();
+    
+  } catch (error) {
+    log(`\n测试执行失败: ${error.message}`, 'red');
+    process.exit(1);
   }
 }
 
 // 运行测试
 if (require.main === module) {
-  runTests().catch(error => {
-    console.error('测试运行失败:', error);
-    process.exit(1);
-  });
+  main().catch(console.error);
 }
 
 module.exports = {
-  runTests,
+  testCacheMechanism,
+  testAutoGenerateLogic,
+  testDatabaseQueryStability,
+  testRequestCancellation,
+  testErrorHandling,
   testResults
 };

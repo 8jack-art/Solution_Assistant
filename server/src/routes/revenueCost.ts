@@ -1,8 +1,8 @@
-import { Router } from 'express'
 import { RevenueCostController } from '../controllers/revenueCostController.js'
 import { authenticateToken } from '../middleware/auth.js'
 
-const router = Router()
+const express = require('express')
+const router = express.Router()
 
 // 所有路由都需要认证
 router.use(authenticateToken)
