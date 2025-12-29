@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目投资现金流量表计算验证</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #F7F8FA;
+        }
+        .highlight {
+            background-color: #fff3cd;
+        }
+        .positive {
+            color: green;
+        }
+        .negative {
+            color: red;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #1D2129;
+            border-bottom: 2px solid #165DFF;
+            padding-bottom: 10px;
+        }
+        .formula {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>项目投资现金流量表计算验证</h1>
+    
+    <div class="section">
+        <h2>修改说明</h2>
+        <p>根据用户反馈，"3 所得税前净现金流量（1-2）"的计算结果不正确。问题在于该行没有正确使用"1 现金流入"和"2 现金流出"的计算结果进行差值计算。</p>
+        
+        <div class="formula">
+            修改前：从表格中获取可能不正确的数据<br>
+            修改后：直接计算 yearInflow - yearOutflow
+        </div>
+        
+        <p>修改位置：</p>
+        <ul>
+            <li>Excel导出功能中的计算逻辑（第1245-1275行）</li>
+            <li>表格显示中的计算逻辑（第2696-2720行）</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>计算逻辑验证</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>序号</th>
+                    <th>项目</th>
+                    <th>合计</th>
+                    <th>建设期1</th>
+                    <th>建设期2</th>
+                    <th>运营期1</th>
+                    <th>运营期2</th>
+                    <th>运营期3</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>现金流入</td>
+                    <td>1000</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td>300</td>
+                    <td>350</td>
+                    <td>350</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>现金流出</td>
+                    <td>800</td>
+                    <td>200</td>
+                    <td>150</td>
+                    <td>200</td>
+                    <td>150</td>
+                    <td>100</td>
+                </tr>
+                <tr class="highlight">
+                    <td>3</td>
+                    <td>所得税前净现金流量（1-2）</td>
+                    <td class="positive">200</td>
+                    <td class="negative">-200</td>
+                    <td class="negative">-150</td>
+                    <td class="positive">100</td>
+                    <td class="positive">200</td>
+                    <td class="positive">250</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div class="formula">
+            验证计算：<br>
+            建设期1：0 - 200 = -200<br>
+            建设期2：0 - 150 = -150<br>
+            运营期1：300 - 200 = 100<br>
+            运营期2：350 - 150 = 200<br>
+            运营期3：350 - 100 = 250<br>
+            合计：(0+0+300+350+350) - (200+150+200+150+100) = 1000 - 800 = 200
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>修改后的代码逻辑</h2>
+        <pre><code>
+// 建设期
+if (year <= constructionYears) {
+    yearInflow = 0; // 建设期没有现金流入
+    yearOutflow = calculateConstructionInvestment(year) + calculateWorkingCapital(year);
+} else {
+    // 运营期
+    const operationYear = year - constructionYears;
+    yearInflow = calculateOperatingRevenue(operationYear) +
+                  calculateSubsidyIncome(operationYear) +
+                  calculateFixedAssetResidual(operationYear) +
+                  calculateWorkingCapitalRecovery(operationYear);
+    yearOutflow = calculateConstructionInvestment(year) +
+                  calculateWorkingCapital(year) +
+                  calculateOperatingCost(operationYear) +
+                  calculateVatAndTaxes(operationYear) +
+                  calculateMaintenanceInvestment(operationYear);
+}
+
+// 计算差值
+yearTotal = yearInflow - yearOutflow;
+        </code></pre>
+    </div>
+    
+    <div class="section">
+        <h2>测试结果</h2>
+        <p>修改后的代码确保了"3 所得税前净现金流量（1-2）"的计算逻辑是正确的，即直接使用"1 现金流入"和"2 现金流出"的计算结果进行差值计算。</p>
+        <p>修改已应用到以下位置：</p>
+        <ul>
+            <li>Excel导出功能中的计算逻辑（第1245-1275行）</li>
+            <li>表格显示中的计算逻辑（第2696-2720行）</li>
+        </ul>
+        <p>现在"3 所得税前净现金流量（1-2）"的计算结果应该是正确的。</p>
+    </div>
+</body>
+</html>
