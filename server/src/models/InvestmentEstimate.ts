@@ -5,68 +5,127 @@ import { randomUUID } from 'crypto'
 export class InvestmentEstimateModel {
   static async findById(id: string): Promise<InvestmentEstimate | null> {
     try {
-      const [rows] = await pool.execute(
-        'SELECT * FROM investment_estimates WHERE id = ?',
-        [id]
-      ) as any[]
+      const [rows] = await pool.execute({
+        sql: 'SELECT * FROM investment_estimates WHERE id = ?',
+        values: [id],
+        timeout: 30000 // 30秒超时
+      }) as any[]
       
       if (rows.length > 0) {
         const row = rows[0]
-        // 解析JSON字段
-        if (row.estimate_data && typeof row.estimate_data === 'string') {
-          row.estimate_data = JSON.parse(row.estimate_data)
+        
+        // 安全解析JSON字段，添加错误处理
+        try {
+          if (row.estimate_data && typeof row.estimate_data === 'string') {
+            row.estimate_data = JSON.parse(row.estimate_data)
+          }
+        } catch (jsonError) {
+          console.error('解析estimate_data JSON失败:', jsonError)
+          row.estimate_data = null
         }
-        // 解析新增的JSON字段
-        if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
-          row.construction_interest_details = JSON.parse(row.construction_interest_details)
+        
+        try {
+          if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
+            row.construction_interest_details = JSON.parse(row.construction_interest_details)
+          }
+        } catch (jsonError) {
+          console.error('解析construction_interest_details JSON失败:', jsonError)
+          row.construction_interest_details = null
         }
-        if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
-          row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple)
+        
+        try {
+          if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
+            row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple)
+          }
+        } catch (jsonError) {
+          console.error('解析loan_repayment_schedule_simple JSON失败:', jsonError)
+          row.loan_repayment_schedule_simple = null
         }
-        if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
-          row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed)
+        
+        try {
+          if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
+            row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed)
+          }
+        } catch (jsonError) {
+          console.error('解析loan_repayment_schedule_detailed JSON失败:', jsonError)
+          row.loan_repayment_schedule_detailed = null
         }
+        
         return row
       }
       return null
-    } catch (error) {
+    } catch (error: any) {
       console.error('查找投资估算失败:', error)
+      // 如果是超时错误，记录详细信息
+      if (error.code === 'ETIMEDOUT' || error.code === 'QUERY_TIMEOUT') {
+        console.error('数据库查询超时，ID:', id)
+      }
       return null
     }
   }
-
+  
   static async findByProjectId(projectId: string): Promise<InvestmentEstimate | null> {
     try {
-      const [rows] = await pool.execute(
-        'SELECT * FROM investment_estimates WHERE project_id = ?',
-        [projectId]
-      ) as any[]
+      // 添加查询超时设置（30秒）
+      const [rows] = await pool.execute({
+        sql: 'SELECT * FROM investment_estimates WHERE project_id = ?',
+        values: [projectId],
+        timeout: 30000 // 30秒超时
+      }) as any[]
       
       if (rows.length > 0) {
         const row = rows[0]
-        // 解析JSON字段
-        if (row.estimate_data && typeof row.estimate_data === 'string') {
-          row.estimate_data = JSON.parse(row.estimate_data)
+        
+        // 安全解析JSON字段，添加错误处理
+        try {
+          if (row.estimate_data && typeof row.estimate_data === 'string') {
+            row.estimate_data = JSON.parse(row.estimate_data)
+          }
+        } catch (jsonError) {
+          console.error('解析estimate_data JSON失败:', jsonError)
+          row.estimate_data = null
         }
-        // 解析新增的JSON字段
-        if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
-          row.construction_interest_details = JSON.parse(row.construction_interest_details)
+        
+        try {
+          if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
+            row.construction_interest_details = JSON.parse(row.construction_interest_details)
+          }
+        } catch (jsonError) {
+          console.error('解析construction_interest_details JSON失败:', jsonError)
+          row.construction_interest_details = null
         }
-        if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
-          row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple)
+        
+        try {
+          if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
+            row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple)
+          }
+        } catch (jsonError) {
+          console.error('解析loan_repayment_schedule_simple JSON失败:', jsonError)
+          row.loan_repayment_schedule_simple = null
         }
-        if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
-          row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed)
+        
+        try {
+          if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
+            row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed)
+          }
+        } catch (jsonError) {
+          console.error('解析loan_repayment_schedule_detailed JSON失败:', jsonError)
+          row.loan_repayment_schedule_detailed = null
         }
+        
         return row
       }
       return null
-    } catch (error) {
+    } catch (error: any) {
       console.error('查找项目投资估算失败:', error)
+      // 如果是超时错误，记录详细信息
+      if (error.code === 'ETIMEDOUT' || error.code === 'QUERY_TIMEOUT') {
+        console.error('数据库查询超时，项目ID:', projectId)
+      }
       return null
     }
   }
-
+  
   static async create(estimateData: Omit<InvestmentEstimate, 'id' | 'created_at' | 'updated_at'>): Promise<InvestmentEstimate | null> {
     try {
       // 生成UUID
@@ -80,7 +139,7 @@ export class InvestmentEstimateModel {
           construction_period, iteration_count, final_total, loan_amount, loan_rate, 
           custom_loan_amount, custom_land_cost, construction_interest_details, 
           loan_repayment_schedule_simple, loan_repayment_schedule_detailed) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           estimateData.project_id,
@@ -108,14 +167,14 @@ export class InvestmentEstimateModel {
           estimateData.loan_repayment_schedule_detailed ? JSON.stringify(estimateData.loan_repayment_schedule_detailed) : null
         ]
       ) as any[]
-
+ 
       return await this.findById(id)
     } catch (error) {
       console.error('创建投资估算失败:', error)
       return null
     }
   }
-
+  
   static async update(id: string, updates: Partial<InvestmentEstimate>): Promise<InvestmentEstimate | null> {
     try {
       // 过滤掉undefined值的字段
@@ -129,26 +188,26 @@ export class InvestmentEstimateModel {
         return value === undefined ? null : value
       })
       const setClause = fields.map(field => `${field} = ?`).join(', ')
-
+ 
       await pool.execute(
         `UPDATE investment_estimates SET ${setClause} WHERE id = ?`,
         [...values, id]
       )
-
+ 
       return await this.findById(id)
     } catch (error) {
       console.error('更新投资估算失败:', error)
       return null
     }
   }
-
+  
   static async delete(id: string): Promise<boolean> {
     try {
       const [result] = await pool.execute(
         'DELETE FROM investment_estimates WHERE id = ?',
         [id]
       ) as any[]
-
+ 
       return result.affectedRows > 0
     } catch (error) {
       console.error('删除投资估算失败:', error)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import * as XLSX from 'xlsx-js-style'
 import { projectApi, investmentApi, llmConfigApi } from '@/lib/api'
@@ -86,6 +86,9 @@ const InvestmentSummary: React.FC = () => {
   const autoGenerateRequested = Boolean(locationState?.autoGenerate)
   const [autoGenerateHandled, setAutoGenerateHandled] = useState(false)
   // 禁用响应式布局，使用固定尺寸
+  
+  // 请求取消控制器
+  const abortControllerRef = useRef<AbortController | null>(null)
   
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -898,9 +901,24 @@ const InvestmentSummary: React.FC = () => {
     if (id) {
       loadProjectAndEstimate()
     }
+    
+    // 组件卸载时取消所有请求
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [id])
 
   const loadProjectAndEstimate = async () => {
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // 创建新的AbortController
+    abortControllerRef.current = new AbortController()
+    
     setLoading(true)
     try {
       // 加载项目信息
@@ -910,7 +928,9 @@ const InvestmentSummary: React.FC = () => {
         setProject(projectData)
         
         // 先检查是否已有投资估算（无论是否autoGenerateRequested，都需要先加载已有数据）
-        const estimateResponse = await investmentApi.getByProjectId(id!)
+        const estimateResponse = await investmentApi.getByProjectId(id!, {
+          signal: abortControllerRef.current.signal
+        })
         let existingThirdLevelItems: Record<number, any[]> = {}
         
         if (estimateResponse.success && estimateResponse.data?.estimate) {
@@ -956,8 +976,11 @@ const InvestmentSummary: React.FC = () => {
                   estimate_data: estimateWithThirdLevel
                 })
               }
-            } catch (e) {
-              console.error('生成估算失败:', e)
+            } catch (e: any) {
+              // 忽略被取消的请求
+              if (e.name !== 'AbortError') {
+                console.error('生成估算失败:', e)
+              }
             } finally {
               setGenerating(false)
             }
@@ -982,12 +1005,15 @@ const InvestmentSummary: React.FC = () => {
         })
       }
     } catch (error: any) {
-      notifications.show({
-        title: '❌ 加载失败',
-        message: error.response?.data?.error || '加载项目失败',
-        color: 'red',
-        autoClose: 6000,
-      })
+      // 忽略被取消的请求
+      if (error.name !== 'AbortError') {
+        notifications.show({
+          title: '❌ 加载失败',
+          message: error.response?.data?.error || '加载项目失败',
+          color: 'red',
+          autoClose: 6000,
+        })
+      }
     } finally {
       setLoading(false)
     }

@@ -140,8 +140,12 @@ const RevenueCostModeling: React.FC = () => {
           revenueCostApi.getByProjectId(id!) // 加载收入成本数据
         ])
         
+        let projectData = null
+        let estimateData = null
+        
+        // 首先处理项目数据
         if (projectResponse.success && projectResponse.data) {
-          const projectData = projectResponse.data.project || projectResponse.data
+          projectData = projectResponse.data.project || projectResponse.data
           setProject(projectData)
           
           // 初始化还款期为运营期
@@ -162,11 +166,12 @@ const RevenueCostModeling: React.FC = () => {
             color: 'red',
           })
           navigate('/dashboard')
+          return
         }
         
-        // 加载投资估算数据
+        // 然后处理投资估算数据
         if (estimateResponse.success && estimateResponse.data?.estimate) {
-          const estimateData = estimateResponse.data.estimate
+          estimateData = estimateResponse.data.estimate
           console.log('✅ 成功加载投资估算数据:', estimateData)
           console.log('📋 投资估算详细字段:', {
             construction_cost: estimateData.construction_cost,
@@ -179,8 +184,9 @@ const RevenueCostModeling: React.FC = () => {
           })
           setInvestmentEstimate(estimateData)
           
-          // 检查并自动保存建设期利息详情
-          await saveConstructionInterestDetailsIfNeeded(estimateData, project)
+          // 修复：在project和estimateData都设置好后，再检查并自动保存建设期利息详情
+          // 此时projectData已经不为null，可以安全传递
+          await saveConstructionInterestDetailsIfNeeded(estimateData, projectData)
         } else {
           console.warn('⚠️ 投资估算API响应异常:', estimateResponse)
         }
@@ -228,6 +234,17 @@ const RevenueCostModeling: React.FC = () => {
 
   // 检查并自动保存建设期利息详情
   const saveConstructionInterestDetailsIfNeeded = async (estimateData: any, project: any) => {
+    // 添加参数验证
+    if (!estimateData) {
+      console.log('⚠️ estimateData参数为空，跳过建设期利息详情保存')
+      return
+    }
+    
+    if (!project) {
+      console.log('⚠️ project参数为空，跳过建设期利息详情保存')
+      return
+    }
+    
     // 检查是否已有建设期利息详情
     if (estimateData.construction_interest_details) {
       console.log('✅ 建设期利息详情已存在，跳过保存')
@@ -242,9 +259,16 @@ const RevenueCostModeling: React.FC = () => {
 
     try {
       console.log('🔄 开始生成并保存建设期利息详情')
+      console.log('📋 项目ID:', project.id, '项目名称:', project.project_name)
       
       // 准备建设期利息详情数据
       const constructionInterestDetails = prepareConstructionInterestDetails(estimateData.estimate_data, project)
+      
+      // 如果准备失败，直接返回
+      if (!constructionInterestDetails) {
+        console.log('⚠️ 建设期利息详情准备失败，跳过保存')
+        return
+      }
       
       // 准备保存数据
       const saveData = {
@@ -291,9 +315,14 @@ const RevenueCostModeling: React.FC = () => {
       }
     } catch (error: any) {
       console.error('❌ 保存建设期利息详情时发生错误:', error)
+      console.error('错误详情:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data
+      })
       notifications.show({
         title: '保存失败',
-        message: error.response?.data?.error || '建设期利息详情保存失败',
+        message: error.response?.data?.error || error.message || '建设期利息详情保存失败',
         color: 'red',
       })
     }
@@ -301,12 +330,25 @@ const RevenueCostModeling: React.FC = () => {
 
   // 准备建设期利息详情数据
   const prepareConstructionInterestDetails = (estimateData: any, project: any) => {
+    // 添加空值检查
     if (!estimateData?.partF?.分年利息) {
+      console.log('⚠️ 未找到partF.分年利息数据，无法生成建设期利息详情')
+      return null
+    }
+    
+    // 添加project参数的空值检查
+    if (!project) {
+      console.log('⚠️ project参数为空，无法生成建设期利息详情')
       return null
     }
 
     const yearlyInterestData = estimateData.partF.分年利息
     const constructionYears = project.construction_years || 0
+    
+    console.log('📊 准备建设期利息详情:', {
+      '建设期年限': constructionYears,
+      '分年利息数据条数': yearlyInterestData?.length || 0
+    })
 
     // 计算各年期末借款余额
     const calculateEndOfYearBalance = (yearIndex: number): number => {

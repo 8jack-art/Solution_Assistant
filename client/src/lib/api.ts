@@ -5,6 +5,105 @@ export type { InvestmentProject, InvestmentEstimate, LLMConfig }
 
 const API_BASE_URL = '/api'
 
+// 数据缓存管理器
+class DataCacheManager {
+  private cache = new Map<string, { data: any; timestamp: number; ttl: number }>()
+  
+  set(key: string, data: any, ttl: number = 300000) { // 默认5分钟TTL
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl
+    })
+  }
+  
+  get(key: string): any | null {
+    const item = this.cache.get(key)
+    
+    if (!item) {
+      return null
+    }
+    
+    // 检查是否过期
+    if (Date.now() - item.timestamp > item.ttl) {
+      this.cache.delete(key)
+      return null
+    }
+    
+    return item.data
+  }
+  
+  invalidate(pattern: string | RegExp) {
+    if (typeof pattern === 'string') {
+      this.cache.delete(pattern)
+    } else {
+      for (const key of this.cache.keys()) {
+        if (pattern.test(key)) {
+          this.cache.delete(key)
+        }
+      }
+    }
+  }
+  
+  clear() {
+    this.cache.clear()
+  }
+}
+
+export const dataCache = new DataCacheManager()
+
+// 请求重试逻辑
+const retryRequest = async (
+  requestFn: () => Promise<any>,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<any> => {
+  let lastError: any
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await requestFn()
+    } catch (error) {
+      lastError = error
+      
+      // 对于4xx错误（除了429）不重试
+      if (lastError.response && lastError.response.status >= 400 && lastError.response.status < 500 && lastError.response.status !== 429) {
+        throw lastError
+      }
+      
+      // 最后一次尝试不需要延迟
+      if (i < maxRetries - 1) {
+        // 指数退避：每次延迟时间翻倍，加上随机抖动
+        const exponentialDelay = delay * Math.pow(2, i) + Math.random() * 1000
+        await new Promise(resolve => setTimeout(resolve, exponentialDelay))
+      }
+    }
+  }
+  
+  throw lastError
+}
+
+// 性能监控
+const monitorRequest = (url: string, startTime: number) => {
+  const duration = Date.now() - startTime
+  
+  // 记录慢请求
+  if (duration > 3000) {
+    console.warn(`[API Performance] Slow request: ${url} took ${duration}ms`)
+  }
+  
+  // 发送到监控系统（如果可用）
+  // @ts-ignore - analytics可能不存在
+  if (window.analytics) {
+    // @ts-ignore
+    window.analytics.track('API Request', {
+      url,
+      duration,
+      success: duration < 10000 // 假设10秒内为成功
+    })
+  }
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000, // 增加到60秒超时
@@ -92,20 +191,64 @@ export const projectApi = {
 
 export const investmentApi = {
   calculate: (params: any) =>
-    api.post<any, ApiResponse<{ estimate: any }>>('/investment/calculate', params),
+    retryRequest(async () => {
+      const startTime = Date.now()
+      const response = await api.post<any, ApiResponse<{ estimate: any }>>('/investment/calculate', params)
+      monitorRequest('/investment/calculate', startTime)
+      return response
+    }),
 
   save: (params: any) =>
-    api.post<any, ApiResponse<{ estimate: any }>>('/investment/save', params),
+    retryRequest(async () => {
+      const startTime = Date.now()
+      const response = await api.post<any, ApiResponse<{ estimate: any }>>('/investment/save', params)
+      monitorRequest('/investment/save', startTime)
+      return response
+    }),
 
-  getByProjectId: (projectId: string) =>
-    api.get<any, ApiResponse<{ estimate?: any }>>(`/investment/project/${projectId}`),
+  getByProjectId: (projectId: string, options?: { signal?: AbortSignal; useCache?: boolean }) => {
+    const cacheKey = `investment:${projectId}`
+    
+    // 尝试从缓存获取
+    if (options?.useCache !== false) {
+      const cachedData = dataCache.get(cacheKey)
+      if (cachedData) {
+        return Promise.resolve(cachedData)
+      }
+    }
+    
+    return retryRequest(async () => {
+      const startTime = Date.now()
+      const response = await api.get<any, ApiResponse<{ estimate?: any }>>(`/investment/project/${projectId}`, {
+        signal: options?.signal
+      })
+      monitorRequest(`/investment/project/${projectId}`, startTime)
+      
+      // 缓存结果
+      if (options?.useCache !== false && response.success) {
+        dataCache.set(cacheKey, response)
+      }
+      
+      return response
+    })
+  },
 
   generateSummary: (projectId: string, aiItems?: any[], customLoanAmount?: number, customLandCost?: number) =>
-    api.post<any, ApiResponse<{ estimate: any; summary: any }>>(`/investment/generate/${projectId}`, { 
-      ai_items: aiItems,
-      custom_loan_amount: customLoanAmount,
-      custom_land_cost: customLandCost
+    retryRequest(async () => {
+      const startTime = Date.now()
+      const response = await api.post<any, ApiResponse<{ estimate: any; summary: any }>>(`/investment/generate/${projectId}`, {
+        ai_items: aiItems,
+        custom_loan_amount: customLoanAmount,
+        custom_land_cost: customLandCost
+      })
+      monitorRequest(`/investment/generate/${projectId}`, startTime)
+      return response
     }),
+
+  // 提供缓存失效方法
+  invalidateCache: (projectId: string) => {
+    dataCache.invalidate(`investment:${projectId}`)
+  }
 }
 
 export const llmConfigApi = {

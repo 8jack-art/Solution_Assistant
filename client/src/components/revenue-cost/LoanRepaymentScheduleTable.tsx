@@ -212,48 +212,66 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     );
 
     // 计算运营期还款数据
-    // 获取贷款总额和利率
-    const loanAmount = estimate?.partF?.贷款总额 || loanConfig.loanAmount;
-    const interestRate = estimate?.partF?.年利率 || loanConfig.interestRate;
-    
-    // 计算等额本息还款
-    const monthlyRate = interestRate / 100 / 12;
-    const totalMonths = loanConfig.loanTerm * 12;
-    const monthlyPayment = loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths) / (Math.pow(1 + monthlyRate, totalMonths) - 1);
+    // 优先从数据库读取运营期数据，如果没有则计算
+    let yearlyPrincipal: number[] = Array(operationYears).fill(0);
+    let yearlyInterest: number[] = Array(operationYears).fill(0);
+    let yearlyPayment: number[] = Array(operationYears).fill(0);
+    let beginningBalance: number[] = Array(operationYears).fill(0);
+    let endingBalance: number[] = Array(operationYears).fill(0);
 
-    // 计算每年的还款额
-    const yearlyPrincipal = Array(operationYears).fill(0);
-    const yearlyInterest = Array(operationYears).fill(0);
-    const yearlyPayment = Array(operationYears).fill(0);
+    // 检查数据库中是否已保存运营期数据
+    if (savedLoanData.loanRepaymentScheduleSimple?.还款计划) {
+      console.log('✅ 从数据库读取运营期还款数据');
+      const savedSchedule = savedLoanData.loanRepaymentScheduleSimple.还款计划;
+      
+      // 从数据库读取运营期数据
+      savedSchedule.forEach((yearData: any) => {
+        const yearIndex = yearData.年份 - 1;
+        if (yearIndex >= 0 && yearIndex < operationYears) {
+          yearlyPrincipal[yearIndex] = yearData.当期还本 || 0;
+          yearlyInterest[yearIndex] = yearData.当期付息 || 0;
+          yearlyPayment[yearIndex] = yearData.当期还本付息 || 0;
+          beginningBalance[yearIndex] = yearData.期初借款余额 || 0;
+          endingBalance[yearIndex] = yearData.期末借款余额 || 0;
+        }
+      });
+    } else {
+      console.log('⚠️ 数据库中无运营期数据，使用计算值');
+      // 获取贷款总额和利率
+      const loanAmount = estimate?.partF?.贷款总额 || loanConfig.loanAmount;
+      const interestRate = estimate?.partF?.年利率 || loanConfig.interestRate;
+      
+      // 计算等额本息还款
+      const monthlyRate = interestRate / 100 / 12;
+      const totalMonths = loanConfig.loanTerm * 12;
+      const monthlyPayment = loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths) / (Math.pow(1 + monthlyRate, totalMonths) - 1);
 
-    let remainingPrincipal = loanAmount;
-    let currentYear = 1;
+      let remainingPrincipal = loanAmount;
+      let currentYear = 1;
 
-    for (let month = 1; month <= totalMonths && currentYear <= operationYears; month++) {
-      const interestPayment = remainingPrincipal * monthlyRate;
-      const principalPayment = monthlyPayment - interestPayment;
-      
-      yearlyInterest[currentYear - 1] += interestPayment;
-      yearlyPrincipal[currentYear - 1] += principalPayment;
-      yearlyPayment[currentYear - 1] += monthlyPayment;
-      
-      remainingPrincipal -= principalPayment;
-      
-      // 每12个月进入下一年
-      if (month % 12 === 0) {
-        currentYear++;
+      for (let month = 1; month <= totalMonths && currentYear <= operationYears; month++) {
+        const interestPayment = remainingPrincipal * monthlyRate;
+        const principalPayment = monthlyPayment - interestPayment;
+        
+        yearlyInterest[currentYear - 1] += interestPayment;
+        yearlyPrincipal[currentYear - 1] += principalPayment;
+        yearlyPayment[currentYear - 1] += monthlyPayment;
+        
+        remainingPrincipal -= principalPayment;
+        
+        // 每12个月进入下一年
+        if (month % 12 === 0) {
+          currentYear++;
+        }
       }
-    }
 
-    // 计算期初和期末借款余额
-    const beginningBalance = Array(operationYears).fill(0);
-    const endingBalance = Array(operationYears).fill(0);
-    
-    let balance = loanAmount;
-    for (let year = 1; year <= operationYears; year++) {
-      beginningBalance[year - 1] = balance;
-      balance -= yearlyPrincipal[year - 1];
-      endingBalance[year - 1] = Math.max(0, balance);
+      // 计算期初和期末借款余额
+      let balance = loanAmount;
+      for (let year = 1; year <= operationYears; year++) {
+        beginningBalance[year - 1] = balance;
+        balance -= yearlyPrincipal[year - 1];
+        endingBalance[year - 1] = Math.max(0, balance);
+      }
     }
 
     // 计算还本付息资金来源
@@ -350,6 +368,15 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
     }
 
     // 构建表格数据
+    // 确保"1 借款还本付息计划"行的运营期数据正确填充
+    // 从数据库读取的运营期数据应该填充到该行的运营期列
+    const loanRepaymentOperationPeriod = savedLoanData.loanRepaymentScheduleSimple?.还款计划
+      ? Array(operationYears).fill(0).map((_, index) => {
+          const yearData = savedLoanData.loanRepaymentScheduleSimple.还款计划.find((y: any) => y.年份 === index + 1);
+          return yearData?.当期还本付息 || 0;
+        })
+      : operationPeriod;
+
     const tableData: LoanRepaymentTableData = {
       rows: [
         // 1 借款还本付息计划
@@ -358,7 +385,7 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
           项目: '借款还本付息计划',
           合计: null,
           建设期: constructionPeriod,
-          运营期: operationPeriod
+          运营期: loanRepaymentOperationPeriod
         },
         // 1.1 期初借款余额
         {

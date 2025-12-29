@@ -10,10 +10,14 @@ export const dbConfig = {
   password: process.env.DB_PASSWORD || '8Pd6tTKmkzY6rYSC',
   database: process.env.DB_NAME || 'ProjInvDB',
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 20, // 增加最大连接数到20
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
+  // 添加连接超时设置
+  connectTimeout: 10000, // 10秒连接超时
+  acquireTimeout: 10000, // 10秒获取连接超时
+  timeout: 30000, // 30秒查询超时
 }
 
 export const pool = mysql.createPool(dbConfig)
