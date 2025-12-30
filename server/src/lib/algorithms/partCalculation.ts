@@ -7,6 +7,9 @@ import {
   calculateConstructionManagementFee,
   calculateLandCost,
   calculateBiddingAgencyFee,
+  calculateEngineeringBiddingFee,
+  calculateGoodsBiddingFee,
+  calculateServiceBiddingFee,
   calculateSupervisionFee,
   calculatePreliminaryConsultingFee,
   calculateSurveyDesignFee,
@@ -38,12 +41,14 @@ export interface InvestmentItem {
  * @param landCost 土地费用
  * @param totalFunding 项目总资金（可选，用于建设单位管理费计算）
  * @param engineeringCost 工程费用 = 建设工程费 + 安装工程费（用于勘察设计费、监理费等计算）
+ * @param equipmentCost 设备购置费（用于货物招标费计算）
  */
 export function calculatePartB(
   partATotal: number, 
   landCost: number, 
   totalFunding?: number,
-  engineeringCost?: number
+  engineeringCost?: number,
+  equipmentCost?: number
 ): InvestmentItem {
   // 确保landCost是数字
   const numericLandCost = Number(landCost) || 0
@@ -52,6 +57,24 @@ export function calculatePartB(
   const managementFee = totalFunding 
     ? calculateConstructionManagementFee(totalFunding, numericLandCost)
     : partATotal * 0.015 // 兼容旧算法（简化计算）
+  
+  // 计算监理费、勘察设计费（需要用于后续计算）
+  const supervisionFee = calculateSupervisionFee(engineeringCost ?? partATotal)
+  const surveyDesignFee = calculateSurveyDesignFee(engineeringCost ?? partATotal)
+  
+  // 勘察费约为勘察设计费的15%（初勘3% + 施工勘察12%）
+  const surveyFee = surveyDesignFee * 0.15
+  // 设计费约为勘察设计费的85%（基本设计费+竣工图编制费）
+  const designFee = surveyDesignFee * 0.85
+  
+  // 计算招标代理费（3个子项之和）
+  const biddingAgencyFee = calculateBiddingAgencyFee(
+    engineeringCost ?? partATotal,  // 工程费用
+    equipmentCost ?? 0,              // 设备购置费
+    supervisionFee,                   // 监理费
+    surveyFee,                        // 勘察费
+    designFee                         // 设计费
+  )
   
   const children: InvestmentItem[] = [
     {
@@ -71,20 +94,38 @@ export function calculatePartB(
     {
       序号: '3',
       工程或费用名称: '招标代理费',
-      合计: calculateBiddingAgencyFee(partATotal),
-      备注: '按第一部分工程费的0.8%计取'
+      合计: biddingAgencyFee,
+      备注: '差额定率分档累进（工程+货物+服务招标费）'
+    },
+    {
+      序号: '3.1',
+      工程或费用名称: '  工程招标费',
+      合计: calculateEngineeringBiddingFee(engineeringCost ?? partATotal),
+      备注: '以工程费用为基数'
+    },
+    {
+      序号: '3.2',
+      工程或费用名称: '  货物招标费',
+      合计: calculateGoodsBiddingFee(equipmentCost ?? 0),
+      备注: '以设备购置费为基数'
+    },
+    {
+      序号: '3.3',
+      工程或费用名称: '  服务招标费',
+      合计: calculateServiceBiddingFee(supervisionFee, surveyFee, designFee),
+      备注: '以监理费+勘察费+设计费为基数'
     },
     {
       序号: '4',
       工程或费用名称: '建设工程监理费',
-      合计: calculateSupervisionFee(partATotal),
-      备注: '按第一部分工程费的1.2%计取'
+      合计: calculateSupervisionFee(engineeringCost ?? partATotal),
+      备注: '按工程费用分档内插计算'
     },
     {
       序号: '5',
       工程或费用名称: '项目前期工作咨询费',
-      合计: calculatePreliminaryConsultingFee(partATotal),
-      备注: '按第一部分工程费的0.5%计取'
+      合计: calculatePreliminaryConsultingFee(totalFunding ?? partATotal),
+      备注: '按总投资额分档内插计算（5个子项之和）'
     },
     {
       序号: '6',
@@ -101,8 +142,8 @@ export function calculatePartB(
     {
       序号: '8',
       工程或费用名称: '编制环境影响报告书',
-      合计: calculateEnvironmentalReportFee(partATotal),
-      备注: '按第一部分工程费的0.3%计取'
+      合计: calculateEnvironmentalReportFee(totalFunding ?? partATotal),
+      备注: '按总投资额分档内插计算×敏感系数0.8'
     },
     {
       序号: '9',

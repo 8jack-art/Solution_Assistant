@@ -8,8 +8,9 @@ import { calculateConstructionManagementFee, calculateLandCost, calculateBidding
  * @param partATotal 第一部分工程费用总额
  * @param landCost 土地费用
  * @param totalFunding 项目总资金（可选，用于建设单位管理费计算）
+ * @param engineeringCost 工程费用 = 建设工程费 + 安装工程费（用于勘察设计费、监理费等计算）
  */
-export function calculatePartB(partATotal, landCost, totalFunding) {
+export function calculatePartB(partATotal, landCost, totalFunding, engineeringCost) {
     // 确保landCost是数字
     const numericLandCost = Number(landCost) || 0;
     // 如果传入了项目总资金，使用新的分段费率算法计算建设单位管理费
@@ -40,20 +41,20 @@ export function calculatePartB(partATotal, landCost, totalFunding) {
         {
             序号: '4',
             工程或费用名称: '建设工程监理费',
-            合计: calculateSupervisionFee(partATotal),
-            备注: '按第一部分工程费的1.2%计取'
+            合计: calculateSupervisionFee(engineeringCost ?? partATotal),
+            备注: '按工程费用分档内插计算'
         },
         {
             序号: '5',
             工程或费用名称: '项目前期工作咨询费',
-            合计: calculatePreliminaryConsultingFee(partATotal),
-            备注: '按第一部分工程费的0.5%计取'
+            合计: calculatePreliminaryConsultingFee(totalFunding ?? partATotal),
+            备注: '按总投资额分档内插计算（5个子项之和）'
         },
         {
             序号: '6',
             工程或费用名称: '勘察设计费',
-            合计: calculateSurveyDesignFee(partATotal),
-            备注: '按第一部分工程费的2.5%计取'
+            合计: calculateSurveyDesignFee(engineeringCost ?? partATotal),
+            备注: '按工程费的2.5%计取'
         },
         {
             序号: '7',
@@ -64,8 +65,8 @@ export function calculatePartB(partATotal, landCost, totalFunding) {
         {
             序号: '8',
             工程或费用名称: '编制环境影响报告书',
-            合计: calculateEnvironmentalReportFee(partATotal),
-            备注: '按第一部分工程费的0.3%计取'
+            合计: calculateEnvironmentalReportFee(totalFunding ?? partATotal),
+            备注: '按总投资额分档内插计算×敏感系数0.8'
         },
         {
             序号: '9',

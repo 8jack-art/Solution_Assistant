@@ -33,6 +33,7 @@ interface InvestmentEstimateResult {
     partG: InvestmentItem;
     iterationCount: number;
     gapRate: number;
+    thirdLevelItems?: Record<number, any[]>;
 }
 /**
  * 统一循环迭代算法

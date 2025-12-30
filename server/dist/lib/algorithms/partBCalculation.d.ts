@@ -1,6 +1,7 @@
 /**
  * B部分工程其它费用计算算法模块
  * 实现工程其它费用各子项的详细计算逻辑
+ * 包含分档内插计算算法
  */
 /**
  * 计算建设单位管理费
@@ -40,25 +41,26 @@ export declare function calculateLandCost(landCost: number): number;
 export declare function calculateBiddingAgencyFee(partATotal: number): number;
 /**
  * 计算建设工程监理费
- * 按第一部分工程费用的1.2%计取
- * @param partATotal 第一部分工程费用总额（万元）
+ * 按工程费用分档内插计算
+ * @param engineeringCost 工程费用 = 建设工程费 + 安装工程费（万元）
  * @returns 建设工程监理费（万元）
  */
-export declare function calculateSupervisionFee(partATotal: number): number;
+export declare function calculateSupervisionFee(engineeringCost: number): number;
 /**
  * 计算项目前期工作咨询费
- * 按第一部分工程费用的0.5%计取
- * @param partATotal 第一部分工程费用总额（万元）
+ * 按总投资额分档内插计算（5个子项之和）
+ * @param totalFunding 项目总资金（万元）
  * @returns 项目前期工作咨询费（万元）
  */
-export declare function calculatePreliminaryConsultingFee(partATotal: number): number;
+export declare function calculatePreliminaryConsultingFee(totalFunding: number): number;
 /**
  * 计算勘察设计费
- * 按第一部分工程费用的2.5%计取
- * @param partATotal 第一部分工程费用总额（万元）
+ * 勘察费 = 初勘及详细勘察费 + 施工勘察费
+ * 设计费 = 基本设计费 + 竣工图编制费
+ * @param engineeringCost 工程费用 = 建设工程费 + 安装工程费（万元）
  * @returns 勘察设计费（万元）
  */
-export declare function calculateSurveyDesignFee(partATotal: number): number;
+export declare function calculateSurveyDesignFee(engineeringCost: number): number;
 /**
  * 计算研究试验费
  * 按第一部分工程费用的1%计取
@@ -68,11 +70,12 @@ export declare function calculateSurveyDesignFee(partATotal: number): number;
 export declare function calculateResearchTestFee(partATotal: number): number;
 /**
  * 计算编制环境影响报告书费用
- * 按第一部分工程费用的0.3%计取
- * @param partATotal 第一部分工程费用总额（万元）
+ * 按投资额分档内插计算
+ * 编制环评报告书编制费 = 基本编制费 × 敏感系数(0.8)
+ * @param totalFunding 项目总资金（万元）
  * @returns 编制环境影响报告书费用（万元）
  */
-export declare function calculateEnvironmentalReportFee(partATotal: number): number;
+export declare function calculateEnvironmentalReportFee(totalFunding: number): number;
 /**
  * 计算场地准备及临时设施费
  * 按第一部分工程费用的2%计取

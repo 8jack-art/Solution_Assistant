@@ -94,46 +94,81 @@ const SURVEY_DESIGN_BRACKETS = [
 ]
 
 // ==================== 前期咨询费分档数据 ====================
-// 前期咨询费有5个子项，每个子项都有分档数据
+// 每个子项有独立的分档数据
 interface ConsultingBracket {
   threshold: number
   min: number
   max: number
 }
 
-const PRELIMINARY_CONSULTING_BRACKETS: Record<string, ConsultingBracket[]> = {
-  // 1亿元以下
-  below100M: [
-    { threshold: 500, min: 0.8, max: 1.2 },
-    { threshold: 1000, min: 1.2, max: 2.0 },
-    { threshold: 3000, min: 2.0, max: 4.8 },
-    { threshold: 10000, min: 4.8, max: 11.2 },
-  ],
-  // 1亿~5亿
-  hundredMTo500M: [
-    { threshold: 10000, min: 11.2, max: 29.6 },
-    { threshold: 50000, min: 29.6, max: 44 },
-    { threshold: 100000, min: 44, max: 80 },
-    { threshold: 500000, min: 80, max: 100 },
-  ],
-  // 5亿~10亿
-  fiveHundredMTo1B: [
-    { threshold: 50000, min: 29.6, max: 44 },
-    { threshold: 100000, min: 44, max: 80 },
-    { threshold: 500000, min: 80, max: 100 },
-    { threshold: 1000000, min: 100, max: 160 }, // 假设
-  ],
-}
+// 编制项目建议书分档数据
+const PROPOSAL_BRACKETS: ConsultingBracket[] = [
+  { threshold: 500, min: 0.8, max: 1.2 },
+  { threshold: 1000, min: 1.2, max: 2.0 },
+  { threshold: 3000, min: 2.0, max: 4.8 },
+  { threshold: 10000, min: 11.2, max: 29.6 },
+  { threshold: 50000, min: 29.6, max: 44 },
+  { threshold: 100000, min: 44, max: 80 },
+  { threshold: 500000, min: 80, max: 100 },
+  { threshold: 1000000, min: 100, max: 160 },
+]
+
+// 编制可行性研究报告分档数据
+const FEASIBILITY_BRACKETS: ConsultingBracket[] = [
+  { threshold: 500, min: 1.6, max: 3.2 },
+  { threshold: 1000, min: 3.2, max: 4.8 },
+  { threshold: 3000, min: 4.8, max: 9.6 },
+  { threshold: 10000, min: 22.4, max: 60 },
+  { threshold: 50000, min: 60, max: 88 },
+  { threshold: 100000, min: 88, max: 160 },
+  { threshold: 500000, min: 160, max: 200 },
+  { threshold: 1000000, min: 200, max: 280 },
+]
+
+// 评估项目建议书分档数据
+const PROPOSAL_EVAL_BRACKETS: ConsultingBracket[] = [
+  { threshold: 500, min: 0.4, max: 0.8 },
+  { threshold: 1000, min: 0.8, max: 1.2 },
+  { threshold: 3000, min: 1.2, max: 3.2 },
+  { threshold: 10000, min: 6.4, max: 9.6 },
+  { threshold: 50000, min: 9.6, max: 12 },
+  { threshold: 100000, min: 12, max: 13.6 },
+  { threshold: 500000, min: 13.6, max: 16 },
+  { threshold: 1000000, min: 16, max: 20 },
+]
+
+// 评估可行性研究报告分档数据
+const FEASIBILITY_EVAL_BRACKETS: ConsultingBracket[] = [
+  { threshold: 500, min: 0.8, max: 1.2 },
+  { threshold: 1000, min: 1.2, max: 2.0 },
+  { threshold: 3000, min: 2.0, max: 4.0 },
+  { threshold: 10000, min: 8.0, max: 12.0 },
+  { threshold: 50000, min: 12.0, max: 16.0 },
+  { threshold: 100000, min: 16.0, max: 20.0 },
+  { threshold: 500000, min: 20.0, max: 28.0 },
+  { threshold: 1000000, min: 28.0, max: 40.0 },
+]
+
+// 初步设计文件评估咨询分档数据
+const DESIGN_EVAL_BRACKETS: ConsultingBracket[] = [
+  { threshold: 500, min: 0.8, max: 1.2 },
+  { threshold: 1000, min: 1.2, max: 2.0 },
+  { threshold: 3000, min: 2.0, max: 4.0 },
+  { threshold: 10000, min: 8.0, max: 12.0 },
+  { threshold: 50000, min: 12.0, max: 16.0 },
+  { threshold: 100000, min: 16.0, max: 20.0 },
+  { threshold: 500000, min: 20.0, max: 28.0 },
+  { threshold: 1000000, min: 28.0, max: 40.0 },
+]
 
 /**
- * 计算前期咨询费分档内插
+ * 计算单个前期咨询子项费用
  */
-function calculatePreliminaryConsultingByBracket(
+function calculateConsultingItemFee(
   totalFunding: number,
-  bracketType: 'below100M' | 'hundredMTo500M' | 'fiveHundredMTo1B'
+  brackets: ConsultingBracket[]
 ): number {
-  const brackets = PRELIMINARY_CONSULTING_BRACKETS[bracketType]
-  if (!brackets) return 0
+  if (totalFunding <= 0) return 0
   
   // 找到所在区间
   let lower = brackets[0]
@@ -150,21 +185,20 @@ function calculatePreliminaryConsultingByBracket(
   // 如果小于最小档
   if (totalFunding < brackets[0].threshold) {
     const ratio = totalFunding / brackets[0].threshold
-    return brackets[0].min + (brackets[0].max - brackets[0].min) * ratio
+    return lower.min + (lower.max - lower.min) * ratio
   }
   
   // 如果大于最大档
   if (totalFunding > brackets[brackets.length - 1].threshold) {
     const last = brackets[brackets.length - 1]
     const secondLast = brackets[brackets.length - 2]
-    const rate = (last.max - secondLast.max) / (last.threshold - secondLast.threshold)
-    return last.max + (totalFunding - last.threshold) * rate
+    const rate = (last.min - secondLast.min) / (last.threshold - secondLast.threshold)
+    return last.min + (totalFunding - last.threshold) * rate
   }
   
-  // 内插计算（使用区间中间值）
-  const mid = (lower.min + lower.max + upper.min + upper.max) / 4
-  const rate = (upper.min + upper.max - lower.min - lower.max) / 4 / (upper.threshold - lower.threshold)
-  return mid + (totalFunding - lower.threshold) * rate
+  // 内插计算（使用min值）
+  const rate = (upper.min - lower.min) / (upper.threshold - lower.threshold)
+  return lower.min + (totalFunding - lower.threshold) * rate
 }
 
 /**
@@ -261,13 +295,158 @@ export function calculateLandCost(landCost: number): number {
 }
 
 /**
- * 计算招标代理费
- * 按第一部分工程费用的0.8%计取
- * @param partATotal 第一部分工程费用总额（万元）
+ * 招标代理费计算
+ * 包含3个子项：工程招标费、货物招标费、服务招标费
+ * 采用差额定率分档累进算法
+ */
+
+// 招标代理费费率表（差额定率分档累进）
+// 费用单位：万元，费率单位：‰
+interface BiddingFeeBracket {
+  threshold: number  // 档位上限（万元）
+  rate: number       // 费率（‰）
+}
+
+// 工程招标费率表
+const ENGINEERING_BIDDING_BRACKETS: BiddingFeeBracket[] = [
+  { threshold: 100, rate: 6.300 },
+  { threshold: 500, rate: 4.410 },
+  { threshold: 1000, rate: 3.465 },
+  { threshold: 5000, rate: 2.205 },
+  { threshold: 10000, rate: 1.260 },
+  { threshold: 50000, rate: 0.315 },
+  { threshold: 100000, rate: 0.221 },
+  { threshold: 500000, rate: 0.050 },
+  { threshold: 1000000, rate: 0.038 },
+  { threshold: 10000000, rate: 0.025 },
+]
+
+// 货物招标费率表
+const GOODS_BIDDING_BRACKETS: BiddingFeeBracket[] = [
+  { threshold: 100, rate: 9.450 },
+  { threshold: 500, rate: 6.930 },
+  { threshold: 1000, rate: 5.040 },
+  { threshold: 5000, rate: 3.150 },
+  { threshold: 10000, rate: 1.575 },
+  { threshold: 50000, rate: 0.315 },
+  { threshold: 100000, rate: 0.221 },
+  { threshold: 500000, rate: 0.050 },
+  { threshold: 1000000, rate: 0.038 },
+  { threshold: 10000000, rate: 0.025 },
+]
+
+// 服务招标费率表
+const SERVICE_BIDDING_BRACKETS: BiddingFeeBracket[] = [
+  { threshold: 100, rate: 9.450 },
+  { threshold: 500, rate: 5.040 },
+  { threshold: 1000, rate: 2.853 },
+  { threshold: 5000, rate: 1.575 },
+  { threshold: 10000, rate: 0.630 },
+  { threshold: 50000, rate: 0.315 },
+  { threshold: 100000, rate: 0.221 },
+  { threshold: 500000, rate: 0.050 },
+  { threshold: 1000000, rate: 0.038 },
+  { threshold: 10000000, rate: 0.025 },
+]
+
+/**
+ * 差额定率分档累进计算招标代理费
+ * @param amount 计算基数（万元）
+ * @param brackets 费率表
  * @returns 招标代理费（万元）
  */
-export function calculateBiddingAgencyFee(partATotal: number): number {
-  return partATotal * 0.008
+function calculateBiddingFeeByBrackets(amount: number, brackets: BiddingFeeBracket[]): number {
+  if (amount <= 0) return 0
+  
+  let fee = 0
+  let remaining = amount
+  let previousThreshold = 0
+  
+  for (const bracket of brackets) {
+    if (remaining <= 0) break
+    
+    const bracketRange = bracket.threshold - previousThreshold
+    
+    if (amount >= bracket.threshold) {
+      // 整个档位都适用
+      fee += bracketRange * bracket.rate / 1000
+    } else if (amount > previousThreshold) {
+      // 只有部分适用
+      const applicableAmount = amount - previousThreshold
+      fee += applicableAmount * bracket.rate / 1000
+    }
+    
+    previousThreshold = bracket.threshold
+  }
+  
+  return fee
+}
+
+/**
+ * 计算工程招标费
+ * 以工程费用（建设工程费+安装工程费）为基数
+ * @param engineeringCost 工程费用（万元）
+ * @returns 工程招标费（万元）
+ */
+export function calculateEngineeringBiddingFee(engineeringCost: number): number {
+  return calculateBiddingFeeByBrackets(engineeringCost, ENGINEERING_BIDDING_BRACKETS)
+}
+
+/**
+ * 计算货物招标费
+ * 以设备购置费为基数
+ * @param equipmentCost 设备购置费（万元）
+ * @returns 货物招标费（万元）
+ */
+export function calculateGoodsBiddingFee(equipmentCost: number): number {
+  return calculateBiddingFeeByBrackets(equipmentCost, GOODS_BIDDING_BRACKETS)
+}
+
+/**
+ * 计算服务招标费
+ * 以（监理费+勘察费+设计费）为基数
+ * 监理费、勘察费、设计费任一项小于50万时，该项招标费为0
+ * @param supervisionFee 监理费（万元）
+ * @param surveyFee 勘察费（万元）
+ * @param designFee 设计费（万元）
+ * @returns 服务招标费（万元）
+ */
+export function calculateServiceBiddingFee(
+  supervisionFee: number,
+  surveyFee: number,
+  designFee: number
+): number {
+  // 检查是否任一项小于50万
+  if (supervisionFee < 50 || surveyFee < 50 || designFee < 50) {
+    return 0
+  }
+  
+  // 服务招标费基数 = 监理费 + 勘察费 + 设计费
+  const serviceBase = supervisionFee + surveyFee + designFee
+  return calculateBiddingFeeByBrackets(serviceBase, SERVICE_BIDDING_BRACKETS)
+}
+
+/**
+ * 计算招标代理费合计
+ * @param engineeringCost 工程费用（万元）
+ * @param equipmentCost 设备购置费（万元）
+ * @param supervisionFee 监理费（万元）
+ * @param surveyFee 勘察费（万元）
+ * @param designFee 设计费（万元）
+ * @returns 招标代理费合计（万元）
+ */
+export function calculateBiddingAgencyFee(
+  engineeringCost: number,
+  equipmentCost: number,
+  supervisionFee: number,
+  surveyFee: number,
+  designFee: number
+): number {
+  const engineeringFee = calculateEngineeringBiddingFee(engineeringCost)
+  const goodsFee = calculateGoodsBiddingFee(equipmentCost)
+  const serviceFee = calculateServiceBiddingFee(supervisionFee, surveyFee, designFee)
+  
+  return engineeringFee + goodsFee + serviceFee
 }
 
 /**
@@ -292,62 +471,13 @@ export function calculateSupervisionFee(engineeringCost: number): number {
 export function calculatePreliminaryConsultingFee(totalFunding: number): number {
   if (totalFunding <= 0) return 0
   
-  // 5个子项的计算逻辑
-  // 根据总投资额所在区间选择对应的分档表
-  let bracketType: 'below100M' | 'hundredMTo500M' | 'fiveHundredMTo1B'
+  // 分别计算4个子项的费用（去掉评估项目建议书）
+  const proposalFee = calculateConsultingItemFee(totalFunding, PROPOSAL_BRACKETS)
+  const feasibilityFee = calculateConsultingItemFee(totalFunding, FEASIBILITY_BRACKETS)
+  const feasibilityEvalFee = calculateConsultingItemFee(totalFunding, FEASIBILITY_EVAL_BRACKETS)
+  const designEvalFee = calculateConsultingItemFee(totalFunding, DESIGN_EVAL_BRACKETS)
   
-  if (totalFunding < 10000) {
-    bracketType = 'below100M'
-  } else if (totalFunding < 50000) {
-    bracketType = 'hundredMTo500M'
-  } else {
-    bracketType = 'fiveHundredMTo1B'
-  }
-  
-  // 5个子项的分档数据
-  const brackets = PRELIMINARY_CONSULTING_BRACKETS[bracketType]
-  if (!brackets) return 0
-  
-  // 计算5个子项的费用
-  let total = 0
-  
-  for (const item of ['编制项目建议书', '编制可行性研究报告', '评估项目建议书', '评估可行性研究报告', '初步设计文件评估咨询']) {
-    // 根据子项类型选择对应的min/max范围
-    let itemMin = 0, itemMax = 0
-    
-    // 简化处理：使用编制项目建议书的费率作为示例
-    // 实际应该根据每个子项分别计算
-    itemMin = brackets[0].min
-    itemMax = brackets[brackets.length - 1].max
-    
-    // 找到所在区间
-    let lower = brackets[0]
-    let upper = brackets[1]
-    
-    for (let i = 0; i < brackets.length - 1; i++) {
-      if (totalFunding >= brackets[i].threshold && totalFunding <= brackets[i + 1].threshold) {
-        lower = brackets[i]
-        upper = brackets[i + 1]
-        break
-      }
-    }
-    
-    // 内插计算
-    if (totalFunding < brackets[0].threshold) {
-      const ratio = totalFunding / brackets[0].threshold
-      total += lower.min + (lower.max - lower.min) * ratio
-    } else if (totalFunding > brackets[brackets.length - 1].threshold) {
-      const last = brackets[brackets.length - 1]
-      const secondLast = brackets[brackets.length - 2]
-      const rate = (last.max - secondLast.max) / (last.threshold - secondLast.threshold)
-      total += last.max + (totalFunding - last.threshold) * rate
-    } else {
-      const rate = (upper.max - lower.max) / (upper.threshold - lower.threshold)
-      total += lower.max + (totalFunding - lower.threshold) * rate
-    }
-  }
-  
-  return total
+  return proposalFee + feasibilityFee + feasibilityEvalFee + designEvalFee
 }
 
 /**
@@ -394,14 +524,71 @@ export function calculateResearchTestFee(partATotal: number): number {
   return partATotal * 0.01
 }
 
+// ==================== 环评报告书分档数据 ====================
+// 投资额单位：亿元
+// 费率单位：万元
+interface EnvReportBracket {
+  threshold: number  // 投资额上限（亿元）
+  min: number        // 费率下限（万元）
+  max: number        // 费率上限（万元）
+}
+
+const ENV_REPORT_BRACKETS: EnvReportBracket[] = [
+  { threshold: 0.3, min: 3.0, max: 3.6 },
+  { threshold: 2, min: 3.6, max: 9.0 },
+  { threshold: 10, min: 9.0, max: 21.0 },
+  { threshold: 50, min: 21.0, max: 45.0 },
+  { threshold: 100, min: 45.0, max: 66.0 },
+  { threshold: 1000, min: 66.0, max: 100.0 },  // 100以上估计值
+]
+
 /**
  * 计算编制环境影响报告书费用
- * 按第一部分工程费用的0.3%计取
- * @param partATotal 第一部分工程费用总额（万元）
+ * 按投资额分档内插计算
+ * 编制环评报告书编制费 = 基本编制费 × 敏感系数(0.8)
+ * @param totalFunding 项目总资金（万元）
  * @returns 编制环境影响报告书费用（万元）
  */
-export function calculateEnvironmentalReportFee(partATotal: number): number {
-  return partATotal * 0.003
+export function calculateEnvironmentalReportFee(totalFunding: number): number {
+  if (totalFunding <= 0) return 0
+  
+  // 将万元转换为亿元
+  const fundingInBillion = totalFunding / 10000
+  
+  // 找到所在区间
+  let lower = ENV_REPORT_BRACKETS[0]
+  let upper = ENV_REPORT_BRACKETS[1]
+  
+  for (let i = 0; i < ENV_REPORT_BRACKETS.length - 1; i++) {
+    if (fundingInBillion >= ENV_REPORT_BRACKETS[i].threshold && fundingInBillion <= ENV_REPORT_BRACKETS[i + 1].threshold) {
+      lower = ENV_REPORT_BRACKETS[i]
+      upper = ENV_REPORT_BRACKETS[i + 1]
+      break
+    }
+  }
+  
+  // 如果小于最小档
+  if (fundingInBillion < ENV_REPORT_BRACKETS[0].threshold) {
+    const ratio = fundingInBillion / ENV_REPORT_BRACKETS[0].threshold
+    const baseFee = lower.min + (lower.max - lower.min) * ratio
+    return baseFee * 0.8  // 敏感系数0.8
+  }
+  
+  // 如果大于最大档
+  if (fundingInBillion > ENV_REPORT_BRACKETS[ENV_REPORT_BRACKETS.length - 1].threshold) {
+    const last = ENV_REPORT_BRACKETS[ENV_REPORT_BRACKETS.length - 1]
+    const secondLast = ENV_REPORT_BRACKETS[ENV_REPORT_BRACKETS.length - 2]
+    const rate = (last.min - secondLast.min) / (last.threshold - secondLast.threshold)
+    const baseFee = last.min + (fundingInBillion - last.threshold) * rate
+    return baseFee * 0.8  // 敏感系数0.8
+  }
+  
+  // 内插计算（使用min值）
+  const rate = (upper.min - lower.min) / (upper.threshold - lower.threshold)
+  const baseFee = lower.min + (fundingInBillion - lower.threshold) * rate
+  
+  // 应用敏感系数0.8
+  return baseFee * 0.8
 }
 
 /**
