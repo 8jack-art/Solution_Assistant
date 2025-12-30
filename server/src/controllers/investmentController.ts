@@ -281,6 +281,7 @@ export class InvestmentController {
         ai_items, 
         custom_loan_amount, 
         custom_land_cost,
+        project_type, // 项目类型：agriculture-农业，construction-建筑
         save_after_complete = true  // 默认保存
       } = req.body
       const userId = req.user?.userId
@@ -357,7 +358,8 @@ export class InvestmentController {
         loanInterestRate: project.loan_interest_rate,
         landCost: landCost,
         aiGeneratedItems: ai_items, // 传递AI生成的子项
-        customLoanAmount: finalCustomLoanAmount // 传递自定义贷款额
+        customLoanAmount: finalCustomLoanAmount, // 传递自定义贷款额
+        projectType: project_type // 传递项目类型
       })
 
       // 合并三级子项数据（如果有）

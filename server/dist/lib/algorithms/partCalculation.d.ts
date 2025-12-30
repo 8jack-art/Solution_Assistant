@@ -20,8 +20,9 @@ export interface InvestmentItem {
  * @param landCost 土地费用
  * @param totalFunding 项目总资金（可选，用于建设单位管理费计算）
  * @param engineeringCost 工程费用 = 建设工程费 + 安装工程费（用于勘察设计费、监理费等计算）
+ * @param equipmentCost 设备购置费（用于货物招标费计算）
  */
-export declare function calculatePartB(partATotal: number, landCost: number, totalFunding?: number, engineeringCost?: number): InvestmentItem;
+export declare function calculatePartB(partATotal: number, landCost: number, totalFunding?: number, engineeringCost?: number, equipmentCost?: number, projectType?: 'agriculture' | 'construction'): InvestmentItem;
 /**
  * 生成A部分的初始子项（使用AI生成的数据或默认数据）
  */

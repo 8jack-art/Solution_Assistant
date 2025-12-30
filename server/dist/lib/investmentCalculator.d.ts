@@ -21,6 +21,7 @@ interface ProjectParams {
         remark?: string;
     }>;
     customLoanAmount?: number;
+    projectType?: 'agriculture' | 'construction';
 }
 type PartF = LoanCalculationResult;
 interface InvestmentEstimateResult {

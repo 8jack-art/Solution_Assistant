@@ -624,10 +624,20 @@ export function calculateInspectionTestFee(partATotal: number): number {
 /**
  * 计算市政公用设施费
  * 按第一部分工程费用的1.5%计取
+ * 农业项目免收市政公用设施费
  * @param partATotal 第一部分工程费用总额（万元）
+ * @param projectType 项目类型（agriculture-农业，construction-建筑）
  * @returns 市政公用设施费（万元）
  */
-export function calculateMunicipalFacilityFee(partATotal: number): number {
+export function calculateMunicipalFacilityFee(
+  partATotal: number, 
+  projectType?: 'agriculture' | 'construction'
+): number {
+  // 农业项目免收市政公用设施费
+  if (projectType === 'agriculture') {
+    return 0
+  }
+  // 建筑项目按1.5%计取
   return partATotal * 0.015
 }
 

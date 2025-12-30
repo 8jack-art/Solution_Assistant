@@ -48,7 +48,8 @@ export function calculatePartB(
   landCost: number, 
   totalFunding?: number,
   engineeringCost?: number,
-  equipmentCost?: number
+  equipmentCost?: number,
+  projectType?: 'agriculture' | 'construction'
 ): InvestmentItem {
   // 确保landCost是数字
   const numericLandCost = Number(landCost) || 0
@@ -96,24 +97,6 @@ export function calculatePartB(
       工程或费用名称: '招标代理费',
       合计: biddingAgencyFee,
       备注: '差额定率分档累进（工程+货物+服务招标费）'
-    },
-    {
-      序号: '3.1',
-      工程或费用名称: '  工程招标费',
-      合计: calculateEngineeringBiddingFee(engineeringCost ?? partATotal),
-      备注: '以工程费用为基数'
-    },
-    {
-      序号: '3.2',
-      工程或费用名称: '  货物招标费',
-      合计: calculateGoodsBiddingFee(equipmentCost ?? 0),
-      备注: '以设备购置费为基数'
-    },
-    {
-      序号: '3.3',
-      工程或费用名称: '  服务招标费',
-      合计: calculateServiceBiddingFee(supervisionFee, surveyFee, designFee),
-      备注: '以监理费+勘察费+设计费为基数'
     },
     {
       序号: '4',
@@ -166,8 +149,8 @@ export function calculatePartB(
     {
       序号: '12',
       工程或费用名称: '市政公用设施费',
-      合计: calculateMunicipalFacilityFee(partATotal),
-      备注: '按第一部分工程费的1.5%计取'
+      合计: calculateMunicipalFacilityFee(partATotal, projectType),
+      备注: projectType === 'agriculture' ? '农业项目免收' : '按第一部分工程费的1.5%计取'
     },
     {
       序号: '13',

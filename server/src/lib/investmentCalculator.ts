@@ -29,6 +29,7 @@ interface ProjectParams {
     remark?: string
   }>
   customLoanAmount?: number
+  projectType?: 'agriculture' | 'construction'
 }
 
 type PartF = LoanCalculationResult
@@ -99,7 +100,8 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
     loanRatio,
     loanInterestRate,
     landCost,
-    customLoanAmount
+    customLoanAmount,
+    projectType
   } = params
 
   let partAItems = generatePartAItems(projectName, targetInvestment, params.aiGeneratedItems)
@@ -126,6 +128,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
   for (let interestIter = 0; interestIter < MAX_INTEREST_ITERATIONS; interestIter++) {
     const partATotal = partAItems.reduce((sum, item) => sum + (item.合计 || 0), 0)
     const engineeringCost = partAItems.reduce((sum, item) => sum + ((item.建设工程费 || 0) + (item.安装工程费 || 0)), 0)
+    const equipmentCost = partAItems.reduce((sum, item) => sum + (item.设备购置费 || 0), 0)
     const partA: InvestmentItem = {
       序号: 'A',
       工程或费用名称: '第一部分 工程费用',
@@ -136,7 +139,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
 
     // 使用上一次迭代的项目总资金来计算建设单位管理费
     const estimatedTotalFunding = previousTotalFunding > 0 ? previousTotalFunding : partATotal * 1.5
-    const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, engineeringCost)
+    const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, engineeringCost, equipmentCost, projectType)
     const partC: InvestmentItem = {
       序号: 'C',
       工程或费用名称: '第一、二部分合计',
@@ -205,6 +208,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
     for (let interestIter = 0; interestIter < MAX_INTEREST_ITERATIONS; interestIter++) {
       const partATotal = partAItems.reduce((sum, item) => sum + (item.合计 || 0), 0)
       const engineeringCost = partAItems.reduce((sum, item) => sum + ((item.建设工程费 || 0) + (item.安装工程费 || 0)), 0)
+      const equipmentCost = partAItems.reduce((sum, item) => sum + (item.设备购置费 || 0), 0)
       const partA: InvestmentItem = {
         序号: 'A',
         工程或费用名称: '第一部分 工程费用',
@@ -215,7 +219,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
 
       // 使用上一次迭代的项目总资金来计算建设单位管理费
       const estimatedTotalFunding = previousTotalFunding > 0 ? previousTotalFunding : partATotal * 1.5
-      const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, engineeringCost)
+      const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, engineeringCost, equipmentCost, projectType)
       const partC: InvestmentItem = {
         序号: 'C',
         工程或费用名称: '第一、二部分合计',

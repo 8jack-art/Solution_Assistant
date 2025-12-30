@@ -9,14 +9,29 @@ import { calculateConstructionManagementFee, calculateLandCost, calculateBidding
  * @param landCost 土地费用
  * @param totalFunding 项目总资金（可选，用于建设单位管理费计算）
  * @param engineeringCost 工程费用 = 建设工程费 + 安装工程费（用于勘察设计费、监理费等计算）
+ * @param equipmentCost 设备购置费（用于货物招标费计算）
  */
-export function calculatePartB(partATotal, landCost, totalFunding, engineeringCost) {
+export function calculatePartB(partATotal, landCost, totalFunding, engineeringCost, equipmentCost, projectType) {
     // 确保landCost是数字
     const numericLandCost = Number(landCost) || 0;
     // 如果传入了项目总资金，使用新的分段费率算法计算建设单位管理费
     const managementFee = totalFunding
         ? calculateConstructionManagementFee(totalFunding, numericLandCost)
         : partATotal * 0.015; // 兼容旧算法（简化计算）
+    // 计算监理费、勘察设计费（需要用于后续计算）
+    const supervisionFee = calculateSupervisionFee(engineeringCost ?? partATotal);
+    const surveyDesignFee = calculateSurveyDesignFee(engineeringCost ?? partATotal);
+    // 勘察费约为勘察设计费的15%（初勘3% + 施工勘察12%）
+    const surveyFee = surveyDesignFee * 0.15;
+    // 设计费约为勘察设计费的85%（基本设计费+竣工图编制费）
+    const designFee = surveyDesignFee * 0.85;
+    // 计算招标代理费（3个子项之和）
+    const biddingAgencyFee = calculateBiddingAgencyFee(engineeringCost ?? partATotal, // 工程费用
+    equipmentCost ?? 0, // 设备购置费
+    supervisionFee, // 监理费
+    surveyFee, // 勘察费
+    designFee // 设计费
+    );
     const children = [
         {
             序号: '1',
@@ -35,8 +50,8 @@ export function calculatePartB(partATotal, landCost, totalFunding, engineeringCo
         {
             序号: '3',
             工程或费用名称: '招标代理费',
-            合计: calculateBiddingAgencyFee(partATotal),
-            备注: '按第一部分工程费的0.8%计取'
+            合计: biddingAgencyFee,
+            备注: '差额定率分档累进（工程+货物+服务招标费）'
         },
         {
             序号: '4',
@@ -89,8 +104,8 @@ export function calculatePartB(partATotal, landCost, totalFunding, engineeringCo
         {
             序号: '12',
             工程或费用名称: '市政公用设施费',
-            合计: calculateMunicipalFacilityFee(partATotal),
-            备注: '按第一部分工程费的1.5%计取'
+            合计: calculateMunicipalFacilityFee(partATotal, projectType),
+            备注: projectType === 'agriculture' ? '农业项目免收' : '按第一部分工程费的1.5%计取'
         },
         {
             序号: '13',

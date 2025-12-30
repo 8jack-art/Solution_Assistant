@@ -254,14 +254,124 @@ function calculateFeeBySegments(base) {
 export function calculateLandCost(landCost) {
     return landCost;
 }
+// 工程招标费率表
+const ENGINEERING_BIDDING_BRACKETS = [
+    { threshold: 100, rate: 6.300 },
+    { threshold: 500, rate: 4.410 },
+    { threshold: 1000, rate: 3.465 },
+    { threshold: 5000, rate: 2.205 },
+    { threshold: 10000, rate: 1.260 },
+    { threshold: 50000, rate: 0.315 },
+    { threshold: 100000, rate: 0.221 },
+    { threshold: 500000, rate: 0.050 },
+    { threshold: 1000000, rate: 0.038 },
+    { threshold: 10000000, rate: 0.025 },
+];
+// 货物招标费率表
+const GOODS_BIDDING_BRACKETS = [
+    { threshold: 100, rate: 9.450 },
+    { threshold: 500, rate: 6.930 },
+    { threshold: 1000, rate: 5.040 },
+    { threshold: 5000, rate: 3.150 },
+    { threshold: 10000, rate: 1.575 },
+    { threshold: 50000, rate: 0.315 },
+    { threshold: 100000, rate: 0.221 },
+    { threshold: 500000, rate: 0.050 },
+    { threshold: 1000000, rate: 0.038 },
+    { threshold: 10000000, rate: 0.025 },
+];
+// 服务招标费率表
+const SERVICE_BIDDING_BRACKETS = [
+    { threshold: 100, rate: 9.450 },
+    { threshold: 500, rate: 5.040 },
+    { threshold: 1000, rate: 2.853 },
+    { threshold: 5000, rate: 1.575 },
+    { threshold: 10000, rate: 0.630 },
+    { threshold: 50000, rate: 0.315 },
+    { threshold: 100000, rate: 0.221 },
+    { threshold: 500000, rate: 0.050 },
+    { threshold: 1000000, rate: 0.038 },
+    { threshold: 10000000, rate: 0.025 },
+];
 /**
- * 计算招标代理费
- * 按第一部分工程费用的0.8%计取
- * @param partATotal 第一部分工程费用总额（万元）
+ * 差额定率分档累进计算招标代理费
+ * @param amount 计算基数（万元）
+ * @param brackets 费率表
  * @returns 招标代理费（万元）
  */
-export function calculateBiddingAgencyFee(partATotal) {
-    return partATotal * 0.008;
+function calculateBiddingFeeByBrackets(amount, brackets) {
+    if (amount <= 0)
+        return 0;
+    let fee = 0;
+    let remaining = amount;
+    let previousThreshold = 0;
+    for (const bracket of brackets) {
+        if (remaining <= 0)
+            break;
+        const bracketRange = bracket.threshold - previousThreshold;
+        if (amount >= bracket.threshold) {
+            // 整个档位都适用
+            fee += bracketRange * bracket.rate / 1000;
+        }
+        else if (amount > previousThreshold) {
+            // 只有部分适用
+            const applicableAmount = amount - previousThreshold;
+            fee += applicableAmount * bracket.rate / 1000;
+        }
+        previousThreshold = bracket.threshold;
+    }
+    return fee;
+}
+/**
+ * 计算工程招标费
+ * 以工程费用（建设工程费+安装工程费）为基数
+ * @param engineeringCost 工程费用（万元）
+ * @returns 工程招标费（万元）
+ */
+export function calculateEngineeringBiddingFee(engineeringCost) {
+    return calculateBiddingFeeByBrackets(engineeringCost, ENGINEERING_BIDDING_BRACKETS);
+}
+/**
+ * 计算货物招标费
+ * 以设备购置费为基数
+ * @param equipmentCost 设备购置费（万元）
+ * @returns 货物招标费（万元）
+ */
+export function calculateGoodsBiddingFee(equipmentCost) {
+    return calculateBiddingFeeByBrackets(equipmentCost, GOODS_BIDDING_BRACKETS);
+}
+/**
+ * 计算服务招标费
+ * 以（监理费+勘察费+设计费）为基数
+ * 监理费、勘察费、设计费任一项小于50万时，该项招标费为0
+ * @param supervisionFee 监理费（万元）
+ * @param surveyFee 勘察费（万元）
+ * @param designFee 设计费（万元）
+ * @returns 服务招标费（万元）
+ */
+export function calculateServiceBiddingFee(supervisionFee, surveyFee, designFee) {
+    // 检查是否任一项小于50万
+    if (supervisionFee < 50 || surveyFee < 50 || designFee < 50) {
+        return 0;
+    }
+    // 服务招标费基数 = 监理费 + 勘察费 + 设计费
+    const serviceBase = supervisionFee + surveyFee + designFee;
+    return calculateBiddingFeeByBrackets(serviceBase, SERVICE_BIDDING_BRACKETS);
+}
+/**
+ * 计算招标代理费合计
+ * @param engineeringCost 工程费用（万元）
+ * @param equipmentCost 设备购置费（万元）
+ * @param supervisionFee 监理费（万元）
+ * @param surveyFee 勘察费（万元）
+ * @param designFee 设计费（万元）
+ * @returns 招标代理费合计（万元）
+ */
+export function calculateBiddingAgencyFee(engineeringCost, equipmentCost, supervisionFee, surveyFee, designFee) {
+    const engineeringFee = calculateEngineeringBiddingFee(engineeringCost);
+    const goodsFee = calculateGoodsBiddingFee(equipmentCost);
+    const serviceFee = calculateServiceBiddingFee(supervisionFee, surveyFee, designFee);
+    return engineeringFee + goodsFee + serviceFee;
 }
 /**
  * 计算建设工程监理费
@@ -408,10 +518,17 @@ export function calculateInspectionTestFee(partATotal) {
 /**
  * 计算市政公用设施费
  * 按第一部分工程费用的1.5%计取
+ * 农业项目免收市政公用设施费
  * @param partATotal 第一部分工程费用总额（万元）
+ * @param projectType 项目类型（agriculture-农业，construction-建筑）
  * @returns 市政公用设施费（万元）
  */
-export function calculateMunicipalFacilityFee(partATotal) {
+export function calculateMunicipalFacilityFee(partATotal, projectType) {
+    // 农业项目免收市政公用设施费
+    if (projectType === 'agriculture') {
+        return 0;
+    }
+    // 建筑项目按1.5%计取
     return partATotal * 0.015;
 }
 /**

@@ -125,6 +125,37 @@ const InvestmentSummary: React.FC = () => {
   const [editingThirdLevelItem, setEditingThirdLevelItem] = useState<{parentIndex: number, itemIndex: number} | null>(null)
   const [thirdLevelItemTemp, setThirdLevelItemTemp] = useState<any>(null)
   const [showConstructionInterestModal, setShowConstructionInterestModal] = useState(false)
+  
+  // 项目类型：控制市政公用设施费是否计算
+  const [projectType, setProjectType] = useState<'agriculture' | 'construction'>('construction')
+  
+  // 项目类型变更时重新计算投资估算
+  const handleProjectTypeChange = async (newType: 'agriculture' | 'construction') => {
+    setProjectType(newType)
+    
+    // 如果有估算数据，则重新计算
+    if (estimate) {
+      setGenerating(true)
+      try {
+        const tableItems = extractCurrentTableItems()
+        const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, newType)
+        
+        if (response.success && response.data) {
+          setEstimate(response.data.summary)
+          notifications.show({
+            title: '✨ 重新计算完成',
+            message: `已切换为${newType === 'agriculture' ? '农业' : '建筑'}项目类型，市政公用设施费已${newType === 'agriculture' ? '免除' : '按1.5%计算'}`,
+            color: 'green',
+            autoClose: 4000,
+          })
+        }
+      } catch (error: any) {
+        console.error('切换项目类型失败:', error)
+      } finally {
+        setGenerating(false)
+      }
+    }
+  }
 
   const columnStyles = {
     sequence: { width: '35px', textAlign: 'center' as const },
@@ -2859,6 +2890,50 @@ const InvestmentSummary: React.FC = () => {
           <IconInfoCircle size={18} stroke={1.5} />
         </ActionIcon>
       </Tooltip>
+    </div>
+    
+    {/* 项目类型选择 - 控制市政公用设施费 */}
+    <div style={{ textAlign: 'center' }}>
+      <Text size="xs" c="#86909C" mb={4}>项目类型</Text>
+      <Group gap="xs" justify="center">
+        <Button
+          size="xs"
+          variant={projectType === 'agriculture' ? 'filled' : 'outline'}
+          onClick={() => handleProjectTypeChange('agriculture')}
+          disabled={generating}
+          style={{
+            backgroundColor: projectType === 'agriculture' ? '#52C41A' : 'transparent',
+            borderColor: projectType === 'agriculture' ? '#52C41A' : '#E5E6EB',
+            color: projectType === 'agriculture' ? '#FFFFFF' : '#4E5969',
+            fontSize: '12px',
+            padding: '4px 12px',
+            height: '28px',
+            fontWeight: 500
+          }}
+        >
+          农业
+        </Button>
+        <Button
+          size="xs"
+          variant={projectType === 'construction' ? 'filled' : 'outline'}
+          onClick={() => handleProjectTypeChange('construction')}
+          disabled={generating}
+          style={{
+            backgroundColor: projectType === 'construction' ? '#165DFF' : 'transparent',
+            borderColor: projectType === 'construction' ? '#165DFF' : '#E5E6EB',
+            color: projectType === 'construction' ? '#FFFFFF' : '#4E5969',
+            fontSize: '12px',
+            padding: '4px 12px',
+            height: '28px',
+            fontWeight: 500
+          }}
+        >
+          建筑
+        </Button>
+      </Group>
+      <Text size="xs" c={projectType === 'agriculture' ? '#52C41A' : '#165DFF'} mt={4} fw={500}>
+        {projectType === 'agriculture' ? '免市政费' : '市政费1.5%'}
+      </Text>
     </div>
   </Group>
 </Card>

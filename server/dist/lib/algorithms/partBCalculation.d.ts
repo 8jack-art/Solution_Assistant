@@ -33,12 +33,39 @@ export declare function calculateConstructionManagementFee(totalFunding: number,
  */
 export declare function calculateLandCost(landCost: number): number;
 /**
- * 计算招标代理费
- * 按第一部分工程费用的0.8%计取
- * @param partATotal 第一部分工程费用总额（万元）
- * @returns 招标代理费（万元）
+ * 计算工程招标费
+ * 以工程费用（建设工程费+安装工程费）为基数
+ * @param engineeringCost 工程费用（万元）
+ * @returns 工程招标费（万元）
  */
-export declare function calculateBiddingAgencyFee(partATotal: number): number;
+export declare function calculateEngineeringBiddingFee(engineeringCost: number): number;
+/**
+ * 计算货物招标费
+ * 以设备购置费为基数
+ * @param equipmentCost 设备购置费（万元）
+ * @returns 货物招标费（万元）
+ */
+export declare function calculateGoodsBiddingFee(equipmentCost: number): number;
+/**
+ * 计算服务招标费
+ * 以（监理费+勘察费+设计费）为基数
+ * 监理费、勘察费、设计费任一项小于50万时，该项招标费为0
+ * @param supervisionFee 监理费（万元）
+ * @param surveyFee 勘察费（万元）
+ * @param designFee 设计费（万元）
+ * @returns 服务招标费（万元）
+ */
+export declare function calculateServiceBiddingFee(supervisionFee: number, surveyFee: number, designFee: number): number;
+/**
+ * 计算招标代理费合计
+ * @param engineeringCost 工程费用（万元）
+ * @param equipmentCost 设备购置费（万元）
+ * @param supervisionFee 监理费（万元）
+ * @param surveyFee 勘察费（万元）
+ * @param designFee 设计费（万元）
+ * @returns 招标代理费合计（万元）
+ */
+export declare function calculateBiddingAgencyFee(engineeringCost: number, equipmentCost: number, supervisionFee: number, surveyFee: number, designFee: number): number;
 /**
  * 计算建设工程监理费
  * 按工程费用分档内插计算
@@ -100,10 +127,12 @@ export declare function calculateInspectionTestFee(partATotal: number): number;
 /**
  * 计算市政公用设施费
  * 按第一部分工程费用的1.5%计取
+ * 农业项目免收市政公用设施费
  * @param partATotal 第一部分工程费用总额（万元）
+ * @param projectType 项目类型（agriculture-农业，construction-建筑）
  * @returns 市政公用设施费（万元）
  */
-export declare function calculateMunicipalFacilityFee(partATotal: number): number;
+export declare function calculateMunicipalFacilityFee(partATotal: number, projectType?: 'agriculture' | 'construction'): number;
 /**
  * 计算其它费用
  * 按第一部分工程费用的0.5%计取

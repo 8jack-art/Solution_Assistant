@@ -418,13 +418,14 @@ export const investmentApi = {
     })
   },
 
-  generateSummary: (projectId: string, aiItems?: any[], customLoanAmount?: number, customLandCost?: number) =>
+  generateSummary: (projectId: string, aiItems?: any[], customLoanAmount?: number, customLandCost?: number, projectType?: 'agriculture' | 'construction') =>
     retryRequest(async () => {
       const startTime = Date.now()
       const response = await api.post<any, ApiResponse<{ estimate: any; summary: any; saved: boolean }>>(`/investment/generate/${projectId}`, {
         ai_items: aiItems,
         custom_loan_amount: customLoanAmount,
         custom_land_cost: customLandCost,
+        project_type: projectType,
         save_after_complete: true  // 迭代完成后自动保存一次
       })
       monitorRequest(`/investment/generate/${projectId}`, startTime)
