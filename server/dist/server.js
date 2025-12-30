@@ -11,6 +11,7 @@ import investmentRoutes from './routes/investment.js';
 import llmRoutes from './routes/llm.js';
 import revenueCostRoutes from './routes/revenueCost.js';
 import reportRoutes from './routes/report.js';
+import debugRoutes from './routes/debug.js';
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -35,6 +36,7 @@ app.use('/api/investment', investmentRoutes);
 app.use('/api/llm', llmRoutes);
 app.use('/api/revenue-cost', revenueCostRoutes);
 app.use('/api/report', reportRoutes);
+app.use('/api/debug', debugRoutes);
 app.get('/api/health', (req, res) => {
     res.json({
         success: true,

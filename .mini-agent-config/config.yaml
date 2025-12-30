@@ -1,0 +1,25 @@
+# MiniMax Agent 配置文件
+# 安装完成后将此文件复制到 ~/.mini-agent/config/config.yaml
+
+# API 配置
+api_key: "YOUR_API_KEY_HERE"          # 从 https://platform.minimaxi.com 获取
+api_base: "https://api.minimaxi.com"  # 中国平台
+# api_base: "https://api.minimax.io"  # 全球平台
+
+# 模型配置
+model: "MiniMax-M2"
+
+# 执行配置
+max_steps: 100                        # 最大执行步数
+timeout: 180                          # 超时时间（秒）
+
+# 工作空间配置
+workspace_dir: "/opt/Solution_Assistant"  # 项目目录
+
+# 日志配置
+log_level: "INFO"
+
+# 工具配置
+enable_bash_tool: true
+enable_file_tools: true
+enable_note_tool: true

@@ -90,7 +90,7 @@ export declare function calculatePreliminaryConsultingFee(totalFunding: number):
 export declare function calculateSurveyDesignFee(engineeringCost: number): number;
 /**
  * 计算研究试验费
- * 按第一部分工程费用的1%计取
+ * 按第一部分工程费用的0.6%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 研究试验费（万元）
  */
@@ -105,14 +105,14 @@ export declare function calculateResearchTestFee(partATotal: number): number;
 export declare function calculateEnvironmentalReportFee(totalFunding: number): number;
 /**
  * 计算场地准备及临时设施费
- * 按第一部分工程费用的2%计取
+ * 按第一部分工程费用的0.5%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 场地准备及临时设施费（万元）
  */
 export declare function calculateSitePreparationFee(partATotal: number): number;
 /**
  * 计算工程保险费
- * 按第一部分工程费用的0.5%计取
+ * 按第一部分工程费用的0.3%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 工程保险费（万元）
  */
@@ -135,7 +135,7 @@ export declare function calculateInspectionTestFee(partATotal: number): number;
 export declare function calculateMunicipalFacilityFee(partATotal: number, projectType?: 'agriculture' | 'construction'): number;
 /**
  * 计算其它费用
- * 按第一部分工程费用的0.5%计取
+ * 按第一部分工程费用的0.2%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 其它费用（万元）
  */

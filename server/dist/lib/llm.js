@@ -1,3 +1,60 @@
+/**
+ * 提供商配置优化
+ * 基于Debug测试结果，不同提供商可能需要不同的请求格式
+ */
+const PROVIDER_CONFIGS = {
+    // 智谱AI: 诊断推荐"不含temperature"
+    'zhipu': { useTemperature: false, useMaxTokens: true },
+    'zhipuai': { useTemperature: false, useMaxTokens: true },
+    '智谱': { useTemperature: false, useMaxTokens: true },
+    'glm': { useTemperature: false, useMaxTokens: true },
+    // 其他提供商: 标准OpenAI格式
+    'bailian': { useTemperature: true, useMaxTokens: true },
+    'qwen': { useTemperature: true, useMaxTokens: true },
+    '百炼': { useTemperature: true, useMaxTokens: true },
+    'volcano': { useTemperature: true, useMaxTokens: true },
+    '火山': { useTemperature: true, useMaxTokens: true },
+    'doubao': { useTemperature: true, useMaxTokens: true },
+    'siliconflow': { useTemperature: true, useMaxTokens: true },
+    '硅基': { useTemperature: true, useMaxTokens: true },
+    // 默认: 标准OpenAI格式
+    'default': { useTemperature: true, useMaxTokens: true }
+};
+/**
+ * 获取提供商的请求格式配置
+ */
+function getProviderConfig(provider) {
+    const providerLower = provider.toLowerCase();
+    // 精确匹配
+    for (const key of Object.keys(PROVIDER_CONFIGS)) {
+        if (providerLower.includes(key.toLowerCase())) {
+            return PROVIDER_CONFIGS[key];
+        }
+    }
+    return PROVIDER_CONFIGS['default'];
+}
+/**
+ * 构建请求体，根据提供商配置
+ */
+function buildRequestBody(params, provider) {
+    const config = getProviderConfig(provider);
+    const body = {
+        model: params.model,
+        messages: params.messages
+    };
+    // 根据提供商配置决定是否包含特定参数
+    if (config.useMaxTokens && params.maxTokens) {
+        body.max_tokens = params.maxTokens;
+    }
+    if (config.useTemperature && params.temperature !== undefined) {
+        body.temperature = params.temperature;
+    }
+    if (params.stream) {
+        body.stream = true;
+    }
+    console.log(`[${provider}] 请求体配置: useTemperature=${config.useTemperature}, useMaxTokens=${config.useMaxTokens}`);
+    return body;
+}
 export class LLMService {
     static async testConnection(config) {
         // 添加重试机制处理429错误
@@ -9,6 +66,15 @@ export class LLMService {
                 const baseUrl = 'baseUrl' in config ? config.baseUrl : config.base_url;
                 const model = config.model;
                 const provider = config.provider;
+                // 详细日志
+                console.log('='.repeat(60));
+                console.log('LLM连接测试');
+                console.log('='.repeat(60));
+                console.log('Provider:', provider);
+                console.log('Base URL:', baseUrl);
+                console.log('Model:', model);
+                console.log('API Key:', apiKey.substring(0, 8) + '***');
+                console.log('重试次数:', attempt + '/' + (MAX_RETRIES + 1));
                 // 构建完整的API路径
                 let apiUrl = baseUrl;
                 // 如果 baseUrl 不包含 chat/completions，则添加
@@ -17,25 +83,23 @@ export class LLMService {
                     apiUrl = baseUrl.replace(/\/$/, '');
                     apiUrl = `${apiUrl}/chat/completions`;
                 }
+                console.log('最终API URL:', apiUrl);
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+                // 构建请求体
+                const requestBody = buildRequestBody({
+                    model: model,
+                    messages: [{ role: 'user', content: '你好，这是一个连接测试。' }],
+                    maxTokens: 10,
+                    temperature: 0.1
+                }, provider);
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${apiKey}`
                     },
-                    body: JSON.stringify({
-                        model: model,
-                        messages: [
-                            {
-                                role: 'user',
-                                content: '你好，这是一个连接测试。'
-                            }
-                        ],
-                        max_tokens: 10,
-                        temperature: 0.1
-                    }),
+                    body: JSON.stringify(requestBody),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
@@ -98,6 +162,13 @@ export class LLMService {
         // 添加重试机制处理429错误
         const MAX_RETRIES = 3;
         const BASE_DELAY = 1000; // 1秒
+        console.log('='.repeat(60));
+        console.log('LLM generateContent 开始');
+        console.log('Provider:', config.provider);
+        console.log('Model:', config.model);
+        console.log('Base URL:', config.base_url);
+        console.log('Messages数量:', messages.length);
+        console.log('Options:', options);
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
                 // 构建完整的API路径
@@ -108,23 +179,28 @@ export class LLMService {
                     apiUrl = config.base_url.replace(/\/$/, '');
                     apiUrl = `${apiUrl}/chat/completions`;
                 }
+                console.log(`[${config.provider}] API URL:`, apiUrl);
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 180000); // 180秒超时（3分钟）
+                // 构建请求体（根据提供商配置）
+                const requestBody = buildRequestBody({
+                    model: config.model,
+                    messages: messages,
+                    maxTokens: options?.maxTokens || 1000,
+                    temperature: options?.temperature || 0.7
+                }, config.provider);
+                console.log(`[${config.provider}] 请求体:`, JSON.stringify(requestBody).substring(0, 200) + '...');
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${config.api_key}`
                     },
-                    body: JSON.stringify({
-                        model: config.model,
-                        messages,
-                        max_tokens: options?.maxTokens || 1000,
-                        temperature: options?.temperature || 0.7
-                    }),
+                    body: JSON.stringify(requestBody),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
+                console.log(`[${config.provider}] HTTP状态:`, response.status, response.statusText);
                 // 如果是429错误且还有重试机会，则等待后重试
                 if (response.status === 429 && attempt < MAX_RETRIES) {
                     const delay = BASE_DELAY * Math.pow(2, attempt); // 指数退避
@@ -134,20 +210,25 @@ export class LLMService {
                 }
                 if (!response.ok) {
                     const errorData = await response.text();
+                    console.error('generateContent - HTTP错误:', response.status, response.statusText);
+                    console.error('generateContent - 错误响应:', errorData.substring(0, 500));
                     return {
                         success: false,
                         error: `HTTP ${response.status}: ${errorData}`
                     };
                 }
                 const data = await response.json();
+                console.log(`[${config.provider}] 响应数据:`, JSON.stringify(data).substring(0, 200) + '...');
                 const content = data.choices?.[0]?.message?.content;
                 // 修改验证逻辑，不仅检查content是否存在，还要检查是否有其他有效信息
                 if (!data.choices || data.choices.length === 0) {
+                    console.error('generateContent - 响应中没有choices');
                     return {
                         success: false,
                         error: '响应格式无效'
                     };
                 }
+                console.log(`[${config.provider}] 生成成功，内容长度:`, content?.length || 0);
                 // 即使content为空，只要有choices就认为是成功的
                 return {
                     success: true,
@@ -155,6 +236,7 @@ export class LLMService {
                 };
             }
             catch (error) {
+                console.error(`[${config.provider}] 生成异常:`, error);
                 if (error instanceof Error && error.name === 'AbortError') {
                     return {
                         success: false,
@@ -175,6 +257,7 @@ export class LLMService {
             }
         }
         // 所有重试都失败了
+        console.error('generateContent - 所有重试都失败');
         return {
             success: false,
             error: '请求失败，已达到最大重试次数'
@@ -195,19 +278,21 @@ export class LLMService {
             }
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 180000); // 180秒超时（3分钟）
+            // 构建请求体（根据提供商配置）
+            const requestBody = buildRequestBody({
+                model: config.model,
+                messages: messages,
+                maxTokens: options?.maxTokens || 8000,
+                temperature: options?.temperature || 0.7,
+                stream: true
+            }, config.provider);
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${config.api_key}`
                 },
-                body: JSON.stringify({
-                    model: config.model,
-                    messages,
-                    max_tokens: options?.maxTokens || 8000,
-                    temperature: options?.temperature || 0.7,
-                    stream: true // 启用流式响应
-                }),
+                body: JSON.stringify(requestBody),
                 signal: controller.signal
             });
             clearTimeout(timeoutId);

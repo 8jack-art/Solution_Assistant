@@ -10,6 +10,18 @@ export class LLMConfigModel {
             return null;
         }
     }
+    // 检查是否存在相同的配置（相同的服务商、URL和模型）
+    static async findByCredentials(userId, provider, baseUrl, model) {
+        try {
+            const [rows] = await pool.execute(`SELECT * FROM llm_configs 
+         WHERE user_id = ? AND provider = ? AND base_url = ? AND model = ?`, [userId, provider, baseUrl, model]);
+            return rows.length > 0 ? rows[0] : null;
+        }
+        catch (error) {
+            console.error('查找配置失败:', error);
+            return null;
+        }
+    }
     static async findByUserId(userId, isAdmin = false) {
         try {
             let query;

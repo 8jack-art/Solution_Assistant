@@ -431,12 +431,12 @@ export function calculateSurveyDesignFee(engineeringCost) {
 }
 /**
  * 计算研究试验费
- * 按第一部分工程费用的1%计取
+ * 按第一部分工程费用的0.6%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 研究试验费（万元）
  */
 export function calculateResearchTestFee(partATotal) {
-    return partATotal * 0.01;
+    return partATotal * 0.006;
 }
 const ENV_REPORT_BRACKETS = [
     { threshold: 0.3, min: 3.0, max: 3.6 },
@@ -490,21 +490,21 @@ export function calculateEnvironmentalReportFee(totalFunding) {
 }
 /**
  * 计算场地准备及临时设施费
- * 按第一部分工程费用的2%计取
+ * 按第一部分工程费用的0.5%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 场地准备及临时设施费（万元）
  */
 export function calculateSitePreparationFee(partATotal) {
-    return partATotal * 0.02;
+    return partATotal * 0.005;
 }
 /**
  * 计算工程保险费
- * 按第一部分工程费用的0.5%计取
+ * 按第一部分工程费用的0.3%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 工程保险费（万元）
  */
 export function calculateInsuranceFee(partATotal) {
-    return partATotal * 0.005;
+    return partATotal * 0.003;
 }
 /**
  * 计算工程检验试验费
@@ -533,11 +533,11 @@ export function calculateMunicipalFacilityFee(partATotal, projectType) {
 }
 /**
  * 计算其它费用
- * 按第一部分工程费用的0.5%计取
+ * 按第一部分工程费用的0.2%计取
  * @param partATotal 第一部分工程费用总额（万元）
  * @returns 其它费用（万元）
  */
 export function calculateOtherFee(partATotal) {
-    return partATotal * 0.005;
+    return partATotal * 0.002;
 }
 //# sourceMappingURL=partBCalculation.js.map

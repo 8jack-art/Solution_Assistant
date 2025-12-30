@@ -5,6 +5,7 @@ import Dashboard from '@/pages/Dashboard'
 import ProjectForm from '@/pages/ProjectForm'
 import InvestmentSummary from '@/pages/InvestmentSummary'
 import LLMConfigsManagement from '@/pages/LLMConfigsManagement'
+import LLMConfigsDebug from '@/pages/LLMConfigsDebug'
 import RevenueCostModeling from '@/pages/RevenueCostModeling'
 import InvestmentReport from '@/pages/InvestmentReport'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
@@ -37,6 +38,11 @@ const AppRoutes: React.FC = () => {
       <Route path="/llm-configs" element={
         <ProtectedRoute>
           <LLMConfigsManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/llm-debug" element={
+        <ProtectedRoute>
+          <LLMConfigsDebug />
         </ProtectedRoute>
       } />
       <Route path="/revenue-cost/:id" element={
