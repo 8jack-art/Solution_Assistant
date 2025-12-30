@@ -984,4 +984,189 @@ export class ReportController {
       })
     }
   }
+
+  /**
+   * 暂停报告生成
+   */
+  static async pauseGeneration(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user?.userId
+      const isAdmin = req.user?.isAdmin
+      const { id } = req.params
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: '用户未认证'
+        })
+      }
+
+      // 验证报告存在且有权限
+      const [reports] = await (pool as any).execute(
+        'SELECT * FROM generated_reports WHERE id = ?',
+        [id]
+      ) as any[]
+
+      if (!reports || reports.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: '报告不存在'
+        })
+      }
+
+      const report = reports[0]
+
+      // 验证权限
+      if (!isAdmin && report.user_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: '无权操作此报告'
+        })
+      }
+
+      // 更新状态为暂停
+      await (pool as any).execute(
+        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
+        ['paused', id]
+      )
+
+      res.json({
+        success: true,
+        message: '报告生成已暂停'
+      })
+    } catch (error) {
+      console.error('暂停报告生成失败:', error)
+      res.status(500).json({
+        success: false,
+        error: '服务器内部错误'
+      })
+    }
+  }
+
+  /**
+   * 继续报告生成
+   */
+  static async resumeGeneration(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user?.userId
+      const isAdmin = req.user?.isAdmin
+      const { id } = req.params
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: '用户未认证'
+        })
+      }
+
+      // 验证报告存在且有权限
+      const [reports] = await (pool as any).execute(
+        'SELECT * FROM generated_reports WHERE id = ?',
+        [id]
+      ) as any[]
+
+      if (!reports || reports.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: '报告不存在'
+        })
+      }
+
+      const report = reports[0]
+
+      // 验证权限
+      if (!isAdmin && report.user_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: '无权操作此报告'
+        })
+      }
+
+      // 只有暂停状态才能继续
+      if (report.generation_status !== 'paused') {
+        return res.status(400).json({
+          success: false,
+          error: '只有暂停的报告才能继续生成'
+        })
+      }
+
+      // 更新状态为生成中
+      await (pool as any).execute(
+        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
+        ['generating', id]
+      )
+
+      // 这里可以添加异步继续生成的逻辑
+      // ReportService.resumeReportGeneration(id, report)
+
+      res.json({
+        success: true,
+        message: '报告生成已继续'
+      })
+    } catch (error) {
+      console.error('继续报告生成失败:', error)
+      res.status(500).json({
+        success: false,
+        error: '服务器内部错误'
+      })
+    }
+  }
+
+  /**
+   * 停止报告生成
+   */
+  static async stopGeneration(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user?.userId
+      const isAdmin = req.user?.isAdmin
+      const { id } = req.params
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: '用户未认证'
+        })
+      }
+
+      // 验证报告存在且有权限
+      const [reports] = await (pool as any).execute(
+        'SELECT * FROM generated_reports WHERE id = ?',
+        [id]
+      ) as any[]
+
+      if (!reports || reports.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: '报告不存在'
+        })
+      }
+
+      const report = reports[0]
+
+      // 验证权限
+      if (!isAdmin && report.user_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: '无权操作此报告'
+        })
+      }
+
+      // 更新状态为停止
+      await (pool as any).execute(
+        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
+        ['stopped', id]
+      )
+
+      res.json({
+        success: true,
+        message: '报告生成已停止'
+      })
+    } catch (error) {
+      console.error('停止报告生成失败:', error)
+      res.status(500).json({
+        success: false,
+        error: '服务器内部错误'
+      })
+    }
+  }
 }

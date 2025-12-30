@@ -14,6 +14,9 @@ router.post('/templates/set-default', authenticateToken, ReportController.setDef
 // 报告生成相关路由
 router.post('/generate', authenticateToken, ReportController.generate)
 router.get('/stream/:reportId', authenticateToken, ReportController.stream)
+router.patch('/:id/pause', authenticateToken, ReportController.pauseGeneration)
+router.patch('/:id/resume', authenticateToken, ReportController.resumeGeneration)
+router.patch('/:id/stop', authenticateToken, ReportController.stopGeneration)
 router.get('/:id', authenticateToken, ReportController.getById)
 router.get('/project/:projectId', authenticateToken, ReportController.getByProjectId)
 router.delete('/:id', authenticateToken, ReportController.delete)

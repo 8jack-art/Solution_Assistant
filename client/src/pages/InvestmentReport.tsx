@@ -359,7 +359,7 @@ const InvestmentReport: React.FC = () => {
       })
 
       // 创建下载链接
-      const blob = new Blob([response], {
+      const blob = new Blob([response.data], {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       })
       const url = window.URL.createObjectURL(blob)
@@ -380,7 +380,7 @@ const InvestmentReport: React.FC = () => {
       console.error('导出失败:', error)
       notifications.show({
         title: '导出失败',
-        message: error.response?.data?.error || '导出时发生错误',
+        message: error.response?.data?.error || error.message || '导出时发生错误',
         color: 'red',
       })
     }

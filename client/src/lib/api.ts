@@ -642,7 +642,9 @@ export const reportApi = {
     format: 'docx'
     title?: string
   }) =>
-    api.post<any, ArrayBuffer>('/report/export', params),
+    api.post('/report/export', params, {
+      responseType: 'arraybuffer'
+    }),
 
   pauseGeneration: (reportId: string) =>
     api.patch<any, ApiResponse>(`/report/${reportId}/pause`),
