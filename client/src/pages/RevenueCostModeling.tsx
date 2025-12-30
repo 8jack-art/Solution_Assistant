@@ -2008,11 +2008,7 @@ const RevenueCostModeling: React.FC = () => {
                     color: '#FFFFFF'
                   }}
                   onClick={() => {
-                    notifications.show({
-                      title: '功能开发中',
-                      message: '完成功能即将推出',
-                      color: 'blue',
-                    })
+                    navigate(`/report/${id}`)
                   }}
                 >
                   完成并保存

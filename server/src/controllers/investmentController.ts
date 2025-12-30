@@ -277,7 +277,12 @@ export class InvestmentController {
   static async generateSummary(req: AuthRequest, res: Response) {
     try {
       const { projectId } = req.params
-      const { ai_items, custom_loan_amount, custom_land_cost } = req.body // 接收AI生成的子项、自定义贷款额、自定义土地费用
+      const { 
+        ai_items, 
+        custom_loan_amount, 
+        custom_land_cost,
+        save_after_complete = true  // 默认保存
+      } = req.body
       const userId = req.user?.userId
       const isAdmin = req.user?.isAdmin
 
@@ -337,10 +342,12 @@ export class InvestmentController {
         customLoanRatio,
         landCost,
         finalCustomLoanAmount,
-        finalCustomLandCost
+        finalCustomLandCost,
+        saveAfterComplete: save_after_complete
       })
 
       // 使用统一循环迭代算法生成投资估算简表
+      // 注意：整个迭代过程在内存中执行，不会写入数据库
       const result = calculateInvestmentEstimate({
         projectName: project.project_name,
         targetInvestment: project.total_investment,
@@ -353,6 +360,11 @@ export class InvestmentController {
         customLoanAmount: finalCustomLoanAmount // 传递自定义贷款额
       })
 
+      // 合并三级子项数据（如果有）
+      if (Object.keys(existingThirdLevelItems).length > 0 && !result.thirdLevelItems) {
+        result.thirdLevelItems = existingThirdLevelItems
+      }
+
       // 辅助函数：确保数值有效并格式化
       const toDecimal = (val: any): number => {
         const num = Number(val)
@@ -360,55 +372,62 @@ export class InvestmentController {
         return Math.round(num * 100) / 100 // 保留两位小数
       }
 
-      // 保存到数据库
-      const estimateData = {
-        project_id: projectId,
-        estimate_data: result,
-        total_investment: toDecimal(result.partG.合计),
-        building_investment: toDecimal(result.partE.合计),
-        construction_interest: toDecimal(result.partF.合计),
-        gap_rate: toDecimal(result.gapRate / 100), // 数据库存储小数形式
-        construction_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.建设工程费 || 0),
-        equipment_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.设备购置费 || 0),
-        installation_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.安装工程费 || 0),
-        other_cost: toDecimal(result.partA.children?.find(i => i.序号 === '一')?.其它费用 || 0),
-        land_cost: toDecimal(landCost),
-        basic_reserve: toDecimal(result.partD.合计),
-        price_reserve: 0,
-        construction_period: project.construction_years,
-        iteration_count: result.iterationCount,
-        final_total: toDecimal(result.partG.合计),
-        loan_amount: toDecimal(result.partF.贷款总额),
-        loan_rate: toDecimal(project.loan_interest_rate),
-        custom_loan_amount: finalCustomLoanAmount !== undefined ? toDecimal(finalCustomLoanAmount) : null,
-        custom_land_cost: finalCustomLandCost !== undefined ? toDecimal(finalCustomLandCost) : null,
-        // 新增贷款相关数据字段（从请求体中获取）
-        construction_interest_details: req.body.construction_interest_details,
-        loan_repayment_schedule_simple: req.body.loan_repayment_schedule_simple,
-        loan_repayment_schedule_detailed: req.body.loan_repayment_schedule_detailed
-      }
+      // 只有在迭代完成后且需要保存时，才写入数据库
+      let savedEstimate = null
+      if (save_after_complete) {
+        console.log('[投资估算] 迭代完成，开始保存最终结果（仅一次）')
+        
+        const estimateData = {
+          project_id: projectId,
+          estimate_data: result,
+          total_investment: toDecimal(result.partG.合计),
+          building_investment: toDecimal(result.partE.合计),
+          construction_interest: toDecimal(result.partF.合计),
+          gap_rate: toDecimal(result.gapRate / 100), // 数据库存储小数形式
+          construction_cost: toDecimal(result.partA.children?.find((i: any) => i.序号 === '一')?.建设工程费 || 0),
+          equipment_cost: toDecimal(result.partA.children?.find((i: any) => i.序号 === '一')?.设备购置费 || 0),
+          installation_cost: toDecimal(result.partA.children?.find((i: any) => i.序号 === '一')?.安装工程费 || 0),
+          other_cost: toDecimal(result.partA.children?.find((i: any) => i.序号 === '一')?.其它费用 || 0),
+          land_cost: toDecimal(landCost),
+          basic_reserve: toDecimal(result.partD.合计),
+          price_reserve: 0,
+          construction_period: project.construction_years,
+          iteration_count: result.iterationCount,
+          final_total: toDecimal(result.partG.合计),
+          loan_amount: toDecimal(result.partF.贷款总额),
+          loan_rate: toDecimal(project.loan_interest_rate),
+          custom_loan_amount: finalCustomLoanAmount !== undefined ? toDecimal(finalCustomLoanAmount) : null,
+          custom_land_cost: finalCustomLandCost !== undefined ? toDecimal(finalCustomLandCost) : null,
+          construction_interest_details: req.body.construction_interest_details,
+          loan_repayment_schedule_simple: req.body.loan_repayment_schedule_simple,
+          loan_repayment_schedule_detailed: req.body.loan_repayment_schedule_detailed
+        }
 
-      let savedEstimate
-      if (existingEstimate) {
-        console.log('更新现有投资估算，ID:', existingEstimate.id)
-        savedEstimate = await InvestmentEstimateModel.update(existingEstimate.id, estimateData)
+        if (existingEstimate) {
+          console.log('更新现有投资估算，ID:', existingEstimate.id)
+          savedEstimate = await InvestmentEstimateModel.update(existingEstimate.id, estimateData)
+        } else {
+          console.log('创建新投资估算')
+          savedEstimate = await InvestmentEstimateModel.create(estimateData)
+        }
+        
+        if (!savedEstimate) {
+          return res.status(500).json({ 
+            success: false, 
+            error: '保存投资估算失败' 
+          })
+        }
+        console.log('[投资估算] 最终结果已保存到数据库')
       } else {
-        console.log('创建新投资估算')
-        savedEstimate = await InvestmentEstimateModel.create(estimateData)
-      }
-
-      if (!savedEstimate) {
-        return res.status(500).json({ 
-          success: false, 
-          error: '保存投资估算失败' 
-        })
+        console.log('[投资估算] 迭代完成，未保存（仅计算模式）')
       }
 
       res.json({
         success: true,
         data: { 
           estimate: savedEstimate,
-          summary: result
+          summary: result,
+          saved: save_after_complete  // 告知前端是否已保存
         }
       })
     } catch (error) {

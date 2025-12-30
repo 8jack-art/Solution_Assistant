@@ -934,13 +934,22 @@ const InvestmentSummary: React.FC = () => {
         console.log(`[数据加载] 开始加载投资估算数据...`)
         const estimateResponse = await investmentApi.getByProjectId(id!, {
           signal: abortControllerRef.current.signal,
-          useCache: true // 明确启用缓存
+          useCache: false // 禁用缓存，直接从服务器获取
         })
+        
+        // 添加调试日志
+        console.log(`[数据加载] API响应:`, JSON.stringify(estimateResponse, null, 2))
+        
         let existingThirdLevelItems: Record<number, any[]> = {}
         
         if (estimateResponse.success && estimateResponse.data?.estimate) {
+          console.log(`[数据加载] 找到投资估算数据`)
           // 使用estimate_data字段作为详细数据，兼容不同的数据结构
           let estimateData = estimateResponse.data.estimate.estimate_data
+          
+          console.log(`[数据加载] estimateData:`, estimateData ? '存在' : '不存在')
+          console.log(`[数据加载] estimateData.partA:`, estimateData?.partA ? '存在' : '不存在')
+          console.log(`[数据加载] estimateData.partG:`, estimateData?.partG ? '存在' : '不存在')
           
           // 如果estimate_data不存在，尝试直接使用estimate
           if (!estimateData) {

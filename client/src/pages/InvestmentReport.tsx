@@ -502,7 +502,7 @@ const InvestmentReport: React.FC = () => {
                 <div>
                   <Text size="xs" c="#86909C" mb={4}>总投资</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {(project?.total_investment || 0).toFixed(2)} 万元
+                    {Number(project?.total_investment || 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>

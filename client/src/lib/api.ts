@@ -386,7 +386,18 @@ export const investmentApi = {
       const cachedData = dataCache.get(cacheKey)
       if (cachedData) {
         console.log(`[API] 使用缓存数据: ${cacheKey}`)
-        return Promise.resolve(cachedData)
+        
+        // 检查缓存数据是否有效（结构完整性检查）
+        if (cachedData.success && 
+            cachedData.data?.estimate?.estimate_data &&
+            cachedData.data.estimate.estimate_data.partA &&
+            cachedData.data.estimate.estimate_data.partG) {
+          console.log(`[API] 缓存数据有效: ${cacheKey}`)
+          return Promise.resolve(cachedData)
+        } else {
+          console.log(`[API] 缓存数据无效或结构不完整，忽略缓存: ${cacheKey}`)
+          dataCache.invalidate(cacheKey)  // 删除无效缓存
+        }
       }
     }
     
@@ -397,8 +408,8 @@ export const investmentApi = {
       })
       monitorRequest(`/investment/project/${projectId}`, startTime)
       
-      // 缓存结果
-      if (options?.useCache !== false && response.success) {
+      // 缓存结果（仅在成功且数据完整时缓存）
+      if (options?.useCache !== false && response.success && response.data?.estimate?.estimate_data) {
         dataCache.set(cacheKey, response)
         console.log(`[API] 已缓存数据: ${cacheKey}`)
       }
@@ -410,10 +421,11 @@ export const investmentApi = {
   generateSummary: (projectId: string, aiItems?: any[], customLoanAmount?: number, customLandCost?: number) =>
     retryRequest(async () => {
       const startTime = Date.now()
-      const response = await api.post<any, ApiResponse<{ estimate: any; summary: any }>>(`/investment/generate/${projectId}`, {
+      const response = await api.post<any, ApiResponse<{ estimate: any; summary: any; saved: boolean }>>(`/investment/generate/${projectId}`, {
         ai_items: aiItems,
         custom_loan_amount: customLoanAmount,
-        custom_land_cost: customLandCost
+        custom_land_cost: customLandCost,
+        save_after_complete: true  // 迭代完成后自动保存一次
       })
       monitorRequest(`/investment/generate/${projectId}`, startTime)
       return response

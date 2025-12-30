@@ -378,7 +378,7 @@ const Dashboard: React.FC = () => {
                             <Button
                               variant="light"
                               size="sm"
-                              onClick={() => navigate(`/investment/${project.id}`)}
+                              onClick={() => navigate(`/investment/${project.id}`, { state: { autoGenerate: false } })}
                               style={{ flex: 1, height: '36px', color: '#1E6FFF', borderRadius: '4px' }}
                             >
                               投资估算
@@ -457,7 +457,7 @@ const Dashboard: React.FC = () => {
                                 <Button
                                   variant="filled"
                                   size="xs"
-                                  onClick={() => navigate(`/investment/${project.id}`)}
+                                  onClick={() => navigate(`/investment/${project.id}`, { state: { autoGenerate: false } })}
                                   style={{ height: '32px', borderRadius: '4px', fontSize: '13px', backgroundColor: '#00C48C' }}
                                 >
                                   估算

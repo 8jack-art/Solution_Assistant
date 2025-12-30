@@ -424,7 +424,16 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       color: 'grape',
       onClick: () => {
         // 导航到投资报告生成页面
-        window.location.href = '/investment-report';
+        const currentProjectId = context?.projectId || useRevenueCostStore.getState().context?.projectId;
+        if (currentProjectId) {
+          window.location.href = `/report/${currentProjectId}`;
+        } else {
+          notifications.show({
+            title: '错误',
+            message: '项目ID未找到，请刷新页面重试',
+            color: 'red',
+          });
+        }
       }
     },
   ]
