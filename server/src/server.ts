@@ -11,6 +11,7 @@ import projectRoutes from './routes/project.js'
 import investmentRoutes from './routes/investment.js'
 import llmRoutes from './routes/llm.js'
 import revenueCostRoutes from './routes/revenueCost.js'
+import reportRoutes from './routes/report.js'
 
 dotenv.config()
 
@@ -39,6 +40,7 @@ app.use('/api/projects', projectRoutes)
 app.use('/api/investment', investmentRoutes)
 app.use('/api/llm', llmRoutes)
 app.use('/api/revenue-cost', revenueCostRoutes)
+app.use('/api/report', reportRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ 

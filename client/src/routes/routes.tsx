@@ -6,6 +6,7 @@ import ProjectForm from '@/pages/ProjectForm'
 import InvestmentSummary from '@/pages/InvestmentSummary'
 import LLMConfigsManagement from '@/pages/LLMConfigsManagement'
 import RevenueCostModeling from '@/pages/RevenueCostModeling'
+import InvestmentReport from '@/pages/InvestmentReport'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 const AppRoutes: React.FC = () => {
@@ -41,6 +42,11 @@ const AppRoutes: React.FC = () => {
       <Route path="/revenue-cost/:id" element={
         <ProtectedRoute>
           <RevenueCostModeling />
+        </ProtectedRoute>
+      } />
+      <Route path="/report/:id" element={
+        <ProtectedRoute>
+          <InvestmentReport />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

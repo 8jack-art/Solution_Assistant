@@ -30,7 +30,8 @@ import {
   IconFileText,
   IconCode,
   IconSettings,
-  IconBug
+  IconBug,
+  IconFileDescription
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, calculateYearlyRevenue, getProductionRateForYear, calculateOtherTaxesAndSurcharges } from '@/stores/revenueCostStore'
@@ -416,6 +417,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       icon: IconFileText,
       color: 'cyan',
       onClick: () => setShowLoanRepaymentModal(true)
+    },
+    {
+      title: '生成投资报告',
+      icon: IconFileDescription,
+      color: 'grape',
+      onClick: () => {
+        // 导航到投资报告生成页面
+        window.location.href = '/investment-report';
+      }
     },
   ]
   
