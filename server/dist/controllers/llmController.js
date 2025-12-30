@@ -457,10 +457,17 @@ export class LLMController {
                 });
             }
             const messages = analyzeProjectInfoPrompt(project_info);
+            console.log('========== AI分析项目信息开始 ==========');
+            console.log('项目信息长度:', project_info.length, '字符');
+            console.log('使用配置:', config.name);
+            console.log('Provider:', config.provider);
+            console.log('Model:', config.model);
             const result = await LLMService.generateContent(config, messages, {
-                maxTokens: 1000,
+                maxTokens: 4000, // 智谱AI需要更大的token限制，避免截断
                 temperature: 0.3
             });
+            console.log('LLM返回内容长度:', result.content?.length || 0, '字符');
+            console.log('LLM返回内容预览:', result.content?.substring(0, 300) || '空');
             if (result.success && result.content) {
                 try {
                     // 尝试解析JSON
@@ -470,7 +477,10 @@ export class LLMController {
                     if (jsonMatch) {
                         jsonContent = jsonMatch[0];
                     }
+                    console.log('JSON匹配结果:', jsonMatch ? '找到匹配' : '未找到匹配');
+                    console.log('待解析内容:', jsonContent);
                     const parsedData = JSON.parse(jsonContent);
+                    console.log('解析成功');
                     res.json({
                         success: true,
                         data: {
@@ -480,6 +490,8 @@ export class LLMController {
                     });
                 }
                 catch (parseError) {
+                    console.error('JSON解析错误:', parseError);
+                    console.error('原始内容:', result.content);
                     res.status(400).json({
                         success: false,
                         error: '解析LLM响应失败',
@@ -538,8 +550,10 @@ export class LLMController {
             console.log('项目名称:', project_name);
             console.log('目标投资:', total_investment, '万元');
             console.log('使用配置:', config.name);
+            console.log('Provider:', config.provider);
+            console.log('Model:', config.model);
             const result = await LLMService.generateContent(config, messages, {
-                maxTokens: 2000,
+                maxTokens: 4000, // 智谱AI需要更大的token限制，避免截断
                 temperature: 0.5
             });
             console.log('LLM返回内容长度:', result.content?.length || 0, '字符');

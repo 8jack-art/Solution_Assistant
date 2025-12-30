@@ -4,11 +4,11 @@ import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
 import ProjectForm from '@/pages/ProjectForm'
 import InvestmentSummary from '@/pages/InvestmentSummary'
+import LLMConfigsManagement from '@/pages/LLMConfigsManagement'
+import LLMConfigsDebug from '@/pages/LLMConfigsDebug'
 import RevenueCostModeling from '@/pages/RevenueCostModeling'
 import InvestmentReport from '@/pages/InvestmentReport'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
-// 现代化 LLM 配置系统
-import { ModernLLMConfigSystem } from '@/components/llm-config-modern'
 
 const AppRoutes: React.FC = () => {
   return (
@@ -35,15 +35,14 @@ const AppRoutes: React.FC = () => {
           <InvestmentSummary />
         </ProtectedRoute>
       } />
-      {/* 现代化 LLM 配置系统 - 统一入口 */}
       <Route path="/llm-configs" element={
         <ProtectedRoute>
-          <ModernLLMConfigSystem />
+          <LLMConfigsManagement />
         </ProtectedRoute>
       } />
       <Route path="/llm-debug" element={
         <ProtectedRoute>
-          <ModernLLMConfigSystem />
+          <LLMConfigsDebug />
         </ProtectedRoute>
       } />
       <Route path="/revenue-cost/:id" element={

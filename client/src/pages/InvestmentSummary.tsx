@@ -312,8 +312,8 @@ const InvestmentSummary: React.FC = () => {
       
       const tableItems = extractCurrentTableItems()
 
-      // 生成投资估算
-      const response = await investmentApi.generateSummary(id!, tableItems)
+      // 生成投资估算（传递当前项目类型，确保市政公用设施费正确计算）
+      const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, projectType)
       
       if (response.success && response.data) {
         // 使用summary作为详细数据
@@ -328,15 +328,16 @@ const InvestmentSummary: React.FC = () => {
             setThirdLevelItems(recalculatedItems)
             console.log('重新生成后已重算三级子项:', recalculatedItems)
             
-            // 保存到数据库（包含重算后的三级子项数据）
+            // 保存到数据库（包含重算后的三级子项数据，同时保存当前项目类型）
             const estimateWithThirdLevel = {
               ...estimateData,
-              thirdLevelItems: recalculatedItems
+              thirdLevelItems: recalculatedItems,
+              projectType: projectType
             }
             saveEstimateToDatabase(estimateWithThirdLevel)
           } else {
-            // 没有三级子项，直接保存
-            saveEstimateToDatabase(estimateData)
+            // 没有三级子项，直接保存（包含当前项目类型）
+            saveEstimateToDatabase({ ...estimateData, projectType: projectType })
           }
         }, 50)
         
@@ -376,76 +377,94 @@ const InvestmentSummary: React.FC = () => {
   const handleRegenerate = async () => {
     if (!project) return
     
-    // 优先使用当前选择的项目类型（用户界面上的状态）
-    // 如果数据库中有保存的值且与当前状态不同，才使用数据库的值
+    // 确定使用的项目类型：
+    // 1. 如果当前状态不是默认值（用户已手动切换过），直接使用当前状态
+    // 2. 如果当前状态是默认值，尝试从数据库加载之前保存的类型
+    // 3. 数据库也没有保存的，使用默认值
     let effectiveProjectType = projectType
     
-    // 先从数据库加载最新的三级子项数据
-    try {
-      const estimateResponse = await investmentApi.getByProjectId(id!)
-      if (estimateResponse.success && estimateResponse.data?.estimate) {
-        const estimateData = estimateResponse.data.estimate.estimate_data
-        const savedThirdLevelItems = estimateData.thirdLevelItems || {}
-        
-        // 如果数据库中有保存的项目类型，且与当前状态不同，才同步状态
-        if (estimateData.projectType && estimateData.projectType !== projectType) {
-          setProjectType(estimateData.projectType)
-          effectiveProjectType = estimateData.projectType
-        }
-        
-        // 使用当前有效的项目类型重新生成
-        setGenerating(true)
-        
-        try {
-          const tableItems = extractCurrentTableItems()
-          const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, effectiveProjectType)
-          
-          if (response.success && response.data) {
-            const newEstimateData = response.data.summary
-            setEstimate(newEstimateData)
-            
-            // 等待estimate更新后重算三级子项
-            setTimeout(() => {
-              if (Object.keys(savedThirdLevelItems).length > 0) {
-                const recalculatedItems = recalculateThirdLevelItems(savedThirdLevelItems)
-                setThirdLevelItems(recalculatedItems)
-                console.log('刷新后已重算三级子项:', recalculatedItems)
-                
-                // 保留重算后的三级子项数据
-                const estimateWithThirdLevel = {
-                  ...newEstimateData,
-                  thirdLevelItems: recalculatedItems
-                }
-                saveEstimateToDatabase(estimateWithThirdLevel)
-              }
-            }, 50)
-            
-            notifications.show({
-              title: '✨ 刷新成功',
-              message: `投资估算已刷新，迭代${response.data.summary.iterationCount}次`,
-              color: 'green',
-              autoClose: 3000,
-            })
+    // 如果当前使用的是默认值，尝试从数据库加载之前保存的类型
+    if (projectType === 'agriculture') {
+      try {
+        const estimateResponse = await investmentApi.getByProjectId(id!)
+        if (estimateResponse.success && estimateResponse.data?.estimate) {
+          const estimateData = estimateResponse.data.estimate.estimate_data
+          if (estimateData?.projectType) {
+            effectiveProjectType = estimateData.projectType
+            setProjectType(effectiveProjectType)
+            console.log(`[handleRegenerate] 从数据库加载项目类型: ${effectiveProjectType}`)
           }
-        } catch (error: any) {
-          console.error('刷新失败:', error)
-          notifications.show({
-            title: '❌ 刷新失败',
-            message: error.response?.data?.error || '请稍后重试',
-            color: 'red',
-            autoClose: 5000,
-          })
-        } finally {
-          setGenerating(false)
         }
-      } else {
-        // 没有保存的数据，直接重新生成
-        await generateEstimate(true)
+      } catch (error) {
+        console.error('加载项目类型失败:', error)
       }
-    } catch (error) {
-      console.error('加载三级子项失败:', error)
-      // 出错时仍然执行刷新，但可能丢失三级子项
-      await generateEstimate(true)
+    }
+    
+    // 使用有效的项目类型重新生成
+    setGenerating(true)
+    
+    try {
+      const tableItems = extractCurrentTableItems()
+      const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, effectiveProjectType)
+      
+      if (response.success && response.data) {
+        const newEstimateData = response.data.summary
+        setEstimate(newEstimateData)
+        
+        // 等待estimate更新后重算三级子项
+        setTimeout(() => {
+          // 重新加载三级子项数据
+          const loadThirdLevelItems = async () => {
+            try {
+              const estimateResponse = await investmentApi.getByProjectId(id!)
+              if (estimateResponse.success && estimateResponse.data?.estimate) {
+                const savedThirdLevelItems = estimateResponse.data.estimate.estimate_data?.thirdLevelItems || {}
+                if (Object.keys(savedThirdLevelItems).length > 0) {
+                  const recalculatedItems = recalculateThirdLevelItems(savedThirdLevelItems)
+                  setThirdLevelItems(recalculatedItems)
+                  console.log('刷新后已重算三级子项:', recalculatedItems)
+                  
+                  // 保留重算后的三级子项数据，同时保存当前的项目类型
+                  const estimateWithThirdLevel = {
+                    ...newEstimateData,
+                    thirdLevelItems: recalculatedItems,
+                    projectType: effectiveProjectType
+                  }
+                  saveEstimateToDatabase(estimateWithThirdLevel)
+                } else {
+                  // 没有三级子项，直接保存
+                  saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
+                }
+              } else {
+                // 没有保存的数据，直接保存当前数据
+                saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
+              }
+            } catch (e) {
+              console.error('加载三级子项失败:', e)
+              // 出错时直接保存当前数据
+              saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
+            }
+          }
+          loadThirdLevelItems()
+        }, 50)
+        
+        notifications.show({
+          title: '✨ 刷新成功',
+          message: `投资估算已刷新，迭代${response.data.summary.iterationCount}次`,
+          color: 'green',
+          autoClose: 3000,
+        })
+      }
+    } catch (error: any) {
+      console.error('刷新失败:', error)
+      notifications.show({
+        title: '❌ 刷新失败',
+        message: error.response?.data?.error || '请稍后重试',
+        color: 'red',
+        autoClose: 5000,
+      })
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -457,17 +476,18 @@ const InvestmentSummary: React.FC = () => {
     try {
       const tableItems = extractCurrentTableItems()
 
-      // 生成投资估算
-      const response = await investmentApi.generateSummary(id!, tableItems)
+      // 生成投资估算（传递当前项目类型，确保市政公用设施费正确计算）
+      const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, projectType)
       
       if (response.success && response.data) {
         const estimateData = response.data.summary
         setEstimate(estimateData)
         
-        // 使用传入的三级子项数据（而不是依赖React状态）
+        // 使用传入的三级子项数据（而不是依赖React状态），同时保存当前项目类型
         const estimateWithThirdLevel = {
           ...estimateData,
-          thirdLevelItems: existingThirdLevelItems
+          thirdLevelItems: existingThirdLevelItems,
+          projectType: projectType
         }
         await saveEstimateToDatabase(estimateWithThirdLevel)
         
@@ -1060,7 +1080,8 @@ const InvestmentSummary: React.FC = () => {
               })) || []
               
               const landCostFromProject = projectData.land_cost ?? 0
-              const response = await investmentApi.generateSummary(id!, tableItems, undefined, landCostFromProject)
+              // 生成投资估算（传递当前项目类型，确保市政公用设施费正确计算）
+              const response = await investmentApi.generateSummary(id!, tableItems, undefined, landCostFromProject, projectType)
               if (response.success && response.data) {
                 const newEstimateData = response.data.summary
                 // 使用 setTimeout 确保状态更新触发渲染
@@ -1221,10 +1242,11 @@ const InvestmentSummary: React.FC = () => {
         // 强制在下一个事件循环中更新状态，确保渲染
         setTimeout(() => setEstimate(estimateData), 0)
         
-        // 保存到数据库（包含三级子项数据）
+        // 保存到数据库（包含三级子项数据和当前项目类型）
         const estimateWithThirdLevel = {
           ...estimateData,
-          thirdLevelItems: thirdLevelItems
+          thirdLevelItems: thirdLevelItems,
+          projectType: projectType
         }
         await saveEstimateToDatabase(estimateWithThirdLevel)
         
@@ -2240,10 +2262,11 @@ const InvestmentSummary: React.FC = () => {
           
           console.log('三级子项已按比例调整，新的三级子项数据:', newThirdLevelItems)
           
-          // 保存三级子项数据到数据库
+          // 保存三级子项数据到数据库（包含当前项目类型）
           const estimateWithThirdLevel = {
             ...newEstimate,
-            thirdLevelItems: newThirdLevelItems
+            thirdLevelItems: newThirdLevelItems,
+            projectType: projectType
           }
           await saveEstimateToDatabase(estimateWithThirdLevel)
           
@@ -2255,10 +2278,11 @@ const InvestmentSummary: React.FC = () => {
             autoClose: 5000,
           })
         } else {
-          // 保存三级子项数据到数据库
+          // 保存三级子项数据到数据库（包含当前项目类型）
           const estimateWithThirdLevel = {
             ...newEstimate,
-            thirdLevelItems: thirdLevelItems
+            thirdLevelItems: thirdLevelItems,
+            projectType: projectType
           }
           await saveEstimateToDatabase(estimateWithThirdLevel)
           
@@ -2784,11 +2808,12 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={async () => {
                 if (estimate && Math.abs(estimate.gapRate) < 1.5) {
-                  // 自动保存投资估算数据
+                  // 自动保存投资估算数据（包含当前项目类型）
                   try {
                     const estimateWithThirdLevel = {
                       ...estimate,
-                      thirdLevelItems: thirdLevelItems
+                      thirdLevelItems: thirdLevelItems,
+                      projectType: projectType
                     }
                     await saveEstimateToDatabase(estimateWithThirdLevel)
                     console.log('✅ 跳转前已自动保存投资估算数据')

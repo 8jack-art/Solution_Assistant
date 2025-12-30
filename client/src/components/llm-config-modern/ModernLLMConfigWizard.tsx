@@ -61,13 +61,16 @@ interface ModernLLMConfigWizardProps {
   onComplete: (config: ConfigFormData) => void
   initialData?: Partial<ConfigFormData>
   onCancel?: () => void
+  isEditing?: boolean
 }
 
 const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
   onComplete,
   initialData,
   onCancel,
+  isEditing = false,
 }) => {
+  // 编辑模式从步骤0开始，让用户能查看和修改所有信息
   const [activeStep, setActiveStep] = useState(0)
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
@@ -143,6 +146,27 @@ const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
     { id: 3, title: '测试连接', description: '验证配置是否正常工作' },
     { id: 4, title: '完成配置', description: '保存配置并设置默认选项' },
   ]
+
+  // 编辑模式下自动选择对应的 provider 并预填充表单
+  useEffect(() => {
+    if (isEditing && initialData?.provider) {
+      const provider = providers.find(p => p.name === initialData.provider)
+      if (provider) {
+        setSelectedProvider(provider)
+      }
+      // 编辑模式下确保所有表单数据都被正确初始化
+      if (initialData) {
+        setFormData({
+          provider: initialData.provider || '',
+          name: initialData.name || '',
+          api_key: initialData.api_key || '',
+          base_url: initialData.base_url || '',
+          model: initialData.model || '',
+          is_default: initialData.is_default || false,
+        })
+      }
+    }
+  }, [isEditing, initialData?.provider, initialData])
 
   // 更新表单数据
   const updateFormData = (field: keyof ConfigFormData, value: string | boolean) => {
@@ -264,6 +288,15 @@ const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
 
   // 下一步
   const nextStep = () => {
+    // 编辑模式下放宽验证，允许用户快速浏览和修改
+    if (isEditing && activeStep === 0) {
+      // 编辑模式下，步骤0如果有provider就允许下一步
+      if (formData.provider) {
+        setActiveStep(prev => Math.min(prev + 1, steps.length - 1))
+        return
+      }
+    }
+    
     if (validateStep(activeStep)) {
       setActiveStep(prev => Math.min(prev + 1, steps.length - 1))
     }
@@ -289,11 +322,11 @@ const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
                 <IconRocket size={24} />
               </ThemeIcon>
               <Title order={2}>
-                智能LLM配置向导
+                {isEditing ? '编辑LLM配置' : '智能LLM配置向导'}
               </Title>
             </Group>
             <Text c="dimmed" size="lg">
-              跟随向导快速配置您的LLM服务，整个过程只需几分钟
+              {isEditing ? '修改您的LLM服务配置信息' : '跟随向导快速配置您的LLM服务，整个过程只需几分钟'}
             </Text>
           </div>
           
@@ -333,9 +366,12 @@ const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
             {/* 步骤 0: 服务商选择 */}
             {activeStep === 0 && (
               <div>
-                <Title order={3} mb="lg">选择您的LLM服务商</Title>
+                <Title order={3} mb="lg">{isEditing ? '确认服务商' : '选择您的LLM服务商'}</Title>
                 <Text c="dimmed" mb="xl">
-                  我们推荐了最受欢迎的LLM服务商，您也可以选择自定义配置
+                  {isEditing 
+                    ? '请确认您的LLM服务商，如有需要可以更换' 
+                    : '我们推荐了最受欢迎的LLM服务商，您也可以选择自定义配置'
+                  }
                 </Text>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
@@ -590,9 +626,9 @@ const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
             {/* 步骤 4: 完成配置 */}
             {activeStep === 4 && (
               <div>
-                <Title order={3} mb="lg">完成配置</Title>
+                <Title order={3} mb="lg">{isEditing ? '确认修改' : '完成配置'}</Title>
                 <Text c="dimmed" mb="xl">
-                  最后一步，请确认您的配置信息
+                  {isEditing ? '请确认您的修改信息' : '最后一步，请确认您的配置信息'}
                 </Text>
                 
                 <Stack gap="lg">
@@ -635,7 +671,10 @@ const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
                   />
                   
                   <Alert color="blue" icon={<IconCheck size={16} />}>
-                    配置完成后，您可以在LLM配置管理页面查看、编辑和删除配置。
+                    {isEditing 
+                      ? '修改完成后，您可以在LLM配置管理页面查看和进一步调整配置。'
+                      : '配置完成后，您可以在LLM配置管理页面查看、编辑和删除配置。'
+                    }
                   </Alert>
                 </Stack>
               </div>
@@ -672,7 +711,7 @@ const ModernLLMConfigWizard: React.FC<ModernLLMConfigWizardProps> = ({
                 variant="gradient"
                 gradient={{ from: 'teal', to: 'blue', deg: 45 }}
               >
-                完成配置
+                {isEditing ? '保存修改' : '完成配置'}
               </Button>
             )}
           </Group>

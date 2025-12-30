@@ -72,6 +72,7 @@ interface NavItem {
 const ModernLLMConfigSystem: React.FC = () => {
   const navigate = useNavigate()
   const [currentView, setCurrentView] = useState<'list' | 'wizard' | 'analytics'>('list')
+  const [editingConfig, setEditingConfig] = useState<LLMConfig | null>(null)
   const [configs, setConfigs] = useState<LLMConfig[]>([])
   const [stats, setStats] = useState<SystemStats>({
     totalConfigs: 0,
@@ -191,39 +192,66 @@ const ModernLLMConfigSystem: React.FC = () => {
   // 配置操作处理
   const handleConfigComplete = async (configData: any) => {
     try {
-      const newConfig: LLMConfig = {
-        id: Date.now().toString(),
-        ...configData,
-        status: 'active',
-        created_at: new Date().toISOString(),
-        usage_count: 0,
-        is_admin: false,
-        user_id: 'user1',
+      if (editingConfig) {
+        // 编辑模式：更新现有配置
+        setConfigs(prev => prev.map(c => 
+          c.id === editingConfig.id 
+            ? { 
+                ...c, 
+                ...configData,
+                // 保留原配置的其他重要属性
+                id: c.id,
+                created_at: c.created_at,
+                usage_count: c.usage_count,
+                is_admin: c.is_admin,
+                user_id: c.user_id,
+                status: c.status, // 保持原状态
+              }
+            : c
+        ))
+        notifications.show({
+          title: '配置更新成功',
+          message: 'LLM配置已成功更新',
+          color: 'green',
+        })
+      } else {
+        // 新建模式：创建新配置
+        const newConfig: LLMConfig = {
+          id: Date.now().toString(),
+          ...configData,
+          status: 'active',
+          created_at: new Date().toISOString(),
+          usage_count: 0,
+          is_admin: false,
+          user_id: 'user1',
+        }
+        setConfigs(prev => [...prev, newConfig])
+        notifications.show({
+          title: '配置创建成功',
+          message: 'LLM配置已成功创建并可以开始使用',
+          color: 'green',
+        })
       }
       
-      setConfigs(prev => [...prev, newConfig])
+      setEditingConfig(null)
       setCurrentView('list')
-      
-      notifications.show({
-        title: '配置创建成功',
-        message: 'LLM配置已成功创建并可以开始使用',
-        color: 'green',
-      })
     } catch (error) {
       notifications.show({
-        title: '创建失败',
-        message: '创建配置时发生错误，请重试',
+        title: editingConfig ? '更新失败' : '创建失败',
+        message: '操作时发生错误，请重试',
         color: 'red',
       })
     }
   }
 
   const handleEdit = (config: LLMConfig) => {
-    notifications.show({
-      title: '编辑配置',
-      message: `编辑配置: ${config.name}`,
-      color: 'blue',
-    })
+    setEditingConfig(config)
+    setCurrentView('wizard')
+  }
+
+  const handleCancelEdit = () => {
+    setEditingConfig(null)
+    setCurrentView('list')
   }
 
   const handleDelete = (config: LLMConfig) => {
@@ -280,14 +308,20 @@ const ModernLLMConfigSystem: React.FC = () => {
       icon: <IconSettings size={20} />,
       badge: configs.length.toString(),
       color: 'blue',
-      action: () => setCurrentView('list'),
+      action: () => {
+        setEditingConfig(null)
+        setCurrentView('list')
+      },
     },
     {
       id: 'wizard',
       label: '新建配置',
       icon: <IconPlus size={20} />,
       color: 'green',
-      action: () => setCurrentView('wizard'),
+      action: () => {
+        setEditingConfig(null) // 清除编辑状态
+        setCurrentView('wizard')
+      },
     },
     {
       id: 'analytics',
@@ -455,7 +489,16 @@ const ModernLLMConfigSystem: React.FC = () => {
             >
               <ModernLLMConfigWizard
                 onComplete={handleConfigComplete}
-                onCancel={() => setCurrentView('list')}
+                onCancel={handleCancelEdit}
+                initialData={editingConfig ? {
+                  provider: editingConfig.provider,
+                  name: editingConfig.name,
+                  api_key: editingConfig.api_key,
+                  base_url: editingConfig.base_url,
+                  model: editingConfig.model,
+                  is_default: editingConfig.is_default,
+                } : undefined}
+                isEditing={!!editingConfig}
               />
             </motion.div>
           )}
