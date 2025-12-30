@@ -815,6 +815,19 @@ const RevenueCostModeling: React.FC = () => {
       await saveLoanRepaymentScheduleData();
     }
 
+    // 步骤2：收入建模 - 保存营业收入表数据
+    if (activeStep === 2) {
+      const { saveRevenueTableData } = useRevenueCostStore.getState();
+      const urbanTaxRate = 0.07; // 默认城市建设维护税税率
+      await saveRevenueTableData(deductibleInputTax, urbanTaxRate);
+    }
+
+    // 步骤3：成本建模 - 保存总成本费用表数据
+    if (activeStep === 3) {
+      const { saveCostTableData } = useRevenueCostStore.getState();
+      await saveCostTableData();
+    }
+
     if (activeStep < STEPS.length - 1) {
       setCurrentStep(stepMap[activeStep + 1] as any)
     }
@@ -1951,7 +1964,7 @@ const RevenueCostModeling: React.FC = () => {
                 <div>
                   <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {investmentEstimate?.final_total ? Number(investmentEstimate.final_total).toFixed(2) : (project?.total_investment || 0).toFixed(2)} 万元
+                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? project?.total_investment ?? 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>

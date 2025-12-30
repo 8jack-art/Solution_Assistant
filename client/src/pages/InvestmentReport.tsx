@@ -34,7 +34,7 @@ import {
   IconRefresh,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { projectApi, reportApi } from '@/lib/api'
+import { projectApi, reportApi, investmentApi } from '@/lib/api'
 import PromptEditor from '@/components/report/PromptEditor'
 import StreamingOutput from '@/components/report/StreamingOutput'
 import WordPreview from '@/components/report/WordPreview'
@@ -70,6 +70,7 @@ const InvestmentReport: React.FC = () => {
   // 状态管理
   const [loading, setLoading] = useState(true)
   const [project, setProject] = useState<any>(null)
+  const [investmentEstimate, setInvestmentEstimate] = useState<any>(null)
   const [templates, setTemplates] = useState<ReportTemplate[]>([])
   const [currentTemplate, setCurrentTemplate] = useState<ReportTemplate | null>(null)
   const [customPrompt, setCustomPrompt] = useState('')
@@ -103,6 +104,16 @@ const InvestmentReport: React.FC = () => {
           })
           navigate('/dashboard')
           return
+        }
+
+        // 获取投资估算数据
+        try {
+          const estimateResponse = await investmentApi.getByProjectId(id!)
+          if (estimateResponse.success && estimateResponse.data?.estimate) {
+            setInvestmentEstimate(estimateResponse.data.estimate)
+          }
+        } catch (error) {
+          console.warn('加载投资估算数据失败:', error)
         }
 
         // 获取报告模板
@@ -500,9 +511,9 @@ const InvestmentReport: React.FC = () => {
               </div>
               <Group gap="xl">
                 <div>
-                  <Text size="xs" c="#86909C" mb={4}>总投资</Text>
+                  <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {Number(project?.total_investment || 0).toFixed(2)} 万元
+                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? project?.total_investment ?? 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>

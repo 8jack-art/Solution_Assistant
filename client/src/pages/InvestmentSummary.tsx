@@ -91,6 +91,9 @@ const InvestmentSummary: React.FC = () => {
   // 请求取消控制器
   const abortControllerRef = useRef<AbortController | null>(null)
   
+  // 标记用户是否手动切换过项目类型（用于区分默认值和用户选择）
+  const userHasManuallySwitched = useRef(false)
+  
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [analyzingAI, setAnalyzingAI] = useState(false)
@@ -132,7 +135,23 @@ const InvestmentSummary: React.FC = () => {
   
   // 项目类型变更时重新计算投资估算
   const handleProjectTypeChange = async (newType: 'agriculture' | 'construction') => {
+    // 标记用户已手动切换过项目类型
+    userHasManuallySwitched.current = true
     setProjectType(newType)
+    
+    // 立即保存项目类型到数据库（无论是否有估算数据）
+    try {
+      const saveData = {
+        project_id: id!,
+        estimate_data: {
+          projectType: newType
+        }
+      }
+      await investmentApi.save(saveData)
+      console.log(`[handleProjectTypeChange] 已保存项目类型到数据库: ${newType}`)
+    } catch (error) {
+      console.error('保存项目类型失败:', error)
+    }
     
     // 如果有估算数据，则重新计算
     if (estimate) {
@@ -383,8 +402,8 @@ const InvestmentSummary: React.FC = () => {
     // 3. 数据库也没有保存的，使用默认值
     let effectiveProjectType = projectType
     
-    // 如果当前使用的是默认值，尝试从数据库加载之前保存的类型
-    if (projectType === 'agriculture') {
+    // 如果当前使用的是默认值且用户从未手动切换过，才尝试从数据库加载之前保存的类型
+    if (projectType === 'agriculture' && !userHasManuallySwitched.current) {
       try {
         const estimateResponse = await investmentApi.getByProjectId(id!)
         if (estimateResponse.success && estimateResponse.data?.estimate) {
@@ -1028,16 +1047,17 @@ const InvestmentSummary: React.FC = () => {
             estimateData = estimateResponse.data.estimate
           }
           
-          // 数据完整性检查 - 修复：放宽检查条件，避免误判
+          // 数据完整性检查 - 关键修复：如果estimateData存在，直接使用它，只在没有数据时才自动生成
+          const dataIsComplete = estimateData && estimateData.partA && estimateData.partG
           if (!estimateData) {
             console.log('[数据加载] 投资估算数据为空，将自动生成')
-            // 不抛出错误，而是继续执行自动生成逻辑
           } else if (!estimateData.partA || !estimateData.partG) {
-            console.log('[数据加载] 投资估算数据缺少关键字段，将自动生成:', estimateData)
-            // 不抛出错误，而是继续执行自动生成逻辑
+            console.log('[数据加载] 投资估算数据缺少部分字段，将使用已有数据')
+          } else {
+            console.log('[数据加载] 投资估算数据完整')
           }
           
-          console.log(`[数据加载] 投资估算数据加载成功，迭代次数: ${estimateData.iterationCount || '未知'}`)
+          console.log(`[数据加载] 投资估算数据加载成功，迭代次数: ${estimateData?.iterationCount || '未知'}`)
           
           // 恢复三级子项数据（如果存在）- 先保存到局部变量
           if (estimateData.thirdLevelItems) {
@@ -1058,11 +1078,7 @@ const InvestmentSummary: React.FC = () => {
           // 检查是否需要自动生成（修复逻辑：只有确实没有数据时才自动生成）
           const shouldAutoGenerate = autoGenerateRequested &&
                                 !autoGenerateHandled &&
-                                (!estimateData ||
-                                 !estimateData.partA ||
-                                 !estimateData.partG ||
-                                 !estimateData.partA.children ||
-                                 estimateData.partA.children.length === 0)
+                                !estimateData
           
           if (shouldAutoGenerate) {
             setAutoGenerateHandled(true)

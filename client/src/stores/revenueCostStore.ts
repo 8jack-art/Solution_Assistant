@@ -480,6 +480,10 @@ interface RevenueCostState {
   setProfitDistributionTableData: (data: ProfitDistributionTableData | null) => void
   setLoanRepaymentTableData: (data: LoanRepaymentTableData | null) => void
   
+  // 计算方法
+  calculateVatForYear: (year: number, deductibleInputTax?: number) => number
+  generateRevenueTableData: (deductibleInputTax?: number, urbanTaxRate?: number) => RevenueTableData | null
+  
   // 贷款配置管理
   setLoanConfig: (config: LoanConfig) => void
   updateLoanConfig: (updates: Partial<LoanConfig>) => void
@@ -496,6 +500,8 @@ interface RevenueCostState {
   // 数据持久化
   saveToBackend: () => Promise<boolean>
   loadFromBackend: (projectId: string) => Promise<boolean>
+  saveRevenueTableData: (deductibleInputTax?: number, urbanTaxRate?: number) => Promise<boolean>
+  saveCostTableData: (tableData?: CostTableData | null) => Promise<boolean>
   
   // 重置
   reset: () => void
@@ -853,6 +859,218 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         }))
         // 触发自动保存
         debouncedSave()
+      },
+      
+      /**
+       * 计算指定年份的增值税额（用于生成营业收入表）
+       */
+      calculateVatForYear: (year: number, deductibleInputTax: number = 0): number => {
+        const state = get()
+        
+        // 计算销项税额
+        const yearOutputTax = state.revenueItems.reduce((sum, item) => {
+          const productionRate = getProductionRateForYear(state.productionRates, year)
+          const revenue = calculateYearlyRevenue(item, year, productionRate)
+          return sum + (revenue - revenue / (1 + item.vatRate))
+        }, 0)
+        
+        // 计算进项税额
+        let yearInputTax = 0
+        if (state.costConfig.rawMaterials.items && state.costConfig.rawMaterials.items.length > 0) {
+          const productionRate = state.costConfig.rawMaterials.applyProductionRate
+            ? (state.productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+            : 1
+          
+          state.costConfig.rawMaterials.items.forEach((item: any) => {
+            const taxRate = Number(item.taxRate) || 0
+            const taxRateDecimal = taxRate / 100
+            let baseAmount = 0
+            if (item.sourceType === 'percentage') {
+              baseAmount = state.revenueItems.reduce((s, revItem) => s + calculateTaxableIncome(revItem), 0) * (item.percentage || 0) / 100
+            } else if (item.sourceType === 'quantityPrice') {
+              baseAmount = (item.quantity || 0) * (item.unitPrice || 0)
+            } else if (item.sourceType === 'directAmount') {
+              baseAmount = item.directAmount || 0
+            }
+            yearInputTax += baseAmount * productionRate * taxRateDecimal / (1 + taxRateDecimal)
+          })
+        }
+        
+        // 计算进项税额（固定资产待抵扣）
+        const yearFixedAssetInputTax = deductibleInputTax > 0 ? deductibleInputTax : 0
+        
+        // 增值税 = 销项税额 - 进项税额 - 进项税额（固定资产待抵扣）
+        const vatAmount = yearOutputTax - yearInputTax - yearFixedAssetInputTax
+        
+        return Math.max(0, vatAmount)
+      },
+      
+      /**
+       * 生成营业收入表数据
+       * 包含：营业收入、增值税、销项税额、进项税额、其他税费及附加等
+       */
+      generateRevenueTableData: (deductibleInputTax: number = 0, urbanTaxRate: number = 0.07): RevenueTableData | null => {
+        const state = get()
+        if (!state.context) return null
+        
+        const operationYears = state.context.operationYears
+        const years = Array.from({ length: operationYears }, (_, i) => i + 1)
+        
+        const rows: RevenueTableRow[] = []
+        
+        // 1. 营业收入
+        const row1 = { 序号: '1', 收入项目: '营业收入', 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const yearTotal = state.revenueItems.reduce((sum, item) => {
+            const productionRate = getProductionRateForYear(state.productionRates, year)
+            return sum + calculateYearlyRevenue(item, year, productionRate)
+          }, 0)
+          row1.运营期.push(yearTotal)
+          row1.合计 += yearTotal
+        })
+        rows.push(row1)
+        
+        // 1.1, 1.2, 1.3... 收入项明细
+        state.revenueItems.forEach((item, idx) => {
+          const row = {
+            序号: `1.${idx + 1}`,
+            收入项目: `${item.name}（${(item.vatRate * 100).toFixed(0)}%）`,
+            合计: 0,
+            运营期: [] as number[]
+          }
+          
+          years.forEach((year) => {
+            const productionRate = getProductionRateForYear(state.productionRates, year)
+            const revenue = calculateYearlyRevenue(item, year, productionRate)
+            row.运营期.push(revenue)
+            row.合计 += revenue
+          })
+          
+          rows.push(row)
+        })
+        
+        // 2. 增值税
+        const row2 = { 序号: '2', 收入项目: '增值税', 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const yearVat = state.calculateVatForYear(year, deductibleInputTax)
+          row2.运营期.push(yearVat)
+          row2.合计 += yearVat
+        })
+        rows.push(row2)
+        
+        // 2.1 销项税额
+        const row2_1 = { 序号: '2.1', 收入项目: '销项税额', 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const yearTotal = state.revenueItems.reduce((sum, item) => {
+            const productionRate = getProductionRateForYear(state.productionRates, year)
+            const revenue = calculateYearlyRevenue(item, year, productionRate)
+            return sum + (revenue - revenue / (1 + item.vatRate))
+          }, 0)
+          row2_1.运营期.push(yearTotal)
+          row2_1.合计 += yearTotal
+        })
+        rows.push(row2_1)
+        
+        // 2.2 进项税额
+        const row2_2 = { 序号: '2.2', 收入项目: '进项税额', 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const yearOutputTax = state.revenueItems.reduce((sum, item) => {
+            const productionRate = getProductionRateForYear(state.productionRates, year)
+            const revenue = calculateYearlyRevenue(item, year, productionRate)
+            return sum + (revenue - revenue / (1 + item.vatRate))
+          }, 0)
+          // 简化计算：估算进项税额为销项税额的10%
+          const yearInputTax = yearOutputTax * 0.1
+          row2_2.运营期.push(yearInputTax)
+          row2_2.合计 += yearInputTax
+        })
+        rows.push(row2_2)
+        
+        // 2.3 进项税额（固定资产待抵扣）
+        const row2_3 = { 序号: '2.3', 收入项目: '进项税额（固定资产待抵扣）', 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const yearFixedAssetInputTax = deductibleInputTax > 0 ? deductibleInputTax / operationYears : 0
+          row2_3.运营期.push(yearFixedAssetInputTax)
+          row2_3.合计 += yearFixedAssetInputTax
+        })
+        rows.push(row2_3)
+        
+        // 3. 其他税费及附加
+        const row3 = { 序号: '3', 收入项目: '其他税费及附加', 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const vatAmount = state.calculateVatForYear(year, deductibleInputTax)
+          const urbanTax = vatAmount * urbanTaxRate
+          const educationTax = vatAmount * 0.05
+          const otherTaxes = urbanTax + educationTax
+          row3.运营期.push(otherTaxes)
+          row3.合计 += otherTaxes
+        })
+        rows.push(row3)
+        
+        // 3.1 城市建设维护税
+        const row3_1 = { 序号: '3.1', 收入项目: `城市建设维护税(${(urbanTaxRate * 100).toFixed(0)}%)`, 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const vatAmount = state.calculateVatForYear(year, deductibleInputTax)
+          const urbanTax = vatAmount * urbanTaxRate
+          row3_1.运营期.push(urbanTax)
+          row3_1.合计 += urbanTax
+        })
+        rows.push(row3_1)
+        
+        // 3.2 教育费附加(3%+地方2%)
+        const row3_2 = { 序号: '3.2', 收入项目: '教育费附加(3%+地方2%)', 合计: 0, 运营期: [] as number[] }
+        years.forEach((year) => {
+          const vatAmount = state.calculateVatForYear(year, deductibleInputTax)
+          const educationTax = vatAmount * 0.05
+          row3_2.运营期.push(educationTax)
+          row3_2.合计 += educationTax
+        })
+        rows.push(row3_2)
+        
+        return {
+          urbanTaxRate,
+          rows,
+          updatedAt: new Date().toISOString()
+        }
+      },
+      
+      /**
+       * 保存营业收入表数据到后端
+       */
+      saveRevenueTableData: async (deductibleInputTax: number = 0, urbanTaxRate: number = 0.07): Promise<boolean> => {
+        const state = get()
+        if (!state.context) return false
+        
+        // 生成表格数据
+        const tableData = state.generateRevenueTableData(deductibleInputTax, urbanTaxRate)
+        if (!tableData) return false
+        
+        // 更新本地状态
+        set({ revenueTableData: tableData })
+        
+        // 触发保存到后端
+        return state.saveToBackend()
+      },
+      
+      /**
+       * 保存总成本费用表数据到后端
+       */
+      saveCostTableData: async (tableData?: CostTableData | null): Promise<boolean> => {
+        const state = get()
+        if (!state.context) return false
+        
+        // 如果没有提供表格数据，使用已有的数据
+        const dataToSave = tableData || state.costTableData
+        if (!dataToSave) {
+          console.warn('⚠️ 没有总成本费用表数据可保存')
+          return false
+        }
+        
+        // 更新本地状态
+        set({ costTableData: dataToSave })
+        
+        // 触发保存到后端
+        return state.saveToBackend()
       },
       
       setCurrentStep: (step) => {
