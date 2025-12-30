@@ -8,6 +8,11 @@ export interface LLMResponse {
     content?: string;
     error?: string;
 }
+export interface LLMStreamResponse {
+    success: boolean;
+    stream?: ReadableStream<Uint8Array>;
+    error?: string;
+}
 export declare class LLMService {
     static testConnection(config: DBLLMConfig | {
         apiKey: string;
@@ -20,6 +25,13 @@ export declare class LLMService {
         maxTokens?: number;
         temperature?: number;
     }): Promise<LLMResponse>;
+    /**
+     * 流式生成内容
+     */
+    static generateContentStream(config: DBLLMConfig, messages: LLMMessage[], options?: {
+        maxTokens?: number;
+        temperature?: number;
+    }): Promise<LLMStreamResponse>;
 }
 export declare function generateInvestmentPrompt(projectInfo: {
     projectName: string;

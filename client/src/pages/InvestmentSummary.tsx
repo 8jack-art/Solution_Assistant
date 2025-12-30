@@ -949,14 +949,11 @@ const InvestmentSummary: React.FC = () => {
           
           // 数据完整性检查 - 修复：放宽检查条件，避免误判
           if (!estimateData) {
-            console.warn('[数据加载] 投资估算数据为空')
-            throw new Error('投资估算数据为空')
-          }
-          
-          // 只有在关键字段完全缺失时才报错
-          if (!estimateData.partA && !estimateData.partG) {
-            console.warn('[数据加载] 投资估算数据缺少关键字段:', estimateData)
-            throw new Error('投资资算数据缺少关键字段')
+            console.log('[数据加载] 投资估算数据为空，将自动生成')
+            // 不抛出错误，而是继续执行自动生成逻辑
+          } else if (!estimateData.partA || !estimateData.partG) {
+            console.log('[数据加载] 投资估算数据缺少关键字段，将自动生成:', estimateData)
+            // 不抛出错误，而是继续执行自动生成逻辑
           }
           
           console.log(`[数据加载] 投资估算数据加载成功，迭代次数: ${estimateData.iterationCount || '未知'}`)

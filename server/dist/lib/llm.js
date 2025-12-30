@@ -109,7 +109,7 @@ export class LLMService {
                     apiUrl = `${apiUrl}/chat/completions`;
                 }
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+                const timeoutId = setTimeout(() => controller.abort(), 180000); // 180秒超时（3分钟）
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
@@ -179,6 +179,63 @@ export class LLMService {
             success: false,
             error: '请求失败，已达到最大重试次数'
         };
+    }
+    /**
+     * 流式生成内容
+     */
+    static async generateContentStream(config, messages, options) {
+        try {
+            // 构建完整的API路径
+            let apiUrl = config.base_url;
+            // 如果 baseUrl 不包含 chat/completions，则添加
+            if (!config.base_url.includes('/chat/completions')) {
+                // 移除末尾的斜杠
+                apiUrl = config.base_url.replace(/\/$/, '');
+                apiUrl = `${apiUrl}/chat/completions`;
+            }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 180000); // 180秒超时（3分钟）
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${config.api_key}`
+                },
+                body: JSON.stringify({
+                    model: config.model,
+                    messages,
+                    max_tokens: options?.maxTokens || 8000,
+                    temperature: options?.temperature || 0.7,
+                    stream: true // 启用流式响应
+                }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                const errorData = await response.text();
+                return {
+                    success: false,
+                    error: `HTTP ${response.status}: ${errorData}`
+                };
+            }
+            // 返回流式响应
+            return {
+                success: true,
+                stream: response.body
+            };
+        }
+        catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') {
+                return {
+                    success: false,
+                    error: '请求超时'
+                };
+            }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : '未知错误'
+            };
+        }
     }
 }
 export function generateInvestmentPrompt(projectInfo) {

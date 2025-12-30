@@ -64,11 +64,15 @@ export class ReportService {
    */
   static async collectProjectData(projectId: string): Promise<any> {
     try {
+      console.log('开始收集项目数据，项目ID:', projectId)
+      
       // 获取投资估算数据
       const [investmentEstimates] = await (pool as any).execute(
         'SELECT * FROM investment_estimates WHERE project_id = ?',
         [projectId]
       ) as any[]
+
+      console.log('投资估算数据查询结果:', investmentEstimates.length, '条记录')
 
       // 获取收入成本数据
       const [revenueCostData] = await (pool as any).execute(
@@ -76,11 +80,15 @@ export class ReportService {
         [projectId]
       ) as any[]
 
+      console.log('收入成本数据查询结果:', revenueCostData.length, '条记录')
+
       // 获取项目基本信息
       const [projects] = await (pool as any).execute(
         'SELECT * FROM investment_projects WHERE id = ?',
         [projectId]
       ) as any[]
+
+      console.log('项目数据查询结果:', projects.length, '条记录')
 
       const project = projects[0] || {}
       
@@ -88,31 +96,46 @@ export class ReportService {
       let investmentData = {}
       if (investmentEstimates.length > 0) {
         const estimate = investmentEstimates[0]
+        console.log('投资估算原始数据键:', Object.keys(estimate))
+        
         if (estimate.estimate_data && typeof estimate.estimate_data === 'string') {
           try {
             investmentData = JSON.parse(estimate.estimate_data)
+            console.log('投资估算数据解析成功，键:', Object.keys(investmentData))
           } catch (e) {
             console.warn('解析投资估算数据失败:', e)
           }
+        } else {
+          console.warn('投资估算数据字段不存在或格式不正确')
         }
+      } else {
+        console.warn('未找到投资估算数据')
       }
 
       let revenueCostModelData = {}
       if (revenueCostData.length > 0) {
         const estimate = revenueCostData[0]
+        console.log('收入成本原始数据键:', Object.keys(estimate))
+        
         if (estimate.model_data && typeof estimate.model_data === 'string') {
           try {
             revenueCostModelData = JSON.parse(estimate.model_data)
+            console.log('收入成本数据解析成功，键:', Object.keys(revenueCostModelData))
           } catch (e) {
             console.warn('解析收入成本数据失败:', e)
           }
+        } else {
+          console.warn('收入成本数据字段不存在或格式不正确')
         }
+      } else {
+        console.warn('未找到收入成本数据')
       }
 
       // 提取关键财务指标
       const financialIndicators = this.extractFinancialIndicators(revenueCostModelData)
+      console.log('财务指标提取结果:', Object.keys(financialIndicators))
 
-      return {
+      const result = {
         project: {
           id: project.id,
           name: project.project_name,
@@ -127,6 +150,9 @@ export class ReportService {
         revenueCost: revenueCostModelData,
         financialIndicators
       }
+      
+      console.log('项目数据收集完成')
+      return result
     } catch (error) {
       console.error('收集项目数据失败:', error)
       throw error
@@ -201,7 +227,8 @@ ${JSON.stringify(financialIndicators, null, 2)}
     try {
       if (format === 'markdown') {
         // 转换Markdown为HTML
-        return marked.parse(content)
+        const result = marked.parse(content)
+        return typeof result === 'string' ? result : String(result)
       } else {
         // 直接返回HTML内容
         return content
