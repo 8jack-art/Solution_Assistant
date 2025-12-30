@@ -219,14 +219,24 @@ export class LLMService {
                 }
                 const data = await response.json();
                 console.log(`[${config.provider}] 响应数据:`, JSON.stringify(data).substring(0, 200) + '...');
-                const content = data.choices?.[0]?.message?.content;
-                // 修改验证逻辑，不仅检查content是否存在，还要检查是否有其他有效信息
+                console.log(`[${config.provider}] finish_reason:`, data.choices?.[0]?.finish_reason);
+                // 智谱AI特殊处理：内容可能在reasoning_content中
+                let content = data.choices?.[0]?.message?.content;
+                if (!content && data.choices?.[0]?.message?.reasoning_content) {
+                    content = data.choices[0].message.reasoning_content;
+                    console.log(`[${config.provider}] 使用reasoning_content作为响应内容`);
+                }
+                // 检查响应格式
                 if (!data.choices || data.choices.length === 0) {
                     console.error('generateContent - 响应中没有choices');
                     return {
                         success: false,
                         error: '响应格式无效'
                     };
+                }
+                // 如果内容为空但有reasoning_content，使用它
+                if (!content && data.choices?.[0]?.message?.reasoning_content) {
+                    content = data.choices[0].message.reasoning_content;
                 }
                 console.log(`[${config.provider}] 生成成功，内容长度:`, content?.length || 0);
                 // 即使content为空，只要有choices就认为是成功的
