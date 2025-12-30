@@ -43,7 +43,6 @@ interface InvestmentEstimateResult {
   partG: InvestmentItem
   iterationCount: number
   gapRate: number
-  thirdLevelItems?: Record<number, any[]> // 三级子项数据，用于保留AI生成的子项信息
 }
 
 // 建设期利息迭代常量
