@@ -125,6 +125,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
   // 第一阶段：迭代计算建设期利息和建设单位管理费，直到项目总资金收敛
   for (let interestIter = 0; interestIter < MAX_INTEREST_ITERATIONS; interestIter++) {
     const partATotal = partAItems.reduce((sum, item) => sum + (item.合计 || 0), 0)
+    const engineeringCost = partAItems.reduce((sum, item) => sum + ((item.建设工程费 || 0) + (item.安装工程费 || 0)), 0)
     const partA: InvestmentItem = {
       序号: 'A',
       工程或费用名称: '第一部分 工程费用',
@@ -135,7 +136,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
 
     // 使用上一次迭代的项目总资金来计算建设单位管理费
     const estimatedTotalFunding = previousTotalFunding > 0 ? previousTotalFunding : partATotal * 1.5
-    const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding)
+    const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, engineeringCost)
     const partC: InvestmentItem = {
       序号: 'C',
       工程或费用名称: '第一、二部分合计',
@@ -203,6 +204,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
     previousTotalFunding = latestSnapshot.partG.合计 // 使用上次的总资金作为初始值
     for (let interestIter = 0; interestIter < MAX_INTEREST_ITERATIONS; interestIter++) {
       const partATotal = partAItems.reduce((sum, item) => sum + (item.合计 || 0), 0)
+      const engineeringCost = partAItems.reduce((sum, item) => sum + ((item.建设工程费 || 0) + (item.安装工程费 || 0)), 0)
       const partA: InvestmentItem = {
         序号: 'A',
         工程或费用名称: '第一部分 工程费用',
@@ -213,7 +215,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
 
       // 使用上一次迭代的项目总资金来计算建设单位管理费
       const estimatedTotalFunding = previousTotalFunding > 0 ? previousTotalFunding : partATotal * 1.5
-      const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding)
+      const partB = calculatePartB(partATotal, landCost, estimatedTotalFunding, engineeringCost)
       const partC: InvestmentItem = {
         序号: 'C',
         工程或费用名称: '第一、二部分合计',

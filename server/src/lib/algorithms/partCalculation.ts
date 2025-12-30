@@ -37,8 +37,14 @@ export interface InvestmentItem {
  * @param partATotal 第一部分工程费用总额
  * @param landCost 土地费用
  * @param totalFunding 项目总资金（可选，用于建设单位管理费计算）
+ * @param engineeringCost 工程费用 = 建设工程费 + 安装工程费（用于勘察设计费、监理费等计算）
  */
-export function calculatePartB(partATotal: number, landCost: number, totalFunding?: number): InvestmentItem {
+export function calculatePartB(
+  partATotal: number, 
+  landCost: number, 
+  totalFunding?: number,
+  engineeringCost?: number
+): InvestmentItem {
   // 确保landCost是数字
   const numericLandCost = Number(landCost) || 0
   
@@ -83,8 +89,8 @@ export function calculatePartB(partATotal: number, landCost: number, totalFundin
     {
       序号: '6',
       工程或费用名称: '勘察设计费',
-      合计: calculateSurveyDesignFee(partATotal),
-      备注: '按第一部分工程费的2.5%计取'
+      合计: calculateSurveyDesignFee(engineeringCost ?? partATotal),
+      备注: '按工程费的2.5%计取'
     },
     {
       序号: '7',
