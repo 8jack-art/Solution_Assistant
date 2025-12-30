@@ -96,7 +96,7 @@ export function calculatePartB(
       序号: '3',
       工程或费用名称: '招标代理费',
       合计: biddingAgencyFee,
-      备注: '差额定率分档累进（工程+货物+服务招标费）'
+      备注: '差额定率分档累进法'
     },
     {
       序号: '4',
@@ -108,19 +108,19 @@ export function calculatePartB(
       序号: '5',
       工程或费用名称: '项目前期工作咨询费',
       合计: calculatePreliminaryConsultingFee(totalFunding ?? partATotal),
-      备注: '按总投资额分档内插计算（5个子项之和）'
+      备注: '按总投资额分档内插计算'
     },
     {
       序号: '6',
       工程或费用名称: '勘察设计费',
       合计: calculateSurveyDesignFee(engineeringCost ?? partATotal),
-      备注: '按工程费的2.5%计取'
+      备注: '按工程费用分段费率表计算'
     },
     {
       序号: '7',
       工程或费用名称: '研究试验费',
       合计: calculateResearchTestFee(partATotal),
-      备注: '按第一部分工程费的1%计取'
+      备注: '按第一部分工程费的0.6%计取'
     },
     {
       序号: '8',
@@ -132,13 +132,13 @@ export function calculatePartB(
       序号: '9',
       工程或费用名称: '场地准备及临时设施费',
       合计: calculateSitePreparationFee(partATotal),
-      备注: '按第一部分工程费的2%计取'
+      备注: '按第一部分工程费的0.5%计取'
     },
     {
       序号: '10',
       工程或费用名称: '工程保险费',
       合计: calculateInsuranceFee(partATotal),
-      备注: '按第一部分工程费的0.5%计取'
+      备注: '按第一部分工程费的0.3%计取'
     },
     {
       序号: '11',
@@ -156,7 +156,7 @@ export function calculatePartB(
       序号: '13',
       工程或费用名称: '其它',
       合计: calculateOtherFee(partATotal),
-      备注: '按第一部分工程费的0.5%计取'
+      备注: '按第一部分工程费的0.2%计取'
     }
   ]
 
@@ -167,7 +167,7 @@ export function calculatePartB(
     序号: 'B',
     工程或费用名称: '第二部分 工程其它费用',
     合计: total,
-    备注: '管理性、咨询性和专项费用合计',
+    备注: '桂建标〔2018〕37号',
     children
   }
 }

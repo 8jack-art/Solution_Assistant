@@ -150,7 +150,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
       序号: 'D',
       工程或费用名称: '基本预备费',
       合计: partC.合计 * 0.08,
-      备注: '按(A+B)×8%计算'
+      备注: '按(A+B)×8%'
     }
     const partE: InvestmentItem = {
       序号: 'E',
@@ -230,7 +230,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
         序号: 'D',
         工程或费用名称: '基本预备费',
         合计: partC.合计 * 0.08,
-        备注: '按(A+B)×8%计算'
+        备注: '按(A+B)×8%'
       }
       const partE: InvestmentItem = {
         序号: 'E',

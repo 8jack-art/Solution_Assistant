@@ -142,7 +142,17 @@ const InvestmentSummary: React.FC = () => {
         const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, newType)
         
         if (response.success && response.data) {
-          setEstimate(response.data.summary)
+          const newEstimate = response.data.summary
+          setEstimate(newEstimate)
+          
+          // 保存到数据库（包含新的projectType和三级子项数据）
+          const estimateWithThirdLevel = {
+            ...newEstimate,
+            thirdLevelItems: thirdLevelItems,
+            projectType: newType
+          }
+          await saveEstimateToDatabase(estimateWithThirdLevel)
+          
           notifications.show({
             title: '✨ 重新计算完成',
             message: `已切换为${newType === 'agriculture' ? '农业' : '建筑'}项目类型，市政公用设施费已${newType === 'agriculture' ? '免除' : '按1.5%计算'}`,
@@ -366,6 +376,10 @@ const InvestmentSummary: React.FC = () => {
   const handleRegenerate = async () => {
     if (!project) return
     
+    // 优先使用当前选择的项目类型（用户界面上的状态）
+    // 如果数据库中有保存的值且与当前状态不同，才使用数据库的值
+    let effectiveProjectType = projectType
+    
     // 先从数据库加载最新的三级子项数据
     try {
       const estimateResponse = await investmentApi.getByProjectId(id!)
@@ -373,12 +387,18 @@ const InvestmentSummary: React.FC = () => {
         const estimateData = estimateResponse.data.estimate.estimate_data
         const savedThirdLevelItems = estimateData.thirdLevelItems || {}
         
-        // 使用保存的三级子项数据重新生成
+        // 如果数据库中有保存的项目类型，且与当前状态不同，才同步状态
+        if (estimateData.projectType && estimateData.projectType !== projectType) {
+          setProjectType(estimateData.projectType)
+          effectiveProjectType = estimateData.projectType
+        }
+        
+        // 使用当前有效的项目类型重新生成
         setGenerating(true)
         
         try {
           const tableItems = extractCurrentTableItems()
-          const response = await investmentApi.generateSummary(id!, tableItems)
+          const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, effectiveProjectType)
           
           if (response.success && response.data) {
             const newEstimateData = response.data.summary
@@ -2021,7 +2041,7 @@ const InvestmentSummary: React.FC = () => {
         project_id: id!,
         estimate_data: {
           ...estimateData,
-          projectType: projectType  // 保存项目类型
+          projectType: estimateData.projectType ?? projectType  // 保存项目类型（优先使用传入的值）
         }
       }
       
@@ -2870,7 +2890,9 @@ const InvestmentSummary: React.FC = () => {
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>差距率</Text>
       <Text size="lg" fw={600} c={(project?.total_investment ?? 0) > (estimate?.partG?.合计 || 0) ? '#00C48C' : '#FF4D4F'}>
-        {(project?.total_investment ?? 0) > (estimate?.partG?.合计 || 0) && estimate?.gapRate && estimate.gapRate < 0 ? '' : (project?.total_investment ?? 0) > (estimate?.partG?.合计 || 0) ? '-' : '+'}{estimate?.gapRate ? Math.abs(estimate.gapRate).toFixed(2) : 'N/A'}%
+        {estimate?.gapRate !== undefined && estimate?.gapRate !== null 
+          ? `${estimate.gapRate < 0 ? '-' : '+'}${Math.abs(estimate.gapRate).toFixed(2)}%`
+          : 'N/A'}
       </Text>
     </div>
     <div style={{ textAlign: 'center' }}>

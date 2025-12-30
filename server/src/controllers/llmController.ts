@@ -77,6 +77,22 @@ export class LLMController {
 
       const configData = createConfigSchema.parse(req.body)
 
+      // 检查是否已存在相同的配置
+      const existingConfig = await LLMConfigModel.findByCredentials(
+        userId,
+        configData.provider,
+        configData.base_url,
+        configData.model
+      )
+      
+      if (existingConfig) {
+        return res.status(409).json({
+          success: false,
+          error: '配置已存在',
+          data: { existing_id: existingConfig.id }
+        })
+      }
+
       // 确保所有必需字段都正确传递给模型
       const config = await LLMConfigModel.create({
         name: configData.name,
