@@ -79,6 +79,141 @@ interface InvestmentEstimate {
   gapRate: number
 }
 
+// 将简化的estimate_data转换为完整的表格数据结构
+const buildFullEstimateStructure = (estimateData: any, projectData: any): InvestmentEstimate => {
+  const constructionCost = estimateData.constructionCost || 0
+  const equipmentCost = estimateData.equipmentCost || 0
+  const installationCost = estimateData.installationCost || 0
+  const otherCost = estimateData.otherCost || 0
+  const landCost = estimateData.landCost || 0
+  const basicReserve = estimateData.basicReserve || 0
+  const priceReserve = estimateData.priceReserve || 0
+  const buildingInvestment = estimateData.buildingInvestment || 0
+  const constructionInterest = estimateData.constructionInterest || 0
+  const totalInvestment = estimateData.totalInvestment || 0
+  
+  // A部分：从estimate_response中获取children数据
+  const partA: InvestmentItem = {
+    id: 'partA',
+    序号: '一',
+    工程或费用名称: '第一部分 工程费用',
+    建设工程费: constructionCost,
+    设备购置费: equipmentCost,
+    安装工程费: installationCost,
+    其它费用: 0,
+    合计: buildingInvestment,
+    占总投资比例: totalInvestment > 0 ? buildingInvestment / totalInvestment : 0,
+    备注: '',
+    children: estimateData.partA?.children || []
+  }
+  
+  // B部分：其它费用（包含土地费用、基本预备费、价差预备费）
+  const partB: InvestmentItem = {
+    id: 'partB',
+    序号: '二',
+    工程或费用名称: '第二部分 其它费用',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: otherCost + landCost + basicReserve + priceReserve,
+    合计: otherCost + landCost + basicReserve + priceReserve,
+    占总投资比例: totalInvestment > 0 ? (otherCost + landCost + basicReserve + priceReserve) / totalInvestment : 0,
+    备注: '',
+    children: [
+      { id: 'B1', 序号: '1', 工程或费用名称: '土地费用', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: landCost, 合计: landCost, 备注: '' },
+      { id: 'B2', 序号: '2', 工程或费用名称: '基本预备费', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: basicReserve, 合计: basicReserve, 备注: '' },
+      { id: 'B3', 序号: '3', 工程或费用名称: '价差预备费', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: priceReserve, 合计: priceReserve, 备注: '' },
+      { id: 'B4', 序号: '4', 工程或费用名称: '其它费用', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: otherCost, 合计: otherCost, 备注: '' }
+    ]
+  }
+  
+  // C部分：一+二
+  const partC: InvestmentItem = {
+    id: 'partC',
+    序号: '三',
+    工程或费用名称: '第一、二部分合计',
+    建设工程费: constructionCost,
+    设备购置费: equipmentCost,
+    安装工程费: installationCost,
+    其它费用: otherCost + landCost + basicReserve + priceReserve,
+    合计: buildingInvestment + otherCost + landCost + basicReserve + priceReserve,
+    占总投资比例: totalInvestment > 0 ? (buildingInvestment + otherCost + landCost + basicReserve + priceReserve) / totalInvestment : 0,
+    备注: ''
+  }
+  
+  // D部分：建设期利息
+  const partD: InvestmentItem = {
+    id: 'partD',
+    序号: '四',
+    工程或费用名称: '建设期利息',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: 0,
+    合计: constructionInterest,
+    占总投资比例: totalInvestment > 0 ? constructionInterest / totalInvestment : 0,
+    备注: ''
+  }
+  
+  // E部分：三+四 = 项目总投资
+  const partE: InvestmentItem = {
+    id: 'partE',
+    序号: '五',
+    工程或费用名称: '项目总资金',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: 0,
+    合计: totalInvestment - constructionInterest,
+    占总投资比例: totalInvestment > 0 ? (totalInvestment - constructionInterest) / totalInvestment : 0,
+    备注: '不含建设期利息'
+  }
+  
+  // F部分：建设期利息详细信息
+  const partF = {
+    贷款总额: estimateData.loanAmount || 0,
+    年利率: projectData?.loan_interest_rate || 0.049,
+    建设期年限: projectData?.construction_years || 3,
+    分年利息: estimateData.construction_interest_details?.分年数据 || [],
+    合计: constructionInterest,
+    占总投资比例: totalInvestment > 0 ? constructionInterest / totalInvestment : 0
+  }
+  
+  // G部分：总投资
+  const partG: InvestmentItem = {
+    id: 'partG',
+    序号: '六',
+    工程或费用名称: '总投资',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: 0,
+    合计: totalInvestment,
+    占总投资比例: 1,
+    备注: ''
+  }
+  
+  return {
+    projectId: projectData?.id || '',
+    projectName: projectData?.project_name || '',
+    targetInvestment: projectData?.total_investment || 0,
+    constructionYears: projectData?.construction_years || 3,
+    operationYears: projectData?.operation_years || 17,
+    loanRatio: projectData?.loan_ratio || 0,
+    loanInterestRate: projectData?.loan_interest_rate || 0.049,
+    landCost: landCost,
+    partA,
+    partB,
+    partC,
+    partD,
+    partE,
+    partF,
+    partG,
+    iterationCount: estimateData.iterationCount || 8,
+    gapRate: estimateData.gapRate || 0
+  }
+}
+
 const InvestmentSummary: React.FC = () => {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -1047,12 +1182,14 @@ const InvestmentSummary: React.FC = () => {
             estimateData = estimateResponse.data.estimate
           }
           
-          // 数据完整性检查 - 关键修复：如果estimateData存在，直接使用它，只在没有数据时才自动生成
-          const dataIsComplete = estimateData && estimateData.partA && estimateData.partG
+          // 数据完整性检查 - 关键修复：如果estimateData存在但缺少partA/partG，则需要从简化的estimate_data构建完整结构
           if (!estimateData) {
             console.log('[数据加载] 投资估算数据为空，将自动生成')
           } else if (!estimateData.partA || !estimateData.partG) {
-            console.log('[数据加载] 投资估算数据缺少部分字段，将使用已有数据')
+            console.log('[数据加载] 投资估算数据缺少partA/partG，需要构建完整结构')
+            // 从简化的estimate_data构建完整的表格数据结构
+            estimateData = buildFullEstimateStructure(estimateData, projectData)
+            console.log('[数据加载] 已构建完整结构，partA.children长度:', estimateData?.partA?.children?.length)
           } else {
             console.log('[数据加载] 投资估算数据完整')
           }
