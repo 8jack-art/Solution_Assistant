@@ -19,6 +19,7 @@ import {
   ActionIcon,
   Tooltip,
   Select,
+  Switch,
 } from '@mantine/core'
 import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar, IconInfoCircle } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
@@ -126,8 +127,8 @@ const InvestmentSummary: React.FC = () => {
   const [thirdLevelItemTemp, setThirdLevelItemTemp] = useState<any>(null)
   const [showConstructionInterestModal, setShowConstructionInterestModal] = useState(false)
   
-  // 项目类型：控制市政公用设施费是否计算
-  const [projectType, setProjectType] = useState<'agriculture' | 'construction'>('construction')
+  // 项目类型：控制市政公用设施费是否计算（默认农业项目，免市政费）
+  const [projectType, setProjectType] = useState<'agriculture' | 'construction'>('agriculture')
   
   // 项目类型变更时重新计算投资估算
   const handleProjectTypeChange = async (newType: 'agriculture' | 'construction') => {
@@ -1004,6 +1005,15 @@ const InvestmentSummary: React.FC = () => {
             setThirdLevelItems(existingThirdLevelItems)
             console.log(`[数据加载] 已恢复${Object.keys(existingThirdLevelItems).length}个三级子项数据`)
           }
+          
+          // 恢复项目类型（如果存在）- 优先使用数据库中的值
+          if (estimateData.projectType) {
+            setProjectType(estimateData.projectType)
+            console.log(`[数据加载] 已恢复项目类型: ${estimateData.projectType}`)
+          } else {
+            console.log(`[数据加载] 未找到保存的项目类型，使用默认值: agriculture`)
+          }
+
           
           // 检查是否需要自动生成（修复逻辑：只有确实没有数据时才自动生成）
           const shouldAutoGenerate = autoGenerateRequested &&
@@ -1997,18 +2007,22 @@ const InvestmentSummary: React.FC = () => {
     setShowSubdivideModal(true)
   }
 
-  // 保存估算数据到数据库
+  // 保存估算数据到数据库（包含projectType）
   const saveEstimateToDatabase = async (estimateData: any) => {
     try {
       console.log('=== 开始保存估算数据到数据库 ===')
       console.log('项目ID:', id)
       console.log('估算数据:', estimateData)
       console.log('三级子项数据:', estimateData.thirdLevelItems)
+      console.log('项目类型:', projectType)
       
-      // 确保数据结构正确
+      // 确保数据结构正确，并包含projectType
       const saveData = {
         project_id: id!,
-        estimate_data: estimateData
+        estimate_data: {
+          ...estimateData,
+          projectType: projectType  // 保存项目类型
+        }
       }
       
       console.log('保存到数据库的数据结构:', saveData)
@@ -2022,6 +2036,7 @@ const InvestmentSummary: React.FC = () => {
       } else {
         console.log('✅ 估算数据已保存到数据库')
         console.log('保存的数据包含三级子项:', !!estimateData.thirdLevelItems)
+        console.log('保存的项目类型:', projectType)
         if (estimateData.thirdLevelItems) {
           console.log('三级子项条目数:', Object.keys(estimateData.thirdLevelItems).length)
         }
@@ -2895,41 +2910,21 @@ const InvestmentSummary: React.FC = () => {
     {/* 项目类型选择 - 控制市政公用设施费 */}
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>项目类型</Text>
-      <Group gap="xs" justify="center">
-        <Button
+      <Group gap="xs" justify="center" align="center">
+        <Text size="sm" c={projectType === 'agriculture' ? '#52C41A' : '#4E5969'} fw={projectType === 'agriculture' ? 600 : 400}>农业</Text>
+        <Switch
           size="xs"
-          variant={projectType === 'agriculture' ? 'filled' : 'outline'}
-          onClick={() => handleProjectTypeChange('agriculture')}
+          checked={projectType === 'construction'}
+          onChange={(e) => handleProjectTypeChange(e.currentTarget.checked ? 'construction' : 'agriculture')}
           disabled={generating}
-          style={{
-            backgroundColor: projectType === 'agriculture' ? '#52C41A' : 'transparent',
-            borderColor: projectType === 'agriculture' ? '#52C41A' : '#E5E6EB',
-            color: projectType === 'agriculture' ? '#FFFFFF' : '#4E5969',
-            fontSize: '12px',
-            padding: '4px 12px',
-            height: '28px',
-            fontWeight: 500
+          color="#165DFF"
+          styles={{
+            track: {
+              backgroundColor: projectType === 'construction' ? '#165DFF' : '#E5E6EB',
+            }
           }}
-        >
-          农业
-        </Button>
-        <Button
-          size="xs"
-          variant={projectType === 'construction' ? 'filled' : 'outline'}
-          onClick={() => handleProjectTypeChange('construction')}
-          disabled={generating}
-          style={{
-            backgroundColor: projectType === 'construction' ? '#165DFF' : 'transparent',
-            borderColor: projectType === 'construction' ? '#165DFF' : '#E5E6EB',
-            color: projectType === 'construction' ? '#FFFFFF' : '#4E5969',
-            fontSize: '12px',
-            padding: '4px 12px',
-            height: '28px',
-            fontWeight: 500
-          }}
-        >
-          建筑
-        </Button>
+        />
+        <Text size="sm" c={projectType === 'construction' ? '#165DFF' : '#4E5969'} fw={projectType === 'construction' ? 600 : 400}>建筑</Text>
       </Group>
       <Text size="xs" c={projectType === 'agriculture' ? '#52C41A' : '#165DFF'} mt={4} fw={500}>
         {projectType === 'agriculture' ? '免市政费' : '市政费1.5%'}
