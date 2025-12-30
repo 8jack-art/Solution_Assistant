@@ -1,6 +1,8 @@
 import { pool } from '../db/config.js'
 import { LLMService, LLMMessage } from '../lib/llm.js'
+// @ts-ignore
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx'
+// @ts-ignore
 import * as marked from 'marked'
 
 /**
@@ -407,48 +409,89 @@ ${JSON.stringify(financialIndicators, null, 2)}
     prompt: string
   ): Promise<void> {
     try {
-      // 模拟流式响应（实际实现需要根据具体的LLM服务调整）
       const messages: LLMMessage[] = [{ role: 'user', content: prompt }]
       
-      // 这里需要实现真正的流式调用
-      // 目前先使用非流式调用，然后分批保存
-      const result = await LLMService.generateContent(llmConfig, messages, {
+      // 使用流式LLM调用
+      const result = await LLMService.generateContentStream(llmConfig, messages, {
         maxTokens: 8000,
         temperature: 0.7
       })
       
-      if (!result.success) {
-        throw new Error(`LLM调用失败: ${result.error}`)
+      if (!result.success || !result.stream) {
+        throw new Error(`LLM流式调用失败: ${result.error}`)
       }
       
-      const content = result.content || ''
+      // 处理流式响应
+      const reader = result.stream.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullContent = ''
       
-      // 分块保存内容
-      const chunkSize = 500 // 每个块500字符
-      const chunks = []
-      
-      for (let i = 0; i < content.length; i += chunkSize) {
-        const chunk = content.substring(i, i + chunkSize)
-        chunks.push(chunk)
-        
-        // 保存到历史记录
-        await pool.execute(
-          'INSERT INTO report_generation_history (report_id, chunk_content, chunk_order) VALUES (?, ?, ?)',
-          [reportId, chunk, Math.floor(i / chunkSize)]
-        )
-        
-        // 模拟流式延迟
-        await new Promise(resolve => setTimeout(resolve, 100))
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          
+          if (done) break
+          
+          // 解码当前数据块
+          buffer += decoder.decode(value, { stream: true })
+          
+          // 处理SSE格式的数据
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || '' // 保留最后一个不完整的行
+          
+          for (const line of lines) {
+            if (line.trim() === '') continue
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim()
+              
+              // 跳过 [DONE] 消息
+              if (data === '[DONE]') continue
+              
+              try {
+                const parsed = JSON.parse(data)
+                const content = parsed.choices?.[0]?.delta?.content || ''
+                
+                if (content) {
+                  fullContent += content
+                  
+                  // 实时保存内容到数据库
+                  await pool.execute(
+                    'UPDATE generated_reports SET report_content = ?, updated_at = NOW() WHERE id = ?',
+                    [fullContent, reportId]
+                  )
+                  
+                  // 保存到历史记录
+                  await pool.execute(
+                    'INSERT INTO report_generation_history (report_id, chunk_content, chunk_order) VALUES (?, ?, ?)',
+                    [reportId, content, Math.floor(fullContent.length / 500)] // 简单的序号
+                  )
+                }
+              } catch (parseError) {
+                console.error('解析流式数据失败:', parseError)
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock()
       }
       
       // 更新报告状态为完成
       await pool.execute(
-        'UPDATE generated_reports SET generation_status = ?, report_content = ?, updated_at = NOW() WHERE id = ?',
-        ['completed', content, reportId]
+        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
+        ['completed', reportId]
       )
       
     } catch (error) {
       console.error('流式处理LLM响应失败:', error)
+      
+      // 更新报告状态为失败
+      await pool.execute(
+        'UPDATE generated_reports SET generation_status = ?, error_message = ?, updated_at = NOW() WHERE id = ?',
+        ['failed', error instanceof Error ? error.message : '未知错误', reportId]
+      )
+      
       throw error
     }
   }

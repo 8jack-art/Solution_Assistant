@@ -12,7 +12,6 @@ import {
   LoadingOverlay,
   Divider,
   Grid,
-  Col,
   Select,
   TextInput,
   ActionIcon,
@@ -31,7 +30,7 @@ import {
   IconDownload,
   IconEye,
   IconTemplate,
-  IconSave,
+  IconDeviceFloppy,
   IconRefresh,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
@@ -121,7 +120,7 @@ const InvestmentReport: React.FC = () => {
 
         // 获取最新的报告
         const reportsResponse = await reportApi.getByProjectId(id!)
-        if (reportsResponse.success && reportsResponse.data?.reports?.length > 0) {
+        if (reportsResponse.success && reportsResponse.data?.reports && reportsResponse.data.reports.length > 0) {
           const latestReport = reportsResponse.data.reports[0]
           setCurrentReport(latestReport)
           if (latestReport.report_content) {
@@ -172,7 +171,7 @@ const InvestmentReport: React.FC = () => {
       setReportContent('')
 
       const generateData = {
-        project_id: id,
+        project_id: id!,
         template_id: currentTemplate?.id,
         custom_prompt: currentTemplate?.is_system || !currentTemplate ? customPrompt : undefined,
         report_title: reportTitle,
@@ -434,7 +433,8 @@ const InvestmentReport: React.FC = () => {
   }
 
   // 切换模板
-  const handleTemplateChange = (templateId: string) => {
+  const handleTemplateChange = (templateId: string | null) => {
+    if (!templateId) return
     const template = templates.find(t => t.id === templateId)
     if (template) {
       setCurrentTemplate(template)
@@ -545,7 +545,7 @@ const InvestmentReport: React.FC = () => {
                       onClick={handleSaveTemplate}
                       disabled={!customPrompt.trim()}
                     >
-                      <IconSave size={20} />
+                      <IconDeviceFloppy size={20} />
                     </ActionIcon>
                   </Tooltip>
                 </Group>
@@ -669,8 +669,8 @@ const InvestmentReport: React.FC = () => {
           </Card>
 
           {/* 内容显示区域 */}
-          <Grid>
-            <Col span={showPreview ? 6 : 12}>
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <div style={{ flex: showPreview ? 1 : 2 }}>
               {/* 实时输出 */}
               <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
                 <Group justify="space-between" align="center" mb="md">
@@ -694,10 +694,10 @@ const InvestmentReport: React.FC = () => {
                   isGenerating={isGenerating}
                 />
               </Card>
-            </Col>
+            </div>
 
             {showPreview && (
-              <Col span={6}>
+              <div style={{ flex: 1 }}>
                 {/* Word预览 */}
                 <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
                   <Group justify="space-between" align="center" mb="md">
@@ -723,9 +723,9 @@ const InvestmentReport: React.FC = () => {
                     title={reportTitle}
                   />
                 </Card>
-              </Col>
+              </div>
             )}
-          </Grid>
+          </div>
 
           {/* 历史记录 */}
           {currentReport && (
@@ -815,12 +815,12 @@ const InvestmentReport: React.FC = () => {
                   <Group gap="xs" mb="xs">
                     <Text size="sm" fw={600}>{template.name}</Text>
                     {template.is_system && (
-                      <Text size="xs" c="#165DFF" bg="#E6F7FF" px="xs" py="2" radius="sm">
+                      <Text size="xs" c="#165DFF" bg="#E6F7FF" px="xs" py="2" style={{ borderRadius: '4px' }}>
                         系统
                       </Text>
                     )}
                     {template.is_default && (
-                      <Text size="xs" c="#00C48C" bg="#E6FBE8" px="xs" py="2" radius="sm">
+                      <Text size="xs" c="#00C48C" bg="#E6FBE8" px="xs" py="2" style={{ borderRadius: '4px' }}>
                         默认
                       </Text>
                     )}
@@ -841,8 +841,9 @@ const InvestmentReport: React.FC = () => {
                 >
                   <IconEdit size={16} />
                 </ActionIcon>
-              </Card>
-            ))}
+              </Group>
+            </Card>
+          ))}
         </Stack>
       </Modal>
     </Container>

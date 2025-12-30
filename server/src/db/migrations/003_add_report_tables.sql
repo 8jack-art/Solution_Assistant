@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS report_generation_history (
 
 -- 插入默认的系统报告模板
 INSERT IGNORE INTO report_templates (id, user_id, name, description, prompt_template, is_default, is_system) VALUES
-('template-default-system', 'system', '标准投资方案报告模板', '系统默认的投资方案报告模板，包含完整的投资分析内容', `请基于以下项目数据生成一份专业的投资方案报告：
+('template-default-system', 'system', '标准投资方案报告模板', '系统默认的投资方案报告模板，包含完整的投资分析内容', '请基于以下项目数据生成一份专业的投资方案报告：
 
 报告应包含以下部分：
 1. 项目概述
@@ -62,4 +62,4 @@ INSERT IGNORE INTO report_templates (id, user_id, name, description, prompt_temp
 5. 投资效益评估
 6. 风险分析与建议
 
-请使用专业的财务分析术语，确保数据准确性和分析深度。`, TRUE, TRUE);
+请使用专业的财务分析术语，确保数据准确性和分析深度。', TRUE, TRUE);
