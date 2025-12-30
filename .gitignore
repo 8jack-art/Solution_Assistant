@@ -39,3 +39,4 @@ yarn-error.log*
 # Backups
 *.backup
 *.tar.gz
+backup/

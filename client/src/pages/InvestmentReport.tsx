@@ -60,6 +60,64 @@ interface Report {
   updated_at: string
 }
 
+// 投资估算数据结构（与InvestmentSummary.tsx保持一致）
+interface InvestmentItem {
+  id: string
+  序号: string
+  工程或费用名称: string
+  建设工程费?: number
+  设备购置费?: number
+  安装工程费?: number
+  其它费用?: number
+  合计: number
+  占总投资比例?: number
+  备注?: string
+  children?: InvestmentItem[]
+  [key: string]: any
+}
+
+interface InvestmentEstimateData {
+  partA: InvestmentItem
+  partB: InvestmentItem
+  partC: InvestmentItem
+  partD: InvestmentItem
+  partE: InvestmentItem
+  partF: {
+    贷款总额: number
+    年利率: number
+    建设期年限: number
+    分年利息: Array<{
+      年份: number
+      期初本金累计: number
+      当期借款金额: number
+      当期利息: number
+    }>
+    合计: number
+    占总投资比例: number
+  }
+  partG: InvestmentItem
+  iterationCount: number
+  gapRate: number
+}
+
+interface InvestmentEstimateFull {
+  id: string
+  project_id: string
+  estimate_data: InvestmentEstimateData
+  construction_cost: number
+  equipment_cost: number
+  installation_cost: number
+  other_cost: number
+  land_cost: number
+  basic_reserve: number
+  price_reserve: number
+  construction_interest: number
+  final_total: number
+  loan_amount: number
+  created_at: string
+  updated_at: string
+}
+
 /**
  * 投资方案报告生成页面
  */
@@ -70,7 +128,7 @@ const InvestmentReport: React.FC = () => {
   // 状态管理
   const [loading, setLoading] = useState(true)
   const [project, setProject] = useState<any>(null)
-  const [investmentEstimate, setInvestmentEstimate] = useState<any>(null)
+  const [investmentEstimate, setInvestmentEstimate] = useState<InvestmentEstimateFull | null>(null)
   const [templates, setTemplates] = useState<ReportTemplate[]>([])
   const [currentTemplate, setCurrentTemplate] = useState<ReportTemplate | null>(null)
   const [customPrompt, setCustomPrompt] = useState('')
@@ -110,7 +168,7 @@ const InvestmentReport: React.FC = () => {
         try {
           const estimateResponse = await investmentApi.getByProjectId(id!)
           if (estimateResponse.success && estimateResponse.data?.estimate) {
-            setInvestmentEstimate(estimateResponse.data.estimate)
+            setInvestmentEstimate(estimateResponse.data.estimate as InvestmentEstimateFull)
           }
         } catch (error) {
           console.warn('加载投资估算数据失败:', error)
@@ -513,7 +571,7 @@ const InvestmentReport: React.FC = () => {
                 <div>
                   <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? project?.total_investment ?? 0).toFixed(2)} 万元
+                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? investmentEstimate?.final_total ?? project?.total_investment ?? 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>

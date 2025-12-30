@@ -1964,7 +1964,7 @@ const RevenueCostModeling: React.FC = () => {
                 <div>
                   <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? project?.total_investment ?? 0).toFixed(2)} 万元
+                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? investmentEstimate?.final_total ?? project?.total_investment ?? 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>
