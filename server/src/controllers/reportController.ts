@@ -116,8 +116,8 @@ export class ReportController {
 
       // 创建报告记录
       const [insertResult] = await (pool as any).execute(
-        `INSERT INTO generated_reports 
-         (project_id, template_id, user_id, report_title, generation_status) 
+        `INSERT INTO generated_reports
+         (project_id, template_id, user_id, report_title, generation_status)
          VALUES (?, ?, ?, ?, 'generating')`,
         [
           validatedData.project_id,
@@ -127,7 +127,12 @@ export class ReportController {
         ]
       ) as any[]
 
-      const reportId = insertResult.insertId
+      // 获取插入的报告ID（UUID）
+      const [reportRows] = await (pool as any).execute(
+        'SELECT id FROM generated_reports ORDER BY created_at DESC LIMIT 1'
+      ) as any[]
+      
+      const reportId = reportRows[0]?.id
 
       // 异步生成报告
       ReportService.generateReportAsync(reportId, llmConfig, promptTemplate, project)

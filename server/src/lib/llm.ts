@@ -148,7 +148,7 @@ export class LLMService {
         }
 
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 60000) // 60秒超时
+        const timeoutId = setTimeout(() => controller.abort(), 180000) // 180秒超时（3分钟）
 
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -249,7 +249,7 @@ export class LLMService {
       }
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60秒超时
+      const timeoutId = setTimeout(() => controller.abort(), 180000) // 180秒超时（3分钟）
 
       const response = await fetch(apiUrl, {
         method: 'POST',
