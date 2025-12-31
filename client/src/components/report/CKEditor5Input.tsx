@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react'
-import { CKEditor } from '@ckeditor/ckeditor5-react'
-import { ClassicEditor } from '@/config/ckeditor'
-import { createSimpleEditorConfig } from '@/config/ckeditor'
+import React, { useState } from 'react'
+// import { CKEditor } from '@ckeditor/ckeditor5-react'
+// import { ClassicEditor } from '@/config/ckeditor'
+// import { createSimpleEditorConfig } from '@/config/ckeditor'
 import { Group, Text, Button, Badge, Stack, Card, Tooltip } from '@mantine/core'
 import { IconTemplate, IconDeviceFloppy, IconCopy, IconRefresh, IconCheck } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import '@/styles/ckeditor.css'
+// import '@/styles/ckeditor.css'
 
 interface CKEditor5InputProps {
   value: string
@@ -90,38 +90,27 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
 }) => {
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
-  const editorRef = useRef<any>(null)
 
-  const handleReady = (editor: any) => {
-    editorRef.current = editor
-    updateStatistics(editor)
-  }
-
-  const handleChange = (_event: any, editor: any) => {
-    const data = editor.getData()
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const data = e.target.value
     onChange(data)
-    updateStatistics(editor)
+    updateStatistics(data)
   }
 
-  const updateStatistics = (editor: any) => {
-    const data = editor.getData()
-    // 移除HTML标签后统计字数
-    const textData = data.replace(/<[^>]*>/g, '')
-    const words = textData.trim() ? textData.trim().split(/\s+/).length : 0
-    const chars = data.length
+  const updateStatistics = (text: string) => {
+    // 统计字数
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0
+    const chars = text.length
     setWordCount(words)
     setCharCount(chars)
   }
 
   const insertTemplate = (template: string) => {
-    if (editorRef.current) {
-      const editor = editorRef.current
-      editor.model.change((writer: any) => {
-        const viewPosition = editor.editing.view.document.selection.getFirstPosition()
-        const modelPosition = editor.editing.mapper.toModelPosition(viewPosition)
-        writer.insertText('\n\n' + template, modelPosition)
-      })
-    }
+    // 简单地在当前光标位置插入模板
+    // 由于使用textarea，我们需要更新value而不是直接插入到编辑器
+    const newValue = value + (value ? '\n\n' : '') + template
+    onChange(newValue)
+    updateStatistics(newValue)
   }
 
   const copyToClipboard = () => {
@@ -142,9 +131,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
 
   const clearContent = () => {
     onChange('')
-    if (editorRef.current) {
-      editorRef.current.setData('')
-    }
+    updateStatistics('')
   }
 
   const formatContent = () => {
@@ -158,9 +145,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
       .trim()
     
     onChange(formatted)
-    if (editorRef.current) {
-      editorRef.current.setData(formatted)
-    }
+    updateStatistics(formatted)
   }
 
   return (
@@ -207,14 +192,25 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
           </Group>
         )}
 
-        {/* CKEditor5 编辑器 */}
+        {/* 简化的文本编辑器 */}
         <div style={{ minHeight: `${minHeight}px` }}>
-          <CKEditor
-            editor={ClassicEditor}
-            config={createSimpleEditorConfig()}
-            data={value}
-            onReady={handleReady}
-            onChange={handleChange}
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            style={{
+              width: '100%',
+              minHeight: `${minHeight}px`,
+              padding: '12px',
+              border: '1px solid #E5E6EB',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              outline: 'none'
+            }}
+            onFocus={(e) => e.target.style.borderColor = '#165DFF'}
+            onBlur={(e) => e.target.style.borderColor = '#E5E6EB'}
           />
         </div>
 
