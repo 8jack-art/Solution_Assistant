@@ -33,11 +33,11 @@ export class InvestmentController {
       const params = calculateEstimateSchema.parse(req.body)
 
       const estimateParams: EstimateParams = {
-        constructionCost: params.construction_cost,
-        equipmentCost: params.equipment_cost,
-        installationCost: params.installation_cost,
-        otherCost: params.other_cost,
-        landCost: params.land_cost,
+        constructionCost: params.construction_cost ?? 0,
+        equipmentCost: params.equipment_cost ?? 0,
+        installationCost: params.installation_cost ?? 0,
+        otherCost: params.other_cost ?? 0,
+        landCost: params.land_cost ?? 0,
         basicReserveRate: params.basic_reserve_rate,
         priceReserveRate: params.price_reserve_rate,
         constructionPeriod: params.construction_period,
@@ -154,11 +154,11 @@ export class InvestmentController {
       } else {
         // 传统模式：使用分离的字段计算
         const estimateParams: EstimateParams = {
-          constructionCost: construction_cost,
-          equipmentCost: equipment_cost,
-          installationCost: installation_cost,
-          otherCost: other_cost,
-          landCost: land_cost,
+          constructionCost: construction_cost ?? 0,
+          equipmentCost: equipment_cost ?? 0,
+          installationCost: installation_cost ?? 0,
+          otherCost: other_cost ?? 0,
+          landCost: land_cost ?? 0,
           basicReserveRate: basic_reserve_rate,
           priceReserveRate: price_reserve_rate,
           constructionPeriod: construction_period,

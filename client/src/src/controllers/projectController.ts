@@ -48,7 +48,7 @@ export class ProjectController {
       const project = await InvestmentProjectModel.create({
         project_name: projectData.project_name,
         total_investment: projectData.total_investment,
-        project_info: projectData.project_info || null,
+        project_info: projectData.project_info || undefined,
         construction_years: projectData.construction_years,
         operation_years: projectData.operation_years,
         loan_ratio: projectData.loan_ratio,
@@ -65,10 +65,10 @@ export class ProjectController {
         land_purchase_area: projectData.land_purchase_area || 0,
         land_purchase_unit_price: projectData.land_purchase_unit_price || 0,
         land_cost: projectData.land_cost || 0,
-        land_remark: projectData.land_remark || null,
+        land_remark: projectData.land_remark || undefined,
         seedling_compensation: projectData.seedling_compensation || 0,
         lease_seedling_compensation: projectData.lease_seedling_compensation || 0,
-        locked_at: null
+        locked_at: undefined
       })
 
       if (!project) {

@@ -274,7 +274,7 @@ export class ReportController {
           // 构建完整内容
           let fullContent = ''
           if (history && history.length > 0) {
-            fullContent = history.map(h => h.chunk_content || '').join('')
+            fullContent = history.map((h: any) => h.chunk_content || '').join('')
           } else if (currentReport.report_content) {
             fullContent = currentReport.report_content
           }
@@ -945,7 +945,7 @@ export class ReportController {
         ) as any[]
 
         if (history && history.length > 0) {
-          content = history.map(h => h.chunk_content || '').join('')
+          content = history.map((h: any) => h.chunk_content || '').join('')
         }
       }
 

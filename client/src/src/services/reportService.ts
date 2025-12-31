@@ -52,7 +52,7 @@ export class ReportService {
       // 更新报告状态为失败
       await pool.execute(
         'UPDATE generated_reports SET generation_status = ?, report_content = ?, updated_at = NOW() WHERE id = ?',
-        ['failed', error.message, reportId]
+        ['failed', error instanceof Error ? error.message : String(error), reportId]
       )
       
       throw error
@@ -235,7 +235,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
       }
     } catch (error) {
       console.error('生成预览失败:', error)
-      return `<p>预览生成失败: ${error.message}</p>`
+      return `<p>预览生成失败: ${error instanceof Error ? error.message : String(error)}</p>`
     }
   }
 
@@ -260,7 +260,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
       return buffer
     } catch (error) {
       console.error('生成Word文档失败:', error)
-      throw new Error(`生成Word文档失败: ${error.message}`)
+      throw new Error(`生成Word文档失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -420,7 +420,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
       // 更新报告状态为失败
       await pool.execute(
         'UPDATE generated_reports SET generation_status = ?, report_content = ?, updated_at = NOW() WHERE id = ?',
-        ['failed', error.message, reportId]
+        ['failed', error instanceof Error ? error.message : String(error), reportId]
       )
       
       throw error
