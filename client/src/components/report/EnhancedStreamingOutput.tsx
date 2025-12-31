@@ -9,6 +9,7 @@ import {
   Tooltip,
   Progress,
   Badge,
+  Button,
 } from '@mantine/core'
 import { 
   IconCopy, 
@@ -19,8 +20,11 @@ import {
   IconCheck,
   IconClock,
   IconGauge,
+  IconPlayerPlay,
+  IconPlayerStop,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
+import { useTypewriter } from '@/hooks/useTypewriter'
 
 interface EnhancedStreamingOutputProps {
   content: string
@@ -33,6 +37,7 @@ interface EnhancedStreamingOutputProps {
   typewriterSpeed?: number
   showProgress?: boolean
   estimatedTotalChars?: number
+  enableReplay?: boolean // 是否启用生成后重播功能
 }
 
 const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
@@ -46,6 +51,7 @@ const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
   typewriterSpeed = 30,
   showProgress = true,
   estimatedTotalChars = 20000,
+  enableReplay = true,
 }) => {
   const finalContent = content
   
@@ -55,37 +61,59 @@ const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
   const [startTime, setStartTime] = useState<number | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
   const [speed, setSpeed] = useState(0)
-  
-  // 调试：记录内容变化
-  const prevContentRef = useRef<string>('')
-  useEffect(() => {
-    if (prevContentRef.current !== finalContent) {
-      console.log('[EnhancedStreamingOutput] 内容变化:',
-        prevContentRef.current.length, '->', finalContent.length,
-        '差值:', finalContent.length - prevContentRef.current.length)
-      prevContentRef.current = finalContent
-    }
-  }, [finalContent])
+  const [replayMode, setReplayMode] = useState(false)
+  const [prevContentLength, setPrevContentLength] = useState(0)
   
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-
+  
+  // 检测内容是否刚完成生成
   useEffect(() => {
-    if (isAutoScroll && scrollAreaRef.current && finalContent) {
-      const scrollToBottom = () => {
-        const scrollElement = scrollAreaRef.current
-        if (scrollElement) {
-          const targetScrollTop = scrollElement.scrollHeight - scrollElement.clientHeight
-          if (scrollElement.scrollTop >= targetScrollTop - 50) {
-            scrollElement.scrollTop = targetScrollTop
-          }
-        }
-      }
-      requestAnimationFrame(scrollToBottom)
+    if (!isGenerating && finalContent.length > 0 && prevContentLength > 0) {
+      // 生成刚完成，可以触发重播
+      console.log('[EnhancedStreamingOutput] 生成完成，内容长度:', finalContent.length)
     }
-  }, [finalContent, isAutoScroll])
+    setPrevContentLength(finalContent.length)
+  }, [isGenerating, finalContent.length, prevContentLength])
+  
+  // 使用打字机效果
+  // 生成中时使用streaming模式，生成完成后可以使用replay模式
+  const { displayedText, isComplete, reset } = useTypewriter(
+    replayMode ? finalContent : finalContent,
+    {
+      speed: typewriterSpeed,
+      disabled: !showTypewriter,
+      mode: replayMode ? 'replay' : 'streaming',
+      onComplete: () => {
+        if (replayMode) {
+          console.log('[EnhancedStreamingOutput] 重播完成')
+          notifications.show({
+            title: '重播完成',
+            message: '内容已全部显示',
+            color: 'green',
+            autoClose: 2000,
+          })
+        }
+      },
+    }
+  )
+  
+  // 根据模式决定显示的内容
+  const displayContent = showTypewriter ? displayedText : finalContent
+  
+  // 自动滚动到底部
+  useEffect(() => {
+    if (isAutoScroll && scrollAreaRef.current && displayContent) {
+      const scrollElement = scrollAreaRef.current
+      const targetScrollTop = scrollElement.scrollHeight - scrollElement.clientHeight
+      if (scrollElement.scrollTop >= targetScrollTop - 50) {
+        scrollElement.scrollTop = targetScrollTop
+      }
+    }
+  }, [displayContent, isAutoScroll])
 
+  // 计时和速度统计
   useEffect(() => {
     if (isGenerating && !startTime) {
       setStartTime(Date.now())
@@ -115,6 +143,29 @@ const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
       }
     }
   }, [isGenerating, startTime, content.length])
+
+  // 重播功能
+  const handleReplay = useCallback(() => {
+    setReplayMode(true)
+    reset()
+    notifications.show({
+      title: '开始重播',
+      message: '正在逐字显示内容',
+      color: 'blue',
+      autoClose: 2000,
+    })
+  }, [reset])
+  
+  // 停止重播
+  const handleStopReplay = useCallback(() => {
+    setReplayMode(false)
+    notifications.show({
+      title: '停止重播',
+      message: '已显示完整内容',
+      color: 'orange',
+      autoClose: 2000,
+    })
+  }, [])
 
   const handleCopy = () => {
     navigator.clipboard.writeText(finalContent).then(() => {
@@ -170,17 +221,17 @@ const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
     : 0
 
   const lineCount = useMemo(() => {
-    if (!finalContent) return 0
-    return finalContent.split('\n').length
-  }, [finalContent])
+    if (!displayContent) return 0
+    return displayContent.split('\n').length
+  }, [displayContent])
 
   const lines = useMemo(() => {
-    if (!finalContent) return []
-    return finalContent.split('\n')
-  }, [finalContent])
+    if (!displayContent) return []
+    return displayContent.split('\n')
+  }, [displayContent])
 
   const renderContent = () => {
-    if (!finalContent) {
+    if (!displayContent) {
       return (
         <Text c="#86909C" style={{ padding: '20px', textAlign: 'center' }}>
           {isGenerating ? '正在生成内容...' : '暂无生成内容...'}
@@ -259,10 +310,42 @@ const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
                 <IconCheck size={8} />
               </Badge>
             )}
+            {replayMode && (
+              <Badge size="xs" color="blue" variant="light">
+                重播中
+              </Badge>
+            )}
           </Group>
           
           {showControls && (
             <Group gap="xs">
+              {enableReplay && !isGenerating && finalContent && showTypewriter && (
+                <>
+                  {!replayMode ? (
+                    <Tooltip label="逐字重播内容">
+                      <ActionIcon
+                        variant="subtle"
+                        color="blue"
+                        size="sm"
+                        onClick={handleReplay}
+                      >
+                        <IconPlayerPlay size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip label="停止重播">
+                      <ActionIcon
+                        variant="subtle"
+                        color="orange"
+                        size="sm"
+                        onClick={handleStopReplay}
+                      >
+                        <IconPlayerStop size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                </>
+              )}
               <Tooltip label={isAutoScroll ? '关闭自动滚动' : '开启自动滚动'}>
                 <ActionIcon
                   variant="subtle"
@@ -306,7 +389,7 @@ const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
           </Group>
           <Group gap="xs">
             <Text size="xs" c="#86909C">字符:</Text>
-            <Text size="xs" fw={600} c="#165DFF">{finalContent.length}</Text>
+            <Text size="xs" fw={600} c="#165DFF">{displayContent.length}</Text>
           </Group>
           {isGenerating && (
             <Group gap="xs">
@@ -315,7 +398,7 @@ const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
               <Text size="xs" fw={600} c="#FF7D00">{formatTime(elapsedTime)}</Text>
             </Group>
           )}
-          {speed > 0 && (
+          {speed > 0 && isGenerating && (
             <Group gap="xs">
               <IconGauge size={12} />
               <Text size="xs" c="#86909C">速度:</Text>

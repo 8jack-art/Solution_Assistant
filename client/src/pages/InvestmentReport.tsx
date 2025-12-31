@@ -402,7 +402,7 @@ const InvestmentReport: React.FC = () => {
                       break
                       
                     case 'content':
-                      // 累积增量内容
+                      // 累积增量内容 - 修复：始终累积，避免内容被清空
                       const newContent = data.content || ''
                       const currentContent = streamDataRef.current.content
                       
@@ -416,13 +416,15 @@ const InvestmentReport: React.FC = () => {
                         setReportContent(prev => prev + incrementalContent)
                         setGenerationProgress(streamDataRef.current.progress)
                         
-                        console.log('[SSE] 增量更新:', incrementalContent.length, '字符')
-                      } else {
-                        // 内容没有增加（可能是刷新），直接更新
+                        console.log('[SSE] 增量更新:', incrementalContent.length, '字符, 总长度:', newContent.length)
+                      } else if (newContent.length === currentContent.length && newContent !== currentContent) {
+                        // 长度相同但内容不同，可能是修正，直接更新
                         streamDataRef.current.content = newContent
-                        streamDataRef.current.progress = data.progress || newContent.length
                         setReportContent(newContent)
-                        setGenerationProgress(streamDataRef.current.progress)
+                        console.log('[SSE] 内容修正，直接更新')
+                      } else {
+                        // 内容没有增加或减少，保持不变
+                        console.log('[SSE] 内容无变化，跳过更新')
                       }
                       break
                       
@@ -923,6 +925,7 @@ const InvestmentReport: React.FC = () => {
                   typewriterSpeed={30}
                   showProgress={true}
                   estimatedTotalChars={20000}
+                  enableReplay={true}
                   onCopy={() => {
                     navigator.clipboard.writeText(reportContent).then(() => {
                       notifications.show({
