@@ -36,7 +36,7 @@ import {
 import { notifications } from '@mantine/notifications'
 import { projectApi, reportApi, investmentApi } from '@/lib/api'
 import PromptEditor from '@/components/report/PromptEditor'
-import StreamingOutput from '@/components/report/StreamingOutput'
+import EnhancedStreamingOutput from '@/components/report/EnhancedStreamingOutput'
 import WordPreview from '@/components/report/WordPreview'
 
 interface ReportTemplate {
@@ -276,56 +276,112 @@ const InvestmentReport: React.FC = () => {
 
   // 开始流式接收
   const startStreaming = (reportId: string) => {
+    console.log(`[SSE] 开始流式连接，报告ID: ${reportId}`)
+    
+    // 清理之前的连接
     if (eventSourceRef.current) {
+      console.log('[SSE] 关闭之前的连接')
       eventSourceRef.current.close()
-    }
-
-    const eventSource = new EventSource(`/api/report/stream/${reportId}`)
-    eventSourceRef.current = eventSource
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        
-        switch (data.type) {
-          case 'content':
-            setReportContent(data.content || '')
-            setGenerationProgress(data.progress || 0)
-            break
-          case 'completed':
-            setReportContent(data.content || '')
-            setGenerationProgress(100)
-            setIsGenerating(false)
-            notifications.show({
-              title: '生成完成',
-              message: '报告生成已完成',
-              color: 'green',
-            })
-            break
-          case 'error':
-            setIsGenerating(false)
-            notifications.show({
-              title: '生成失败',
-              message: data.error || '生成过程中发生错误',
-              color: 'red',
-            })
-            break
-          case 'status':
-            if (data.status === 'failed') {
-              setIsGenerating(false)
-            }
-            break
-        }
-      } catch (error) {
-        console.error('解析SSE数据失败:', error)
-      }
-    }
-
-    eventSource.onerror = (error) => {
-      console.error('SSE连接错误:', error)
-      setIsGenerating(false)
-      eventSource.close()
       eventSourceRef.current = null
+    }
+
+    try {
+      const eventSource = new EventSource(`/api/reports/stream/${reportId}`, {
+        withCredentials: true
+      })
+      eventSourceRef.current = eventSource
+
+      console.log('[SSE] EventSource 创建成功，URL:', `/api/reports/stream/${reportId}`)
+
+      eventSource.onopen = () => {
+        console.log('[SSE] 连接已建立')
+      }
+
+      eventSource.onmessage = (event) => {
+        try {
+          console.log('[SSE] 收到消息:', event.data)
+          const data = JSON.parse(event.data)
+          console.log('[SSE] 解析后的数据:', data)
+          
+          switch (data.type) {
+            case 'status':
+              console.log('[SSE] 状态更新:', data.status)
+              if (data.status === 'failed') {
+                setIsGenerating(false)
+                notifications.show({
+                  title: '生成失败',
+                  message: '报告生成失败',
+                  color: 'red',
+                })
+              }
+              break
+              
+            case 'content':
+              console.log('[SSE] 内容更新，长度:', data.content?.length || 0)
+              console.log('[SSE] 进度:', data.progress || 0)
+              setReportContent(data.content || '')
+              setGenerationProgress(data.progress || 0)
+              break
+              
+            case 'completed':
+              console.log('[SSE] 生成完成')
+              setReportContent(data.content || '')
+              setGenerationProgress(100)
+              setIsGenerating(false)
+              notifications.show({
+                title: '✅ 生成完成',
+                message: '报告生成已完成',
+                color: 'green',
+                autoClose: 4000,
+              })
+              break
+              
+            case 'error':
+              console.error('[SSE] 生成错误:', data.error)
+              setIsGenerating(false)
+              notifications.show({
+                title: '❌ 生成失败',
+                message: data.error || '生成过程中发生错误',
+                color: 'red',
+                autoClose: 6000,
+              })
+              break
+              
+            default:
+              console.log('[SSE] 未知消息类型:', data.type)
+          }
+        } catch (error) {
+          console.error('[SSE] 解析数据失败:', error)
+          console.error('[SSE] 原始数据:', event.data)
+        }
+      }
+
+      eventSource.onerror = (error) => {
+        console.error('[SSE] 连接错误:', error)
+        setIsGenerating(false)
+        
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close()
+          eventSourceRef.current = null
+        }
+        
+        notifications.show({
+          title: '🔌 连接断开',
+          message: '与服务器的连接已断开，请检查网络连接',
+          color: 'orange',
+          autoClose: 5000,
+        })
+      }
+
+    } catch (error) {
+      console.error('[SSE] 创建连接失败:', error)
+      setIsGenerating(false)
+      notifications.show({
+        title: '❌ 连接失败',
+        message: '无法建立与服务器的连接',
+        color: 'red',
+        autoClose: 6000,
+      })
     }
   }
 
@@ -740,7 +796,7 @@ const InvestmentReport: React.FC = () => {
           {/* 内容显示区域 */}
           <div style={{ display: 'flex', gap: '16px' }}>
             <div style={{ flex: showPreview ? 1 : 2 }}>
-              {/* 实时输出 */}
+              {/* 实时输出 - 使用增强版流式输出组件 */}
               <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
                 <Group justify="space-between" align="center" mb="md">
                   <Title order={4} c="#1D2129">生成内容</Title>
@@ -758,9 +814,23 @@ const InvestmentReport: React.FC = () => {
                   )}
                 </Group>
                 
-                <StreamingOutput
+                <EnhancedStreamingOutput
                   content={reportContent}
                   isGenerating={isGenerating}
+                  showTypewriter={true}
+                  typewriterSpeed={30}
+                  showProgress={true}
+                  estimatedTotalChars={8000}
+                  onCopy={() => {
+                    navigator.clipboard.writeText(reportContent).then(() => {
+                      notifications.show({
+                        title: '复制成功',
+                        message: '内容已复制到剪贴板',
+                        color: 'green',
+                      })
+                    })
+                  }}
+                  onExport={() => handleExport()}
                 />
               </Card>
             </div>

@@ -134,10 +134,10 @@ export class ReportController {
       
       const reportId = reportRows[0]?.id
 
-      // 异步生成报告
-      ReportService.generateReportAsync(reportId, llmConfig, promptTemplate, project)
+      // 异步流式生成报告
+      ReportService.generateReportStream(reportId, llmConfig, promptTemplate, project)
         .catch(error => {
-          console.error('异步生成报告失败:', error)
+          console.error('异步流式生成报告失败:', error)
           // 更新报告状态为失败
           pool.execute(
             'UPDATE generated_reports SET generation_status = ?, report_content = ? WHERE id = ?',
