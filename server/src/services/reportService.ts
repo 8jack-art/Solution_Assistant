@@ -513,14 +513,13 @@ ${JSON.stringify(financialIndicators, null, 2)}
                 if (content) {
                   fullContent += content
                   
-                  // 将内容切分成更小的块（每2-3个字符推送一次），实现更流畅的打字机效果
-                  const chars = content.split('')
-                  for (let i = 0; i < chars.length; i++) {
-                    const char = chars[i]
-                    // 通过SSE管理器实时推送到前端（逐字符推送）
+                  // 将内容逐字符推送，实现流畅的打字机效果
+                  for (let i = 0; i < content.length; i++) {
+                    const char = content[i]
+                    // 通过SSE管理器实时推送到前端
                     sseManager.appendContent(reportId, char)
                   }
-                  console.log(`已推送 ${chars.length} 个字符到SSE管理器，累计内容长度: ${fullContent.length}`)
+                  console.log(`已推送 ${content.length} 个字符到SSE管理器，累计内容长度: ${fullContent.length}`)
                   
                   // 同时保存到数据库（用于断线重连）
                   await pool.execute(

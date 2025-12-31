@@ -21,7 +21,6 @@ import {
   IconGauge,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { useTypewriter } from '@/hooks/useTypewriter'
 
 interface EnhancedStreamingOutputProps {
   content: string
@@ -30,125 +29,63 @@ interface EnhancedStreamingOutputProps {
   onExport?: () => void
   maxHeight?: number
   showControls?: boolean
-  showTypewriter?: boolean // 是否启用打字机效果
-  typewriterSpeed?: number // 打字机速度
-  showProgress?: boolean // 是否显示进度
-  estimatedTotalChars?: number // 预估总字符数
+  showTypewriter?: boolean
+  typewriterSpeed?: number
+  showProgress?: boolean
+  estimatedTotalChars?: number
 }
 
-// 节流配置：内容更新最小间隔（毫秒）
-const CONTENT_UPDATE_THROTTLE = 50
-
-/**
- * 增强版流式输出组件 - 优化版
- * 集成打字机效果、进度显示和更好的用户体验
- * 优化内容：
- * 1. 修复自动滚动逻辑，避免与Mantine ScrollArea冲突
- * 2. 添加节流机制，减少渲染频率
- * 3. 使用useMemo缓存行数据计算
- */
-const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
+const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = React.memo(({
   content,
   isGenerating,
   onCopy,
   onExport,
   maxHeight = 500,
   showControls = true,
-  showTypewriter = true,
+  showTypewriter = false,
   typewriterSpeed = 30,
   showProgress = true,
-  estimatedTotalChars = 8000,
+  estimatedTotalChars = 20000,
 }) => {
   const [isAutoScroll, setIsAutoScroll] = useState(true)
   const [isWordWrap, setIsWordWrap] = useState(true)
   const [showLineNumbers, setShowLineNumbers] = useState(false)
-  const [copiedLines, setCopiedLines] = useState<Set<number>>(new Set())
   const [startTime, setStartTime] = useState<number | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
-  const [speed, setSpeed] = useState(0) // 当前生成速度（字符/秒）
+  const [speed, setSpeed] = useState(0)
   
-  // 使用useRef存储节流相关的状态
+  // 调试：记录内容变化
+  const prevContentRef = useRef<string>('')
+  useEffect(() => {
+    if (prevContentRef.current !== finalContent) {
+      console.log('[EnhancedStreamingOutput] 内容变化:', 
+        prevContentRef.current.length, '->', finalContent.length, 
+        '差值:', finalContent.length - prevContentRef.current.length)
+      prevContentRef.current = finalContent
+    }
+  }, [finalContent])
+  
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-  const lastScrollTopRef = useRef<number>(0)
-  const lastUpdateTimeRef = useRef<number>(0)
   
-  // 节流后的内容状态
-  const [throttledContent, setThrottledContent] = useState(content)
-  
-  // 打字机效果
-  const { displayedText, isComplete: typewriterComplete } = useTypewriter(
-    content,
-    {
-      speed: typewriterSpeed,
-      disabled: !showTypewriter || isGenerating, // 生成中不启用打字机效果
-      onComplete: () => {
-        console.log('打字机效果完成')
-      }
-    }
-  )
+  const finalContent = content
 
-  // 使用完整内容或打字机效果内容
-  const finalContent = showTypewriter && !isGenerating ? displayedText : content
-
-  // 内容节流：避免频繁更新导致UI抖动
   useEffect(() => {
-    const now = Date.now()
-    
-    // 如果距离上次更新时间超过节流间隔，直接更新
-    if (now - lastUpdateTimeRef.current >= CONTENT_UPDATE_THROTTLE) {
-      setThrottledContent(content)
-      lastUpdateTimeRef.current = now
-    } else {
-      // 否则设置一个定时器延迟更新
-      const timer = setTimeout(() => {
-        setThrottledContent(content)
-        lastUpdateTimeRef.current = Date.now()
-      }, CONTENT_UPDATE_THROTTLE)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [content])
-
-  // 自动滚动到底部 - 优化版
-  useEffect(() => {
-    if (isAutoScroll && scrollAreaRef.current && throttledContent) {
-      // 使用requestAnimationFrame确保在DOM更新后执行滚动
+    if (isAutoScroll && scrollAreaRef.current && finalContent) {
       const scrollToBottom = () => {
         const scrollElement = scrollAreaRef.current
         if (scrollElement) {
           const targetScrollTop = scrollElement.scrollHeight - scrollElement.clientHeight
-          
-          // 如果当前位置已经接近底部，才执行滚动
           if (scrollElement.scrollTop >= targetScrollTop - 50) {
             scrollElement.scrollTop = targetScrollTop
           }
         }
       }
-      
-      // 延迟滚动，确保内容已渲染
       requestAnimationFrame(scrollToBottom)
     }
-  }, [throttledContent, isAutoScroll])
+  }, [finalContent, isAutoScroll])
 
-  // 记录滚动位置变化，用于检测用户是否手动滚动
-  useEffect(() => {
-    if (!scrollAreaRef.current) return
-    
-    const scrollElement = scrollAreaRef.current
-    const handleScroll = () => {
-      lastScrollTopRef.current = scrollElement.scrollTop
-    }
-    
-    scrollElement.addEventListener('scroll', handleScroll, { passive: true })
-    
-    return () => {
-      scrollElement.removeEventListener('scroll', handleScroll)
-    }
-  }, [])
-
-  // 计时器和速度计算
   useEffect(() => {
     if (isGenerating && !startTime) {
       setStartTime(Date.now())
@@ -159,8 +96,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
     if (isGenerating) {
       timerRef.current = setInterval(() => {
         setElapsedTime(Date.now() - (startTime || Date.now()))
-        
-        // 计算生成速度
         if (startTime && content.length > 0) {
           const seconds = (Date.now() - startTime) / 1000
           const charsPerSecond = content.length / seconds
@@ -181,7 +116,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
     }
   }, [isGenerating, startTime, content.length])
 
-  // 复制内容
   const handleCopy = () => {
     navigator.clipboard.writeText(finalContent).then(() => {
       notifications.show({
@@ -199,7 +133,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
     })
   }
 
-  // 下载内容
   const handleDownload = () => {
     const blob = new Blob([finalContent], { type: 'text/plain;charset=utf-8' })
     const url = window.URL.createObjectURL(blob)
@@ -210,54 +143,44 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-
     notifications.show({
       title: '下载成功',
       message: '内容已下载为文本文件',
       color: 'green',
     })
-    
     if (onExport) onExport()
   }
 
-  // 格式化时间
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000)
     const minutes = Math.floor(seconds / 60)
     const hours = Math.floor(minutes / 60)
-    
     if (hours > 0) {
       return `${hours}:${(minutes % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
-    } else {
-      return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`
     }
+    return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`
   }
 
-  // 计算进度百分比
   const progressPercentage = showProgress && estimatedTotalChars > 0 
     ? Math.min((finalContent.length / estimatedTotalChars) * 100, 100)
     : 0
 
-  // 预估剩余时间
   const estimatedRemainingTime = speed > 0 && finalContent.length < estimatedTotalChars
     ? ((estimatedTotalChars - finalContent.length) / speed) * 1000
     : 0
 
-  // 获取行数 - 使用useMemo缓存
   const lineCount = useMemo(() => {
-    if (!throttledContent) return 0
-    return throttledContent.split('\n').length
-  }, [throttledContent])
+    if (!finalContent) return 0
+    return finalContent.split('\n').length
+  }, [finalContent])
 
-  // 使用useMemo缓存行数据计算，避免每次渲染都重新计算
   const lines = useMemo(() => {
-    if (!throttledContent) return []
-    return throttledContent.split('\n')
-  }, [throttledContent])
+    if (!finalContent) return []
+    return finalContent.split('\n')
+  }, [finalContent])
 
-  // 渲染内容
   const renderContent = () => {
-    if (!throttledContent) {
+    if (!finalContent) {
       return (
         <Text c="#86909C" style={{ padding: '20px', textAlign: 'center' }}>
           {isGenerating ? '正在生成内容...' : '暂无生成内容...'}
@@ -280,25 +203,12 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
       >
         {lines.map((line, index) => (
           <div
-            key={`line-${index}`}  // 使用索引作为key，配合稳定的lines数组
+            key={`line-${index}`}
             style={{
               display: 'flex',
               minHeight: '22px',
               alignItems: 'flex-start',
-              position: 'relative',
-              backgroundColor: copiedLines.has(index) ? '#E6F7FF' : 'transparent',
-              borderRadius: '4px',
               marginBottom: '2px',
-            }}
-            onMouseEnter={(e) => {
-              if (showLineNumbers) {
-                e.currentTarget.style.backgroundColor = '#F0F9FF'
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (showLineNumbers && !copiedLines.has(index)) {
-                e.currentTarget.style.backgroundColor = 'transparent'
-              }
             }}
           >
             {showLineNumbers && (
@@ -317,12 +227,7 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
                 {index + 1}
               </span>
             )}
-            <span
-              style={{
-                flex: 1,
-                cursor: showLineNumbers ? 'pointer' : 'default',
-              }}
-            >
+            <span style={{ flex: 1 }}>
               {line || <span style={{ color: '#86909C' }}>&nbsp;</span>}
             </span>
           </div>
@@ -334,7 +239,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
       <Stack gap="md">
-        {/* 标题和状态 */}
         <Group justify="space-between" align="center">
           <Group gap="xs">
             <Text size="sm" fw={500} c="#1D2129">生成内容</Text>
@@ -350,7 +254,7 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
                 <Text size="xs" c="#165DFF">生成中...</Text>
               </Group>
             )}
-            {showTypewriter && !isGenerating && typewriterComplete && finalContent && (
+            {!isGenerating && finalContent && (
               <Badge size="xs" color="green" variant="light">
                 <IconCheck size={8} />
               </Badge>
@@ -369,7 +273,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
                   <IconRefresh size={16} />
                 </ActionIcon>
               </Tooltip>
-              
               <Tooltip label={isWordWrap ? '关闭自动换行' : '开启自动换行'}>
                 <ActionIcon
                   variant="subtle"
@@ -380,7 +283,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
                   {isWordWrap ? <IconEye size={16} /> : <IconEyeOff size={16} />}
                 </ActionIcon>
               </Tooltip>
-              
               <Tooltip label={showLineNumbers ? '隐藏行号' : '显示行号'}>
                 <ActionIcon
                   variant="subtle"
@@ -397,7 +299,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
           )}
         </Group>
 
-        {/* 统计信息和进度 */}
         <Group gap="md" wrap="wrap">
           <Group gap="xs">
             <Text size="xs" c="#86909C">行数:</Text>
@@ -405,7 +306,7 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
           </Group>
           <Group gap="xs">
             <Text size="xs" c="#86909C">字符:</Text>
-            <Text size="xs" fw={600} c="#165DFF">{throttledContent.length}</Text>
+            <Text size="xs" fw={600} c="#165DFF">{finalContent.length}</Text>
           </Group>
           {isGenerating && (
             <Group gap="xs">
@@ -423,7 +324,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
           )}
         </Group>
 
-        {/* 进度条 */}
         {showProgress && (
           <div>
             <Group justify="space-between" mb="xs">
@@ -431,9 +331,7 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
               <Group gap="xs">
                 <Text size="sm" c="#86909C">{progressPercentage.toFixed(1)}%</Text>
                 {estimatedRemainingTime > 0 && isGenerating && (
-                  <Text size="sm" c="#86909C">
-                    剩余约 {formatTime(estimatedRemainingTime)}
-                  </Text>
+                  <Text size="sm" c="#86909C">剩余约 {formatTime(estimatedRemainingTime)}</Text>
                 )}
               </Group>
             </Group>
@@ -446,7 +344,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
           </div>
         )}
 
-        {/* 内容显示区域 */}
         <div style={{ position: 'relative' }}>
           <ScrollArea
             ref={scrollAreaRef}
@@ -460,8 +357,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
           >
             {renderContent()}
           </ScrollArea>
-          
-          {/* 生成中的遮罩效果 */}
           {isGenerating && (
             <div
               style={{
@@ -484,34 +379,20 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
           )}
         </div>
 
-        {/* 底部操作栏 */}
-        {showControls && throttledContent && (
+        {showControls && finalContent && (
           <Group justify="space-between" align="center">
             <Text size="xs" c="#86909C">
               {isAutoScroll ? '自动滚动已开启' : '自动滚动已关闭'} • 
-              {isWordWrap ? '自动换行已开启' : '自动换行已关闭'} • 
-              {showTypewriter ? '打字机效果已开启' : '打字机效果已关闭'}
+              {isWordWrap ? '自动换行已开启' : '自动换行已关闭'}
             </Text>
-            
             <Group gap="xs">
               <Tooltip label="复制全部内容">
-                <ActionIcon
-                  variant="light"
-                  color="blue"
-                  size="sm"
-                  onClick={handleCopy}
-                >
+                <ActionIcon variant="light" color="blue" size="sm" onClick={handleCopy}>
                   <IconCopy size={16} />
                 </ActionIcon>
               </Tooltip>
-              
               <Tooltip label="下载为文本文件">
-                <ActionIcon
-                  variant="light"
-                  color="green"
-                  size="sm"
-                  onClick={handleDownload}
-                >
+                <ActionIcon variant="light" color="green" size="sm" onClick={handleDownload}>
                   <IconDownload size={16} />
                 </ActionIcon>
               </Tooltip>

@@ -58,18 +58,19 @@ export const useTypewriter = (
     // 清理之前的定时器
     cleanup()
 
-    // 重置状态
-    setDisplayedText('')
-    setIsComplete(false)
-    indexRef.current = 0
-    startTimeRef.current = Date.now()
-
-    // 开始打字机效果
-    const startTypewriter = () => {
+    // 检查是否是增量更新（新内容比当前显示的多或相等）
+    const currentDisplayedLength = indexRef.current
+    
+    if (fullText.length >= currentDisplayedLength) {
+      // 增量更新或相同：只显示新增的部分
+      const newContent = fullText.slice(currentDisplayedLength)
+      
+      console.log(`[Typewriter] 增量更新: 当前显示${currentDisplayedLength}字符, 新内容${newContent.length}字符`)
+      
+      // 开始打字新增内容
       const typeNextChar = () => {
         if (indexRef.current < fullText.length) {
           const nextIndex = indexRef.current + 1
-          // 使用函数式更新避免依赖currentIndex
           setDisplayedText(fullText.slice(0, nextIndex))
           indexRef.current = nextIndex
           
@@ -83,12 +84,38 @@ export const useTypewriter = (
       }
       
       timeoutRef.current = setTimeout(typeNextChar, speed)
-    }
-
-    if (startDelay > 0) {
-      timeoutRef.current = setTimeout(startTypewriter, startDelay)
     } else {
-      startTypewriter()
+      // 内容减少：可能是重置，不应该发生，如果是重置则重新开始
+      console.log(`[Typewriter] 内容减少: ${currentDisplayedLength} -> ${fullText.length}, 重置显示`)
+      setDisplayedText(fullText)
+      setIsComplete(false)
+      indexRef.current = fullText.length
+      
+      // 重新开始打字机效果（从0开始）
+      const startTypewriter = () => {
+        const typeNextChar = () => {
+          if (indexRef.current < fullText.length) {
+            const nextIndex = indexRef.current + 1
+            setDisplayedText(fullText.slice(0, nextIndex))
+            indexRef.current = nextIndex
+            
+            timeoutRef.current = setTimeout(typeNextChar, speed)
+          } else {
+            setIsComplete(true)
+            if (onComplete) {
+              onComplete()
+            }
+          }
+        }
+        
+        timeoutRef.current = setTimeout(typeNextChar, speed)
+      }
+      
+      if (startDelay > 0) {
+        timeoutRef.current = setTimeout(startTypewriter, startDelay)
+      } else {
+        startTypewriter()
+      }
     }
 
     // 清理函数

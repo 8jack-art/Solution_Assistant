@@ -402,10 +402,28 @@ const InvestmentReport: React.FC = () => {
                       break
                       
                     case 'content':
-                      streamDataRef.current.content = data.content || ''
-                      streamDataRef.current.progress = data.progress || 0
-                      setReportContent(streamDataRef.current.content)
-                      setGenerationProgress(streamDataRef.current.progress)
+                      // 累积增量内容
+                      const newContent = data.content || ''
+                      const currentContent = streamDataRef.current.content
+                      
+                      // 如果新内容比当前内容长，说明有新增内容
+                      if (newContent.length > currentContent.length) {
+                        const incrementalContent = newContent.slice(currentContent.length)
+                        streamDataRef.current.content = newContent
+                        streamDataRef.current.progress = data.progress || newContent.length
+                        
+                        // 累积内容：追加新的增量
+                        setReportContent(prev => prev + incrementalContent)
+                        setGenerationProgress(streamDataRef.current.progress)
+                        
+                        console.log('[SSE] 增量更新:', incrementalContent.length, '字符')
+                      } else {
+                        // 内容没有增加（可能是刷新），直接更新
+                        streamDataRef.current.content = newContent
+                        streamDataRef.current.progress = data.progress || newContent.length
+                        setReportContent(newContent)
+                        setGenerationProgress(streamDataRef.current.progress)
+                      }
                       break
                       
                     case 'completed':

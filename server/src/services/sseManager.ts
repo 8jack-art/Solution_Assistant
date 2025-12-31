@@ -9,6 +9,8 @@ class SSEManager {
   private contentBuffer: Map<string, string> = new Map()
   private flushIntervals: Map<string, NodeJS.Timeout> = new Map()
 
+  private lastSentLength: Map<string, number> = new Map()
+
   /**
    * 注册一个新的SSE连接
    */
@@ -19,6 +21,7 @@ class SSEManager {
     console.log(`[SSE Manager] 注册新连接，报告ID: ${reportId}`)
     this.connections.set(reportId, res)
     this.contentBuffer.set(reportId, '')
+    this.lastSentLength.set(reportId, 0)
 
     // 发送初始状态
     this.send(reportId, {
@@ -70,6 +73,7 @@ class SSEManager {
 
     // 清除缓冲区
     this.contentBuffer.delete(reportId)
+    this.lastSentLength.delete(reportId)
   }
 
   /**
@@ -101,7 +105,7 @@ class SSEManager {
   }
 
   /**
-   * 刷新内容到前端
+   * 刷新内容到前端 - 发送增量内容
    */
   private flushContent(reportId: string): void {
     const content = this.contentBuffer.get(reportId)
@@ -112,25 +116,45 @@ class SSEManager {
       return
     }
 
-    // 发送内容更新
-    this.send(reportId, {
-      type: 'content',
-      status: 'generating',
-      content: content,
-      progress: content.length
-    })
-
-    // 清空缓冲区
-    this.contentBuffer.set(reportId, '')
+    const lastLength = this.lastSentLength.get(reportId) || 0
+    
+    // 只发送新增的内容
+    if (content.length > lastLength) {
+      const incrementalContent = content.slice(lastLength)
+      
+      // 发送增量内容
+      this.send(reportId, {
+        type: 'content',
+        status: 'generating',
+        content: incrementalContent,
+        progress: content.length
+      })
+      
+      console.log(`[SSE Manager] 发送增量内容: ${incrementalContent.length} 字符, 累计: ${content.length}`)
+      
+      // 更新已发送长度
+      this.lastSentLength.set(reportId, content.length)
+    }
+    
+    // 不清空缓冲区，保留完整内容用于下次增量计算
   }
 
   /**
    * 标记报告生成完成
    */
   complete(reportId: string, finalContent: string): void {
-    // 刷新最终内容
-    this.contentBuffer.set(reportId, finalContent)
-    this.flushContent(reportId)
+    // 刷新最终增量内容
+    const lastLength = this.lastSentLength.get(reportId) || 0
+    if (finalContent.length > lastLength) {
+      const incrementalContent = finalContent.slice(lastLength)
+      this.send(reportId, {
+        type: 'content',
+        status: 'generating',
+        content: incrementalContent,
+        progress: finalContent.length
+      })
+      this.lastSentLength.set(reportId, finalContent.length)
+    }
 
     // 发送完成事件
     this.send(reportId, {

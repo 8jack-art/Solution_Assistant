@@ -402,11 +402,15 @@ export class LLMService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.api_key.substring(0, 8)}***`,
-          // 百炼可能需要额外的Headers
-          ...(config.provider.toLowerCase().includes('bailian') || config.provider.toLowerCase().includes('qwen') ? {
-            'X-DashScope-SSE': 'enable'  // 百炼SSE启用Header
-          } : {})
+          // 百炼可能使用不同的认证方式
+          ...(config.provider.toLowerCase().includes('bailian') || config.provider.toLowerCase().includes('百炼') ? {
+            'Authorization': `Bearer ${config.api_key}`,
+            'X-DashScope-SSE': 'enable',
+            // 百炼可能需要API Key作为API-Key header
+            ...(config.api_key.startsWith('sk-') ? { 'API-Key': config.api_key } : {})
+          } : {
+            'Authorization': `Bearer ${config.api_key}`
+          })
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal
