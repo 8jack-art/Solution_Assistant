@@ -35,7 +35,7 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { projectApi, reportApi, investmentApi } from '@/lib/api'
-import CKEditor5Input from '@/components/report/CKEditor5Input'
+import TiptapInput from '@/components/report/TiptapInput'
 import CKEditor5Output from '@/components/report/CKEditor5Output'
 import WordPreview from '@/components/report/WordPreview'
 
@@ -811,7 +811,7 @@ const InvestmentReport: React.FC = () => {
               />
 
               {/* 提示词编辑器 - 使用CKEditor 5 */}
-              <CKEditor5Input
+              <TiptapInput
                 value={customPrompt}
                 onChange={setCustomPrompt}
                 placeholder="请输入报告生成的提示词..."

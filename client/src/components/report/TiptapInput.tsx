@@ -1,9 +1,15 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Group, Text, Button, Badge, Stack, Card, Tooltip, ActionIcon } from '@mantine/core'
-import { IconTemplate, IconCopy, IconRefresh, IconCheck, IconEdit } from '@tabler/icons-react'
+import { IconTemplate, IconCopy, IconRefresh, IconCheck, IconEdit, IconDownload } from '@tabler/icons-react'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Placeholder from '@tiptap/extension-placeholder'
+import Typography from '@tiptap/extension-typography'
 import { notifications } from '@mantine/notifications'
+// @ts-ignore - html-to-docx 没有官方类型声明
+import htmlToDocx from 'html-to-docx'
 
-interface CKEditor5InputProps {
+interface TiptapInputProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
@@ -74,10 +80,10 @@ const PROMPT_TEMPLATES = [
 ]
 
 /**
- * 增强版文本编辑器组件
- * 提供富文本编辑体验，支持模板插入、字数统计等功能
+ * Tiptap富文本编辑器组件
+ * 基于ProseMirror，支持流式输出和Word导出
  */
-const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
+const TiptapInput: React.FC<TiptapInputProps> = ({
   value,
   onChange,
   placeholder = '请输入报告生成的提示词...',
@@ -87,7 +93,28 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Tiptap编辑器配置
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({
+        placeholder,
+      }),
+      Typography,
+    ],
+    content: value,
+    onUpdate: ({ editor }) => {
+      const html = editor.getHTML()
+      onChange(html)
+      updateStatistics(html)
+    },
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm sm:prose-base lg:prose-lg xl:prose-2xl focus:outline-none',
+      },
+    },
+  })
 
   // 更新统计信息
   const updateStatistics = useCallback((text: string) => {
@@ -105,23 +132,17 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
 
   // 插入模板
   const insertTemplate = useCallback((template: string) => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const cursorPosition = textarea.selectionStart
-    const textBefore = value.substring(0, cursorPosition)
-    const textAfter = value.substring(cursorPosition)
-    const newText = textBefore + template + textAfter
-
-    onChange(newText)
+    const currentContent = editor?.getHTML() || ''
+    const newContent = currentContent + template
     
-    // 恢复光标位置
-    setTimeout(() => {
-      const newCursorPos = cursorPosition + template.length
-      textarea.focus()
-      textarea.setSelectionRange(newCursorPos, newCursorPos)
-    }, 0)
-  }, [value, onChange])
+    onChange(newContent)
+    
+    notifications.show({
+      title: '模板已插入',
+      message: `${template.substring(0, 50)}...`,
+      color: 'green',
+    })
+  }, [editor, onChange])
 
   // 复制到剪贴板
   const copyToClipboard = useCallback(() => {
@@ -145,7 +166,10 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
   const clearContent = useCallback(() => {
     onChange('')
     updateStatistics('')
-  }, [onChange, updateStatistics])
+    if (editor) {
+      editor.commands.clearContent()
+    }
+  }, [editor, onChange, updateStatistics])
 
   // 格式化内容
   const formatContent = useCallback(() => {
@@ -160,13 +184,63 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
     
     onChange(formatted)
     updateStatistics(formatted)
-  }, [value, onChange, updateStatistics])
+    if (editor) {
+      editor.commands.setContent(formatted)
+    }
+  }, [value, editor, onChange, updateStatistics])
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value
-    onChange(newValue)
-    updateStatistics(newValue)
-  }, [onChange, updateStatistics])
+  // Word导出
+  const exportToWord = useCallback(async () => {
+    if (!value.trim()) {
+      notifications.show({
+        title: '导出失败',
+        message: '没有可导出的内容',
+        color: 'red',
+      })
+      return
+    }
+
+    try {
+      notifications.show({
+        title: '正在导出...',
+        message: '正在生成Word文档',
+        color: 'blue',
+      })
+
+      // 使用html-to-docx导出
+      const docx = await htmlToDocx(value, {
+        table: { row: { cantSplit: true } },
+        footer: true,
+        pageNumber: true,
+      })
+
+      // 创建下载链接
+      const blob = new Blob([docx], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = '投资方案报告.docx'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      notifications.show({
+        title: '导出成功',
+        message: 'Word文档已导出',
+        color: 'green',
+      })
+    } catch (error) {
+      console.error('Word导出失败:', error)
+      notifications.show({
+        title: '导出失败',
+        message: 'Word文档导出失败',
+        color: 'red',
+      })
+    }
+  }, [value])
 
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
@@ -176,7 +250,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
           <Group gap="xs">
             <Text size="sm" fw={500} c="#1D2129">提示词编辑器</Text>
             <Badge size="sm" color="blue" variant="light">
-              增强编辑器
+              Tiptap
             </Badge>
             {isFocused && (
               <Badge size="sm" color="green" variant="light">
@@ -215,34 +289,23 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
           </Group>
         )}
 
-        {/* 增强文本编辑器 */}
+        {/* Tiptap富文本编辑器 */}
         <div style={{ 
-          position: 'relative',
           minHeight: `${minHeight}px`, 
           border: '1px solid #E5E6EB', 
           borderRadius: '8px', 
           overflow: 'hidden',
-          transition: 'border-color 0.2s, box-shadow 0.2s'
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+          borderColor: isFocused ? '#165DFF' : '#E5E6EB',
+          boxShadow: isFocused ? '0 0 0 3px rgba(22, 93, 255, 0.1)' : 'none'
         }}>
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleChange}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            placeholder={placeholder}
+          <EditorContent 
+            editor={editor}
             style={{
-              width: '100%',
               minHeight: `${minHeight}px`,
               padding: '16px',
               fontSize: '14px',
               lineHeight: '1.6',
-              border: 'none',
-              outline: 'none',
-              resize: 'vertical',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-              color: '#1D2129',
-              backgroundColor: 'transparent'
             }}
           />
           
@@ -255,7 +318,8 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
               position: 'absolute',
               bottom: '12px',
               right: '12px',
-              pointerEvents: 'none'
+              pointerEvents: 'none',
+              opacity: isFocused ? 1 : 0.5
             }}
           >
             <IconEdit size={18} />
@@ -266,7 +330,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
         <Group justify="space-between" align="center">
           <Group gap="xs">
             <Text size="xs" c="#86909C">
-              增强文本编辑器
+              Tiptap富文本编辑器
             </Text>
           </Group>
           
@@ -303,6 +367,18 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
                 清空
               </Button>
             </Tooltip>
+
+            <Tooltip label="导出Word">
+              <Button
+                variant="outline"
+                size="xs"
+                color="green"
+                leftSection={<IconDownload size={12} />}
+                onClick={exportToWord}
+              >
+                导出Word
+              </Button>
+            </Tooltip>
             
             {value.trim() && (
               <Tooltip label="内容完整">
@@ -323,7 +399,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
           marginTop: '8px'
         }}>
           <Text size="sm" c="#165DFF">
-            💡 提示：使用上方模板按钮快速插入常用提示词。支持Markdown格式、模板插入等功能。
+            💡 提示：使用上方模板按钮快速插入常用提示词。支持Markdown格式、模板插入、Word导出等功能。
           </Text>
         </div>
       </Stack>
@@ -331,4 +407,4 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
   )
 }
 
-export default CKEditor5Input
+export default TiptapInput
