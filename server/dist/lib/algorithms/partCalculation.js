@@ -38,7 +38,7 @@ export function calculatePartB(partATotal, landCost, totalFunding, engineeringCo
             工程或费用名称: '建设单位管理费',
             合计: managementFee,
             备注: totalFunding
-                ? '按分段费率表计算（详见算法文档）'
+                ? '按分段费率表计算'
                 : '按第一部分工程费的1.5%计取'
         },
         {

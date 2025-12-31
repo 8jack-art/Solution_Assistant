@@ -528,7 +528,7 @@ export class RevenueCostController {
             console.log('项目:', project.project_name);
             // 调用LLM服务
             const llmResponse = await LLMService.generateContent(llmConfig, messages, {
-                maxTokens: 2000,
+                maxTokens: 6000, // 增加到6000，避免复杂收入项目表被截断
                 temperature: 0.7
             });
             if (!llmResponse.success || !llmResponse.content) {
@@ -551,6 +551,16 @@ export class RevenueCostController {
                 }
                 // 移除可能的前后空白和注释
                 jsonContent = jsonContent.trim();
+                // 如果JSON不完整（被截断），尝试修复
+                if (!jsonContent.endsWith('}')) {
+                    console.warn('⚠️ JSON可能被截断，尝试修复...');
+                    // 找到最后一个完整的数组闭合并添加对象闭括号
+                    const lastArrayClose = jsonContent.lastIndexOf('}]');
+                    if (lastArrayClose > 0) {
+                        jsonContent = jsonContent.substring(0, lastArrayClose + 2) + '}';
+                        console.log('✅ 截断JSON修复成功');
+                    }
+                }
                 // 尝试解析JSON
                 itemsResult = JSON.parse(jsonContent);
                 // 验证返回格式
@@ -561,10 +571,12 @@ export class RevenueCostController {
             }
             catch (parseError) {
                 console.error('❌ 解析LLM响应失败:', parseError.message);
-                console.error('原LLM输出:', llmResponse.content);
+                console.error('原始LLM响应前500字符:', llmResponse.content.substring(0, 500));
+                console.error('原始LLM响应后500字符:', llmResponse.content.substring(llmResponse.content.length - 500));
+                console.error('完整响应长度:', llmResponse.content.length);
                 return res.status(500).json({
                     success: false,
-                    error: `AI返回格式错误: ${parseError.message}`
+                    error: `AI返回格式错误: ${parseError.message}，响应长度${llmResponse.content.length}字符，请重试`
                 });
             }
             // 返回生成结果

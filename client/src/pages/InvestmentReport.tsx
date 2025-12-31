@@ -286,12 +286,12 @@ const InvestmentReport: React.FC = () => {
     }
 
     try {
-      const eventSource = new EventSource(`/api/reports/stream/${reportId}`, {
+      const eventSource = new EventSource(`http://localhost:3001/api/report/stream/${reportId}`, {
         withCredentials: true
       })
       eventSourceRef.current = eventSource
 
-      console.log('[SSE] EventSource 创建成功，URL:', `/api/reports/stream/${reportId}`)
+      console.log('[SSE] EventSource 创建成功，URL:', `http://localhost:3001/api/report/stream/${reportId}`)
 
       eventSource.onopen = () => {
         console.log('[SSE] 连接已建立')
