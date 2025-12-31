@@ -35,7 +35,7 @@ interface EnhancedStreamingOutputProps {
   estimatedTotalChars?: number
 }
 
-const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = React.memo(({
+const EnhancedStreamingOutputInner: React.FC<EnhancedStreamingOutputProps> = ({
   content,
   isGenerating,
   onCopy,
@@ -47,6 +47,8 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = React.me
   showProgress = true,
   estimatedTotalChars = 20000,
 }) => {
+  const finalContent = content
+  
   const [isAutoScroll, setIsAutoScroll] = useState(true)
   const [isWordWrap, setIsWordWrap] = useState(true)
   const [showLineNumbers, setShowLineNumbers] = useState(false)
@@ -58,8 +60,8 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = React.me
   const prevContentRef = useRef<string>('')
   useEffect(() => {
     if (prevContentRef.current !== finalContent) {
-      console.log('[EnhancedStreamingOutput] 内容变化:', 
-        prevContentRef.current.length, '->', finalContent.length, 
+      console.log('[EnhancedStreamingOutput] 内容变化:',
+        prevContentRef.current.length, '->', finalContent.length,
         '差值:', finalContent.length - prevContentRef.current.length)
       prevContentRef.current = finalContent
     }
@@ -68,8 +70,6 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = React.me
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-  
-  const finalContent = content
 
   useEffect(() => {
     if (isAutoScroll && scrollAreaRef.current && finalContent) {
@@ -403,5 +403,7 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = React.me
     </Card>
   )
 }
+
+const EnhancedStreamingOutput = React.memo(EnhancedStreamingOutputInner)
 
 export default EnhancedStreamingOutput
