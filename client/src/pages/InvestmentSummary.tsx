@@ -1205,11 +1205,14 @@ const InvestmentSummary: React.FC = () => {
             estimateData = estimateResponse.data.estimate
           }
           
-          // 数据完整性检查 - 关键修复：如果estimateData为空，则需要从简化的estimate_data构建完整结构
-          if (!estimateData) {
-            console.log('[数据加载] 投资估算数据为空，将自动生成')
+          // 数据完整性检查 - 检查 estimateData 是否包含完整结构
+          const isCompleteStructure = estimateData?.partA?.children?.length > 0 && 
+                                     estimateData?.partG?.合计 > 0
+          
+          if (!estimateData || !isCompleteStructure) {
+            console.log('[数据加载] 投资估算数据为空或不完整，将自动生成完整结构')
             // 从简化的estimate_data构建完整的表格数据结构
-            estimateData = buildFullEstimateStructure(estimateData, projectData)
+            estimateData = buildFullEstimateStructure(estimateData || {}, projectData)
             console.log('[数据加载] 已构建完整结构，partA.children长度:', estimateData?.partA?.children?.length)
           } else {
             console.log('[数据加载] 投资估算数据完整')
