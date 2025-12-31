@@ -14,6 +14,17 @@ export const dbConfig = {
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
+  // 增加连接超时设置
+  acquireTimeout: 60000,  // 60秒获取连接超时
+  connectTimeout: 60000,   // 60秒连接超时
+  timeout: 60000,          // 60秒无响应超时
+  // 连接池选项
+  maxIdle: 5,              // 最大空闲连接数
+  idleTimeout: 60000,      // 空闲连接超时时间
+  // 重连选项
+  reconnect: true,
+  // SSL选项（如果需要）
+  ssl: process.env.DB_SSL ? { rejectUnauthorized: false } : undefined,
 }
 
 export const pool = mysql.createPool(dbConfig)

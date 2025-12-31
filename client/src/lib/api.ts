@@ -389,13 +389,19 @@ export const investmentApi = {
         
         // 检查缓存数据是否有效（结构完整性检查）
         if (cachedData.success && 
-            cachedData.data?.estimate?.estimate_data &&
-            cachedData.data.estimate.estimate_data.partA &&
-            cachedData.data.estimate.estimate_data.partG) {
-          console.log(`[API] 缓存数据有效: ${cacheKey}`)
-          return Promise.resolve(cachedData)
+            cachedData.data?.estimate?.estimate_data) {
+          const estimateData = cachedData.data.estimate.estimate_data
+          // 检查是否包含基本结构，即使partA和partG可能不完整
+          if (estimateData.partA && estimateData.partG) {
+            console.log(`[API] 缓存数据完整有效: ${cacheKey}`)
+            return Promise.resolve(cachedData)
+          } else {
+            console.log(`[API] 缓存数据结构不完整，但仍然使用: ${cacheKey}`)
+            // 即使结构不完整也返回数据，让前端的buildFullEstimateStructure函数处理
+            return Promise.resolve(cachedData)
+          }
         } else {
-          console.log(`[API] 缓存数据无效或结构不完整，忽略缓存: ${cacheKey}`)
+          console.log(`[API] 缓存数据无效，忽略缓存: ${cacheKey}`)
           dataCache.invalidate(cacheKey)  // 删除无效缓存
         }
       }
@@ -407,6 +413,12 @@ export const investmentApi = {
         signal: options?.signal
       })
       monitorRequest(`/investment/project/${projectId}`, startTime)
+      
+      // 检查响应是否包含错误信息（特别是数据库连接错误）
+      if (!response.success && response.error && response.error.includes('数据库连接')) {
+        console.warn('[API] 数据库连接问题，清除相关缓存:', cacheKey)
+        dataCache.invalidate(cacheKey)  // 清除可能有问题的缓存
+      }
       
       // 缓存结果（仅在成功且数据完整时缓存）
       if (options?.useCache !== false && response.success && response.data?.estimate?.estimate_data) {

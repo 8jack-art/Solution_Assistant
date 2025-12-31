@@ -14,14 +14,24 @@ export class InvestmentEstimateModel {
         const row = rows[0]
         // 解析JSON字段
         if (row.estimate_data && typeof row.estimate_data === 'string') {
-          row.estimate_data = JSON.parse(row.estimate_data)
+          try {
+            row.estimate_data = JSON.parse(row.estimate_data)
+          } catch (parseError) {
+            console.error('解析estimate_data失败:', parseError, '原始数据:', row.estimate_data)
+            // 如果解析失败，保留原始值但记录错误
+            console.warn(`保留原始estimate_data值，ID: ${id}`)
+          }
         }
         return row
       }
       return null
     } catch (error) {
       console.error('查找投资估算失败:', error)
-      return null
+      // 根据错误类型决定是否抛出异常或返回null
+      if (error && typeof error === 'object' && 'code' in error && (error as any).code === 'ECONNREFUSED') {
+        console.error('数据库连接被拒绝，请检查数据库服务是否正常运行')
+      }
+      throw error; // 重新抛出错误，让上层处理
     }
   }
 
@@ -36,14 +46,24 @@ export class InvestmentEstimateModel {
         const row = rows[0]
         // 解析JSON字段
         if (row.estimate_data && typeof row.estimate_data === 'string') {
-          row.estimate_data = JSON.parse(row.estimate_data)
+          try {
+            row.estimate_data = JSON.parse(row.estimate_data)
+          } catch (parseError) {
+            console.error('解析estimate_data失败:', parseError, '原始数据:', row.estimate_data)
+            // 如果解析失败，保留原始值但记录错误
+            console.warn(`保留原始estimate_data值，Project ID: ${projectId}`)
+          }
         }
         return row
       }
       return null
     } catch (error) {
       console.error('查找项目投资估算失败:', error)
-      return null
+      // 根据错误类型决定是否抛出异常或返回null
+      if (error && typeof error === 'object' && 'code' in error && (error as any).code === 'ECONNREFUSED') {
+        console.error('数据库连接被拒绝，请检查数据库服务是否正常运行')
+      }
+      throw error; // 重新抛出错误，让上层处理
     }
   }
 

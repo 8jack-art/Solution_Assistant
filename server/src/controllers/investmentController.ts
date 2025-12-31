@@ -267,6 +267,13 @@ export class InvestmentController {
       })
     } catch (error) {
       console.error('获取投资估算失败:', error)
+      // 区分不同类型的错误
+      if (error && typeof error === 'object' && 'code' in error && (error as any).code === 'ECONNREFUSED') {
+        return res.status(503).json({ 
+          success: false, 
+          error: '数据库连接失败，请稍后重试' 
+        })
+      }
       res.status(500).json({ 
         success: false, 
         error: '服务器内部错误' 
@@ -367,6 +374,71 @@ export class InvestmentController {
         result.thirdLevelItems = existingThirdLevelItems
       }
 
+      // 生成建设期利息详情
+      const constructionInterestDetails = {
+        基本信息: {
+          贷款总额: result.partF.贷款总额 || 0,
+          年利率: result.partF.年利率 || 0,
+          建设期年限: project.construction_years,
+          贷款期限: project.operation_years
+        },
+        分年数据: result.partF.分年利息.map((data: any, index: number) => ({
+          年份: index + 1,
+          期初借款余额: index === 0 ? 0 : result.partF.分年利息.slice(0, index).reduce((sum: number, item: any) => sum + (item?.当期借款金额 || 0), 0),
+          当期借款金额: data?.当期借款金额 || 0,
+          当期利息: data?.当期利息 || 0,
+          期末借款余额: result.partF.分年利息.slice(0, index + 1).reduce((sum: number, item: any) => sum + (item?.当期借款金额 || 0), 0)
+        })),
+        汇总信息: {
+          总借款金额: result.partF.分年利息.reduce((sum: number, data: any) => sum + (data?.当期借款金额 || 0), 0),
+          总利息: result.partF.分年利息.reduce((sum: number, data: any) => sum + (data?.当期利息 || 0), 0),
+          期末借款余额: result.partF.分年利息.reduce((sum: number, data: any) => sum + (data?.当期借款金额 || 0), 0)
+        }
+      };
+      
+      // 生成还本付息计划简表（等额本金）
+      const generateLoanRepaymentScheduleSimple = (constructionInterestDetails: any, operationYears: number) => {
+        const loanAmount = constructionInterestDetails.基本信息.贷款总额 || 0;
+        const annualRate = constructionInterestDetails.基本信息.年利率 || 0;
+        const totalInterest = constructionInterestDetails.汇总信息.总利息 || 0;
+        
+        // 计算运营期还款计划（等额本金）
+        const yearlyPrincipal = operationYears > 0 ? loanAmount / operationYears : 0;
+        
+        const repaymentSchedule = [];
+        let remainingPrincipal = loanAmount;
+        
+        for (let year = 1; year <= operationYears; year++) {
+          const beginningBalance = remainingPrincipal;
+          const principalPayment = Math.min(yearlyPrincipal, remainingPrincipal); // 确保最后一年还清
+          const interestPayment = remainingPrincipal * annualRate;
+          const totalPayment = principalPayment + interestPayment;
+          remainingPrincipal -= principalPayment;
+          const endingBalance = Math.max(0, remainingPrincipal);
+          
+          repaymentSchedule.push({
+            年份: year,
+            期初借款余额: beginningBalance,
+            当期还本: principalPayment,
+            当期付息: interestPayment,
+            当期还本付息: totalPayment,
+            期末借款余额: endingBalance
+          });
+        }
+        
+        return {
+          基本信息: {
+            贷款总额: loanAmount,
+            年利率: annualRate,
+            贷款期限: operationYears,
+            还款方式: '等额本金'
+          },
+          还款计划: repaymentSchedule
+        };
+      };
+      
+      const loanRepaymentScheduleSimple = generateLoanRepaymentScheduleSimple(constructionInterestDetails, project.operation_years);
+      
       // 辅助函数：确保数值有效并格式化
       const toDecimal = (val: any): number => {
         const num = Number(val)
@@ -400,9 +472,9 @@ export class InvestmentController {
           loan_rate: toDecimal(project.loan_interest_rate),
           custom_loan_amount: finalCustomLoanAmount !== undefined ? toDecimal(finalCustomLoanAmount) : null,
           custom_land_cost: finalCustomLandCost !== undefined ? toDecimal(finalCustomLandCost) : null,
-          construction_interest_details: req.body.construction_interest_details,
-          loan_repayment_schedule_simple: req.body.loan_repayment_schedule_simple,
-          loan_repayment_schedule_detailed: req.body.loan_repayment_schedule_detailed
+          construction_interest_details: constructionInterestDetails,
+          loan_repayment_schedule_simple: loanRepaymentScheduleSimple,
+          loan_repayment_schedule_detailed: req.body.loan_repayment_schedule_detailed || null
         }
 
         if (existingEstimate) {

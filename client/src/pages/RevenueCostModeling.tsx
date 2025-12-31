@@ -108,6 +108,9 @@ const RevenueCostModeling: React.FC = () => {
     分年数据: number[]
   }>>([])
   
+  // 建设期利息详情状态
+  const [constructionInterestDetails, setConstructionInterestDetails] = useState<any>(null)
+  
   // 弹窗状态控制
   const [editModalOpened, setEditModalOpened] = useState(false)
   const [depreciationTableOpened, setDepreciationTableOpened] = useState(false)
@@ -187,6 +190,12 @@ const RevenueCostModeling: React.FC = () => {
           // 修复：在project和estimateData都设置好后，再检查并自动保存建设期利息详情
           // 此时projectData已经不为null，可以安全传递
           await saveConstructionInterestDetailsIfNeeded(estimateData, projectData)
+                
+          // 设置建设期利息详情
+          if (estimateData.construction_interest_details) {
+            setConstructionInterestDetails(estimateData.construction_interest_details);
+            console.log('📋 设置建设期利息详情:', estimateData.construction_interest_details);
+          }
         } else {
           console.warn('⚠️ 投资估算API响应异常:', estimateResponse)
         }
@@ -1749,6 +1758,94 @@ const RevenueCostModeling: React.FC = () => {
                     • 还款期：{repaymentPeriod} 年 | 年利率：{((Number(project?.loan_interest_rate) || 0.049) * 100).toFixed(2)}%
                   </Text>
                 </div>
+
+                {/* 建设期利息详情 */}
+                {constructionInterestDetails && (
+                  <div style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#F0F5FF',
+                    borderRadius: '8px',
+                    border: '1px solid #ADC6FF'
+                  }}>
+                    <Text size="sm" c="#165DFF" fw={500} mb={8}>
+                      💰 建设期利息详情
+                    </Text>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '8px' }}>
+                      <div>
+                        <Text size="xs" c="#86909C">贷款总额</Text>
+                        <Text fw={600} c="#1D2129">{(constructionInterestDetails.基本信息?.贷款总额 || 0).toFixed(2)}万元</Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="#86909C">年利率</Text>
+                        <Text fw={600} c="#1D2129">{((constructionInterestDetails.基本信息?.年利率 || 0) * 100).toFixed(2)}%</Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="#86909C">建设期年限</Text>
+                        <Text fw={600} c="#1D2129">{constructionInterestDetails.基本信息?.建设期年限 || 0}年</Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="#86909C">贷款期限</Text>
+                        <Text fw={600} c="#1D2129">{constructionInterestDetails.基本信息?.贷款期限 || 0}年</Text>
+                      </div>
+                    </div>
+                    
+                    {/* 分年数据表格 */}
+                    {constructionInterestDetails.分年数据 && constructionInterestDetails.分年数据.length > 0 && (
+                      <div style={{ overflowX: 'auto', marginTop: '8px' }}>
+                        <Table
+                          striped
+                          withTableBorder
+                          styles={{
+                            th: {
+                              backgroundColor: '#F7F8FA',
+                              color: '#1D2129',
+                              fontWeight: 600,
+                              fontSize: '12px',
+                              textAlign: 'center',
+                              border: '1px solid #E5E6EB'
+                            },
+                            td: {
+                              fontSize: '12px',
+                              textAlign: 'center',
+                              border: '1px solid #E5E6EB'
+                            }
+                          }}
+                        >
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th>年份</Table.Th>
+                              <Table.Th>期初借款余额</Table.Th>
+                              <Table.Th>当期借款金额</Table.Th>
+                              <Table.Th>当期利息</Table.Th>
+                              <Table.Th>期末借款余额</Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {constructionInterestDetails.分年数据.map((data: any, index: number) => (
+                              <Table.Tr key={index}>
+                                <Table.Td>{data.年份}</Table.Td>
+                                <Table.Td>{data.期初借款余额?.toFixed(2)}</Table.Td>
+                                <Table.Td>{data.当期借款金额?.toFixed(2)}</Table.Td>
+                                <Table.Td>{data.当期利息?.toFixed(2)}</Table.Td>
+                                <Table.Td>{data.期末借款余额?.toFixed(2)}</Table.Td>
+                              </Table.Tr>
+                            ))}
+                            {/* 汇总行 */}
+                            {constructionInterestDetails.汇总信息 && (
+                              <Table.Tr style={{ backgroundColor: '#E6F7FF' }}>
+                                <Table.Td fw={700}>汇总</Table.Td>
+                                <Table.Td fw={700}>{constructionInterestDetails.汇总信息.总借款金额?.toFixed(2)}</Table.Td>
+                                <Table.Td fw={700}>{constructionInterestDetails.汇总信息.总利息?.toFixed(2)}</Table.Td>
+                                <Table.Td fw={700}>{constructionInterestDetails.汇总信息.期末借款余额?.toFixed(2)}</Table.Td>
+                                <Table.Td fw={700}>-</Table.Td>
+                              </Table.Tr>
+                            )}
+                          </Table.Tbody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 还本付息表格 */}
                 {repaymentTableData.length > 0 ? (

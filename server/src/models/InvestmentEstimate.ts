@@ -33,7 +33,14 @@ export class InvestmentEstimateModel {
         // 安全解析JSON字段，添加错误处理
         try {
           if (row.estimate_data && typeof row.estimate_data === 'string') {
-            row.estimate_data = JSON.parse(row.estimate_data)
+            // 先验证JSON是否有效
+            const parsed = JSON.parse(row.estimate_data)
+            row.estimate_data = parsed
+            
+            // 检查是否包含partA和partG，如果缺失则记录警告
+            if (!parsed.partA || !parsed.partG) {
+              console.warn(`[InvestmentEstimate] ID${id}的estimate_data缺少partA或partG结构`)
+            }
           }
         } catch (jsonError) {
           console.error(`[InvestmentEstimate] 解析estimate_data JSON失败，ID${id}:`, jsonError)
@@ -41,7 +48,10 @@ export class InvestmentEstimateModel {
           row.estimate_data = {
             id: id,
             parseError: true,
-            rawData: row.estimate_data
+            rawData: row.estimate_data,
+            // 提供基本的结构以避免前端错误
+            partA: { 序号: 'A', 工程或费用名称: '第一部分 工程费用', 合计: 0 },
+            partG: { 序号: 'G', 工程或费用名称: '项目总资金', 合计: 0 }
           }
         }
         
@@ -132,7 +142,14 @@ export class InvestmentEstimateModel {
         // 安全解析JSON字段，添加错误处理
         try {
           if (row.estimate_data && typeof row.estimate_data === 'string') {
-            row.estimate_data = JSON.parse(row.estimate_data)
+            // 先验证JSON是否有效
+            const parsed = JSON.parse(row.estimate_data)
+            row.estimate_data = parsed
+            
+            // 检查是否包含partA和partG，如果缺失则记录警告
+            if (!parsed.partA || !parsed.partG) {
+              console.warn(`[InvestmentEstimate] 项目${projectId}的estimate_data缺少partA或partG结构`)
+            }
           }
         } catch (jsonError) {
           console.error(`[InvestmentEstimate] 解析estimate_data JSON失败，项目${projectId}:`, jsonError)
@@ -140,7 +157,10 @@ export class InvestmentEstimateModel {
           row.estimate_data = {
             projectId: projectId,
             parseError: true,
-            rawData: row.estimate_data
+            rawData: row.estimate_data,
+            // 提供基本的结构以避免前端错误
+            partA: { 序号: 'A', 工程或费用名称: '第一部分 工程费用', 合计: 0 },
+            partG: { 序号: 'G', 工程或费用名称: '项目总资金', 合计: 0 }
           }
         }
         

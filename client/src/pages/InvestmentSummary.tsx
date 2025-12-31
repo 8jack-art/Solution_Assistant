@@ -21,11 +21,12 @@ import {
   Select,
   Switch,
 } from '@mantine/core'
-import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar, IconInfoCircle } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar, IconInfoCircle, IconCurrencyDollar } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
 import LoadingOverlay from '@/components/LoadingOverlay'
 import ConstructionInterestModal from '@/components/revenue-cost/ConstructionInterestModal'
+import LoanRepaymentScheduleTable from '@/components/revenue-cost/LoanRepaymentScheduleTable'
 
 // 投资估算数据结构
 interface InvestmentItem {
@@ -77,6 +78,11 @@ interface InvestmentEstimate {
   // 迭代信息
   iterationCount: number
   gapRate: number
+  
+  // 额外数据字段
+  construction_interest_details?: any
+  loan_repayment_schedule_simple?: any
+  loan_repayment_schedule_detailed?: any
 }
 
 // 将简化的estimate_data转换为完整的表格数据结构
@@ -210,7 +216,11 @@ const buildFullEstimateStructure = (estimateData: any, projectData: any): Invest
     partF,
     partG,
     iterationCount: estimateData.iterationCount || 8,
-    gapRate: estimateData.gapRate || 0
+    gapRate: estimateData.gapRate || 0,
+    // 保留建设期利息详情和还本付息计划数据
+    construction_interest_details: estimateData.construction_interest_details,
+    loan_repayment_schedule_simple: estimateData.loan_repayment_schedule_simple,
+    loan_repayment_schedule_detailed: estimateData.loan_repayment_schedule_detailed
   }
 }
 
@@ -264,6 +274,7 @@ const InvestmentSummary: React.FC = () => {
   const [editingThirdLevelItem, setEditingThirdLevelItem] = useState<{parentIndex: number, itemIndex: number} | null>(null)
   const [thirdLevelItemTemp, setThirdLevelItemTemp] = useState<any>(null)
   const [showConstructionInterestModal, setShowConstructionInterestModal] = useState(false)
+  const [showLoanRepaymentModal, setShowLoanRepaymentModal] = useState(false)
   
   // 项目类型：控制市政公用设施费是否计算（默认农业项目，免市政费）
   const [projectType, setProjectType] = useState<'agriculture' | 'construction'>('agriculture')
@@ -1166,6 +1177,18 @@ const InvestmentSummary: React.FC = () => {
         // 添加调试日志
         console.log(`[数据加载] API响应:`, JSON.stringify(estimateResponse, null, 2))
         
+        // 检查是否有数据库连接错误
+        if (!estimateResponse.success && estimateResponse.error && estimateResponse.error.includes('数据库')) {
+          console.error('[数据加载] 数据库连接错误:', estimateResponse.error)
+          notifications.show({
+            title: '❌ 数据库连接错误',
+            message: '无法连接到数据库，请稍后重试',
+            color: 'red',
+            autoClose: 6000,
+          })
+          return
+        }
+        
         let existingThirdLevelItems: Record<number, any[]> = {}
         
         if (estimateResponse.success && estimateResponse.data?.estimate) {
@@ -1182,11 +1205,9 @@ const InvestmentSummary: React.FC = () => {
             estimateData = estimateResponse.data.estimate
           }
           
-          // 数据完整性检查 - 关键修复：如果estimateData存在但缺少partA/partG，则需要从简化的estimate_data构建完整结构
+          // 数据完整性检查 - 关键修复：如果estimateData为空，则需要从简化的estimate_data构建完整结构
           if (!estimateData) {
             console.log('[数据加载] 投资估算数据为空，将自动生成')
-          } else if (!estimateData.partA || !estimateData.partG) {
-            console.log('[数据加载] 投资估算数据缺少partA/partG，需要构建完整结构')
             // 从简化的estimate_data构建完整的表格数据结构
             estimateData = buildFullEstimateStructure(estimateData, projectData)
             console.log('[数据加载] 已构建完整结构，partA.children长度:', estimateData?.partA?.children?.length)
@@ -1271,6 +1292,14 @@ const InvestmentSummary: React.FC = () => {
             setAutoGenerateHandled(true)
           }
           
+          // 确保从数据库获取的额外字段被合并到estimateData中
+          if (estimateResponse.data.estimate) {
+            // 合并数据库中保存的建设期利息详情和还本付息计划数据
+            estimateData.construction_interest_details = estimateResponse.data.estimate.construction_interest_details;
+            estimateData.loan_repayment_schedule_simple = estimateResponse.data.estimate.loan_repayment_schedule_simple;
+            estimateData.loan_repayment_schedule_detailed = estimateResponse.data.estimate.loan_repayment_schedule_detailed;
+          }
+          
           // 使用 setTimeout 确保状态更新触发渲染
           setTimeout(() => setEstimate(estimateData), 0)
           console.log(`[数据加载] 投资估算数据已设置到组件状态`)
@@ -1312,8 +1341,20 @@ const InvestmentSummary: React.FC = () => {
           })
           
           if (cachedData.success && cachedData.data?.estimate) {
-            const estimateData = cachedData.data.estimate.estimate_data
-            if (estimateData.thirdLevelItems) {
+            let estimateData = cachedData.data.estimate.estimate_data
+            
+            // 确保从数据库获取的额外字段被合并到estimateData中
+            if (cachedData.data.estimate) {
+              // 合并数据库中保存的建设期利息详情和还本付息计划数据
+              if (!estimateData) {
+                estimateData = cachedData.data.estimate
+              }
+              estimateData.construction_interest_details = cachedData.data.estimate.construction_interest_details;
+              estimateData.loan_repayment_schedule_simple = cachedData.data.estimate.loan_repayment_schedule_simple;
+              estimateData.loan_repayment_schedule_detailed = cachedData.data.estimate.loan_repayment_schedule_detailed;
+            }
+            
+            if (estimateData?.thirdLevelItems) {
               setThirdLevelItems(estimateData.thirdLevelItems)
             }
             setTimeout(() => setEstimate(estimateData), 0)
@@ -3105,6 +3146,26 @@ const InvestmentSummary: React.FC = () => {
           <IconInfoCircle size={18} stroke={1.5} />
         </ActionIcon>
       </Tooltip>
+      <Tooltip label="查看还本付息计划简表（等额本金）" position="top" withArrow>
+        <ActionIcon
+          onClick={() => setShowLoanRepaymentModal(true)}
+          size={32}
+          radius={32}
+          style={{
+            backgroundColor: '#F0F5FF',
+            color: '#52C41A',
+            border: '1px solid #CCE0FF',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+            transition: 'all 0.2s ease',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            marginLeft: '10px'
+          }}
+        >
+          <IconCurrencyDollar size={18} stroke={1.5} />
+        </ActionIcon>
+      </Tooltip>
     </div>
     
     {/* 项目类型选择 - 控制市政公用设施费 */}
@@ -4661,6 +4722,25 @@ const InvestmentSummary: React.FC = () => {
         onClose={() => setShowConstructionInterestModal(false)}
         estimate={estimate}
       />
+      
+      {/* 还本付息计划简表Modal */}
+      <Modal
+        opened={showLoanRepaymentModal}
+        onClose={() => setShowLoanRepaymentModal(false)}
+        title={
+          <Group gap="xs">
+            <IconCurrencyDollar size={20} color="#00C48C" />
+            <Text fw={600} c="#1D2129">还本付息计划简表（等额本金还款）</Text>
+          </Group>
+        }
+        size="xl"
+        centered
+      >
+        <LoanRepaymentScheduleTable
+          showCard={false}
+          estimate={estimate}
+        />
+      </Modal>
     </div>
   )
 }
