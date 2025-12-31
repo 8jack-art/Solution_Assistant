@@ -1,11 +1,8 @@
-import React, { useState } from 'react'
-// import { CKEditor } from '@ckeditor/ckeditor5-react'
-// import { ClassicEditor } from '@/config/ckeditor'
-// import { createSimpleEditorConfig } from '@/config/ckeditor'
-import { Group, Text, Button, Badge, Stack, Card, Tooltip } from '@mantine/core'
-import { IconTemplate, IconDeviceFloppy, IconCopy, IconRefresh, IconCheck } from '@tabler/icons-react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Group, Text, Button, Badge, Stack, Card, Tooltip, Loader } from '@mantine/core'
+import { IconTemplate, IconCopy, IconRefresh, IconCheck } from '@tabler/icons-react'
+import { CKEditor } from '@ckeditor/ckeditor5-react'
 import { notifications } from '@mantine/notifications'
-// import '@/styles/ckeditor.css'
 
 interface CKEditor5InputProps {
   value: string
@@ -79,7 +76,7 @@ const PROMPT_TEMPLATES = [
 
 /**
  * CKEditor 5 输入组件
- * 替换原有的 PromptEditor，提供富文本编辑功能
+ * 使用动态导入解决CKEditor5 v44.3.0 IIFE格式导出与Vite/ESM的兼容性问题
  */
 const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
   value,
@@ -90,31 +87,82 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
 }) => {
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
+  const [editor, setEditor] = useState<any>(null)
+  const [isReady, setIsReady] = useState(false)
+  const [editorLoaded, setEditorLoaded] = useState(false)
+  const editorRef = useRef<any>(null)
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const data = e.target.value
-    onChange(data)
-    updateStatistics(data)
-  }
+  // 加载CKEditor5
+  useEffect(() => {
+    let mounted = true
 
-  const updateStatistics = (text: string) => {
-    // 统计字数
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0
-    const chars = text.length
+    const loadEditor = async () => {
+      try {
+        console.log('[CKEditor5Input] 开始加载CKEditor5...')
+        const module = await import('@ckeditor/ckeditor5-build-classic')
+        
+        if (!mounted) return
+        
+        // 获取编辑器类
+        const EditorClass = module.default || module
+        console.log('[CKEditor5Input] EditorClass:', typeof EditorClass, EditorClass?.create ? 'has create' : 'no create')
+        
+        editorRef.current = EditorClass
+        setEditorLoaded(true)
+      } catch (error) {
+        console.error('[CKEditor5Input] 加载CKEditor5失败:', error)
+      }
+    }
+
+    loadEditor()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  // 更新统计信息
+  const updateStatistics = useCallback((text: string) => {
+    const plainText = text.replace(/<[^>]*>/g, '')
+    const words = plainText.trim() ? plainText.trim().split(/\s+/).length : 0
+    const chars = plainText.length
     setWordCount(words)
     setCharCount(chars)
-  }
+  }, [])
 
-  const insertTemplate = (template: string) => {
-    // 简单地在当前光标位置插入模板
-    // 由于使用textarea，我们需要更新value而不是直接插入到编辑器
-    const newValue = value + (value ? '\n\n' : '') + template
-    onChange(newValue)
-    updateStatistics(newValue)
-  }
+  // 监听内容变化
+  useEffect(() => {
+    updateStatistics(value)
+  }, [value, updateStatistics])
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(value).then(() => {
+  const handleReady = useCallback((editorInstance: any) => {
+    console.log('[CKEditor5Input] 编辑器已就绪')
+    setEditor(editorInstance)
+    setIsReady(true)
+    updateStatistics(value)
+  }, [value, updateStatistics])
+
+  const handleChange = useCallback((_event: any, editorInstance: any) => {
+    const data = editorInstance.getData()
+    onChange(data)
+    updateStatistics(data)
+  }, [onChange, updateStatistics])
+
+  // 插入模板
+  const insertTemplate = useCallback((template: string) => {
+    if (editor) {
+      const selection = editor.model.document.selection
+      editor.model.change((writer: any) => {
+        const insertPosition = selection.getFirstPosition()
+        writer.insertText(template, insertPosition)
+      })
+    }
+  }, [editor])
+
+  // 复制到剪贴板
+  const copyToClipboard = useCallback(() => {
+    const plainText = value.replace(/<[^>]*>/g, '')
+    navigator.clipboard.writeText(plainText).then(() => {
       notifications.show({
         title: '复制成功',
         message: '提示词已复制到剪贴板',
@@ -127,25 +175,96 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
         color: 'red',
       })
     })
-  }
+  }, [value])
 
-  const clearContent = () => {
+  // 清空内容
+  const clearContent = useCallback(() => {
     onChange('')
     updateStatistics('')
-  }
+    if (editor) {
+      editor.setData('')
+    }
+  }, [editor, onChange, updateStatistics])
 
-  const formatContent = () => {
-    // 简单的格式化：去除多余空行，统一标点符号
+  // 格式化内容
+  const formatContent = useCallback(() => {
     let formatted = value
-      .replace(/\n{3,}/g, '\n\n') // 最多保留2个连续换行
-      .replace(/，{2,}/g, '，') // 最多保留1个连续逗号
-      .replace(/。{2,}/g, '。') // 最多保留1个连续句号
-      .replace(/！{2,}/g, '！') // 最多保留1个连续感叹号
-      .replace(/？{2,}/g, '？') // 最多保留1个连续问号
+      .replace(/<p><\/p>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/，{2,}/g, '，')
+      .replace(/。{2,}/g, '。')
+      .replace(/！{2,}/g, '！')
+      .replace(/？{2,}/g, '？')
       .trim()
     
     onChange(formatted)
     updateStatistics(formatted)
+    if (editor) {
+      editor.setData(formatted)
+    }
+  }, [value, editor, onChange, updateStatistics])
+
+  // 渲染编辑器
+  const renderEditor = () => {
+    if (!editorLoaded) {
+      return (
+        <div style={{ 
+          minHeight: `${minHeight}px`, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          border: '1px solid #E5E6EB',
+          borderRadius: '8px',
+          backgroundColor: '#F7F8FA'
+        }}>
+          <Group gap="sm">
+            <Loader size="sm" />
+            <Text size="sm" c="#86909C">正在加载CKEditor5编辑器...</Text>
+          </Group>
+        </div>
+      )
+    }
+
+    return (
+      <div style={{ minHeight: `${minHeight}px`, border: '1px solid #E5E6EB', borderRadius: '8px', overflow: 'hidden' }}>
+        <CKEditor
+          editor={editorRef.current}
+          data={value}
+          onChange={handleChange}
+          onReady={handleReady}
+          placeholder={placeholder}
+          config={{
+            language: 'zh-cn',
+            toolbar: [
+              'undo', 'redo',
+              '|', 'bold', 'italic', 'underline',
+              '|', 'bulletedList', 'numberedList',
+              '|', 'heading',
+              '|', 'link', 'blockQuote',
+              '|', 'codeBlock'
+            ],
+            heading: {
+              options: [
+                { model: 'paragraph', title: 'Paragraph', class: 'ck-heading_paragraph' },
+                { model: 'heading1', view: 'h1', title: 'Heading 1', class: 'ck-heading_heading1' },
+                { model: 'heading2', view: 'h2', title: 'Heading 2', class: 'ck-heading_heading2' },
+                { model: 'heading3', view: 'h3', title: 'Heading 3', class: 'ck-heading_heading3' }
+              ]
+            },
+            codeBlock: {
+              languages: [
+                { language: 'plaintext', label: 'Plain text' },
+                { language: 'javascript', label: 'JavaScript' },
+                { language: 'css', label: 'CSS' },
+                { language: 'sql', label: 'SQL' }
+              ]
+            },
+            placeholder: placeholder
+          }}
+          disabled={false}
+        />
+      </div>
+    )
   }
 
   return (
@@ -155,9 +274,12 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
         <Group justify="space-between" align="center">
           <Group gap="xs">
             <Text size="sm" fw={500} c="#1D2129">提示词编辑器</Text>
-            {showTemplateButtons && (
-              <Badge size="sm" color="blue" variant="light">
-                富文本
+            <Badge size="sm" color="blue" variant="light">
+              CKEditor5
+            </Badge>
+            {isReady && (
+              <Badge size="sm" color="green" variant="light">
+                已就绪
               </Badge>
             )}
           </Group>
@@ -184,6 +306,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
                   size="xs"
                   onClick={() => insertTemplate(template.template)}
                   style={{ height: '28px' }}
+                  disabled={!isReady}
                 >
                   <IconTemplate size={14} />
                 </Button>
@@ -192,33 +315,16 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
           </Group>
         )}
 
-        {/* 简化的文本编辑器 */}
-        <div style={{ minHeight: `${minHeight}px` }}>
-          <textarea
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            style={{
-              width: '100%',
-              minHeight: `${minHeight}px`,
-              padding: '12px',
-              border: '1px solid #E5E6EB',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontFamily: 'inherit',
-              resize: 'vertical',
-              outline: 'none'
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#165DFF'}
-            onBlur={(e) => e.target.style.borderColor = '#E5E6EB'}
-          />
-        </div>
+        {/* CKEditor5 富文本编辑器 */}
+        {renderEditor()}
 
         {/* 底部工具栏 */}
         <Group justify="space-between" align="center">
-          <Text size="xs" c="#86909C">
-            富文本编辑器 • 支持Markdown语法
-          </Text>
+          <Group gap="xs">
+            <Text size="xs" c="#86909C">
+              CKEditor5 富文本编辑器
+            </Text>
+          </Group>
           
           <Group gap="xs">
             <Tooltip label="格式化内容">
@@ -227,6 +333,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
                 size="xs"
                 leftSection={<IconRefresh size={12} />}
                 onClick={formatContent}
+                disabled={!isReady}
               >
                 格式化
               </Button>
@@ -248,8 +355,8 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
                 variant="outline"
                 size="xs"
                 color="red"
-                leftSection={<IconDeviceFloppy size={12} />}
                 onClick={clearContent}
+                disabled={!isReady}
               >
                 清空
               </Button>
@@ -266,19 +373,17 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
         </Group>
 
         {/* 提示信息 */}
-        {value.length === 0 && (
-          <div style={{
-            padding: '12px 16px',
-            backgroundColor: '#F0F9FF',
-            borderRadius: '8px',
-            border: '1px solid #ADC6FF',
-            marginTop: '8px'
-          }}>
-            <Text size="sm" c="#165DFF">
-              💡 提示：您可以输入自定义提示词，或使用上方的模板按钮快速插入常用模板。支持富文本格式和Markdown语法。
-            </Text>
-          </div>
-        )}
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: '#F0F9FF',
+          borderRadius: '8px',
+          border: '1px solid #ADC6FF',
+          marginTop: '8px'
+        }}>
+          <Text size="sm" c="#165DFF">
+            💡 提示：使用上方模板按钮快速插入常用提示词。支持格式化、标题、列表等富文本功能。
+          </Text>
+        </div>
       </Stack>
     </Card>
   )

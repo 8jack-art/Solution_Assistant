@@ -1,6 +1,7 @@
 /**
  * CKEditor 5 配置文件
  * 使用 Classic Editor 构建，提供完整的富文本编辑功能
+ * 升级到最新版本API
  */
 
 import ClassicEditor from '@ckeditor/ckeditor5-build-classic'
@@ -52,7 +53,70 @@ export function createEditorConfig(isReadOnly = false): any {
       ]
     },
     placeholder: isReadOnly ? '生成的内容将显示在这里...' : '请输入内容...',
-    readOnly: isReadOnly
+    readOnly: isReadOnly,
+    // 升级配置：添加更多功能
+    fontSize: {
+      options: [
+        'tiny',
+        'small',
+        'default',
+        'big',
+        'huge'
+      ]
+    },
+    fontFamily: {
+      options: [
+        'default',
+        'Arial, sans-serif',
+        'Times New Roman, serif',
+        'Courier New, monospace',
+        'Georgia, serif',
+        'Verdana, sans-serif'
+      ]
+    },
+    // 文本对齐
+    alignment: {
+      options: [ 'left', 'right', 'center', 'justify' ]
+    },
+    // 增强的列表功能
+    list: {
+      properties: {
+        styles: true,
+        startIndex: true,
+        reversed: true
+      }
+    },
+    // 链接配置
+    link: {
+      addTargetToExternalLinks: true,
+      defaultProtocol: 'https://',
+      decorators: [
+        {
+          mode: 'manual',
+          label: 'Open in new tab',
+          attributes: {
+            target: '_blank',
+            rel: 'noopener noreferrer'
+          }
+        }
+      ]
+    },
+    // 媒体嵌入
+    mediaEmbed: {
+      previewsInData: true
+    },
+    // 代码块配置
+    codeBlock: {
+      languages: [
+        { language: 'plaintext', label: 'Plain text' },
+        { language: 'javascript', label: 'JavaScript' },
+        { language: 'typescript', label: 'TypeScript' },
+        { language: 'css', label: 'CSS' },
+        { language: 'html', label: 'HTML' },
+        { language: 'sql', label: 'SQL' },
+        { language: 'json', label: 'JSON' }
+      ]
+    }
   }
 }
 
@@ -68,13 +132,27 @@ export function createSimpleEditorConfig(): any {
       '|', 'bold', 'italic', 'underline',
       '|', 'bulletedList', 'numberedList',
       '|', 'heading',
-      '|', 'link', 'blockQuote'
+      '|', 'link', 'blockQuote',
+      '|', 'codeBlock'
     ],
     heading: {
       options: headingOptions
     },
     placeholder: '请输入提示词...',
-    readOnly: false
+    readOnly: false,
+    // 简化配置：专注于文本编辑
+    fontSize: {
+      options: ['default', 'big']
+    },
+    // 代码块支持
+    codeBlock: {
+      languages: [
+        { language: 'plaintext', label: 'Plain text' },
+        { language: 'javascript', label: 'JavaScript' },
+        { language: 'css', label: 'CSS' },
+        { language: 'sql', label: 'SQL' }
+      ]
+    }
   }
 }
 

@@ -35,8 +35,6 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { projectApi, reportApi, investmentApi } from '@/lib/api'
-import PromptEditor from '@/components/report/PromptEditor'
-import EnhancedStreamingOutput from '@/components/report/EnhancedStreamingOutput'
 import CKEditor5Input from '@/components/report/CKEditor5Input'
 import CKEditor5Output from '@/components/report/CKEditor5Output'
 import WordPreview from '@/components/report/WordPreview'
@@ -141,7 +139,8 @@ const InvestmentReport: React.FC = () => {
   const [reportContent, setReportContent] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [templateModalOpened, setTemplateModalOpened] = useState(false)
-  const [useCKEditor, setUseCKEditor] = useState(true) // 是否使用CKEditor 5
+  // 强制使用CKEditor 5，不再支持切换到旧版
+  const useCKEditor = true
 
   // 引用
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -811,23 +810,14 @@ const InvestmentReport: React.FC = () => {
                 searchable
               />
 
-              {/* 提示词编辑器 - 支持切换 */}
-              {useCKEditor ? (
-                <CKEditor5Input
-                  value={customPrompt}
-                  onChange={setCustomPrompt}
-                  placeholder="请输入报告生成的提示词..."
-                  minHeight={300}
-                  showTemplateButtons={true}
-                />
-              ) : (
-                <PromptEditor
-                  value={customPrompt}
-                  onChange={setCustomPrompt}
-                  placeholder="请输入报告生成的提示词..."
-                  minHeight={300}
-                />
-              )}
+              {/* 提示词编辑器 - 使用CKEditor 5 */}
+              <CKEditor5Input
+                value={customPrompt}
+                onChange={setCustomPrompt}
+                placeholder="请输入报告生成的提示词..."
+                minHeight={300}
+                showTemplateButtons={true}
+              />
 
               {/* 控制按钮 */}
               <Group justify="space-between">
@@ -870,16 +860,6 @@ const InvestmentReport: React.FC = () => {
                 </Group>
 
                 <Group gap="md">
-                  <Tooltip label="切换编辑器">
-                    <Button
-                      leftSection={<IconRefresh size={16} />}
-                      variant="outline"
-                      onClick={() => setUseCKEditor(!useCKEditor)}
-                      style={{ height: '40px' }}
-                    >
-                      {useCKEditor ? '旧版' : '新版'}
-                    </Button>
-                  </Tooltip>
                   <Button
                     leftSection={<IconEye size={16} />}
                     variant="outline"
@@ -941,44 +921,22 @@ const InvestmentReport: React.FC = () => {
                   )}
                 </Group>
                 
-                {useCKEditor ? (
-                  <CKEditor5Output
-                    content={reportContent}
-                    isGenerating={isGenerating}
-                    enableReplay={true}
-                    typewriterSpeed={30}
-                    onCopy={() => {
-                      navigator.clipboard.writeText(reportContent).then(() => {
-                        notifications.show({
-                          title: '复制成功',
-                          message: '内容已复制到剪贴板',
-                          color: 'green',
-                        })
+                <CKEditor5Output
+                  content={reportContent}
+                  isGenerating={isGenerating}
+                  enableReplay={true}
+                  typewriterSpeed={30}
+                  onCopy={() => {
+                    navigator.clipboard.writeText(reportContent).then(() => {
+                      notifications.show({
+                        title: '复制成功',
+                        message: '内容已复制到剪贴板',
+                        color: 'green',
                       })
-                    }}
-                    onExport={() => handleExport()}
-                  />
-                ) : (
-                  <EnhancedStreamingOutput
-                    content={reportContent}
-                    isGenerating={isGenerating}
-                    showTypewriter={true}
-                    typewriterSpeed={30}
-                    showProgress={true}
-                    estimatedTotalChars={20000}
-                    enableReplay={true}
-                    onCopy={() => {
-                      navigator.clipboard.writeText(reportContent).then(() => {
-                        notifications.show({
-                          title: '复制成功',
-                          message: '内容已复制到剪贴板',
-                          color: 'green',
-                        })
-                      })
-                    }}
-                    onExport={() => handleExport()}
-                  />
-                )}
+                    })
+                  }}
+                  onExport={() => handleExport()}
+                />
               </Card>
             </div>
 
