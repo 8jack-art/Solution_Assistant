@@ -51,7 +51,7 @@ const ProjectForm: React.FC = () => {
   const [error, setError] = useState('')
   const [isEdit, setIsEdit] = useState(false)
   const [project, setProject] = useState<InvestmentProject | null>(null)
-  
+   
   const { id } = useParams()
   const navigate = useNavigate()
   const isMobile = useMediaQuery('(max-width: 768px)')
@@ -241,6 +241,7 @@ const ProjectForm: React.FC = () => {
     setAnalyzing(true)
     try {
       const response = await llmConfigApi.analyzeProjectInfo(formData.project_info)
+      
       if (response.success && response.data?.analyzed_data) {
         const analyzedData = response.data.analyzed_data
         setFormData(prev => ({
@@ -314,6 +315,7 @@ const ProjectForm: React.FC = () => {
     setLandModeAnalyzing(true)
     try {
       const response = await llmConfigApi.analyzeProjectInfo(formData.project_info)
+      
       if (response.success && response.data?.analyzed_data) {
         const analyzedData = response.data.analyzed_data
         // 填充用地信息，青苗补偿费保持为0

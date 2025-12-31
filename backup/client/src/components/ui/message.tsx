@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { createRoot } from 'react-dom/client'
+import * as ReactDOM from 'react-dom'
 import { cn } from '@/lib/utils'
 
 interface MessageProps {
@@ -46,16 +46,16 @@ export const useMessage = () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     
-    const root = React.createRoot(container)
-    root.render(
+    ReactDOM.render(
       <Message
         message={message}
         type={type}
         onClose={() => {
-          root.unmount()
+          ReactDOM.unmountComponentAtNode(container)
           document.body.removeChild(container)
         }}
-      />
+      />,
+      container
     )
   }
 

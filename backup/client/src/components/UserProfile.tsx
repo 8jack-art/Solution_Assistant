@@ -55,12 +55,10 @@ const UserProfile: React.FC<UserProfileProps> = ({ user }) => {
             padding: '8px 12px',
             borderRadius: '8px',
             transition: 'background-color 0.2s',
-          }}
-          sx={(theme) => ({
             '&:hover': {
-              backgroundColor: theme.colors.gray[0],
+              backgroundColor: '#f8f9fa',
             },
-          })}
+          }}
         >
           <Group gap="sm">
             <Avatar color={getAvatarColor()} radius="xl" size="md">

@@ -37,6 +37,7 @@ import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
 import DynamicRevenueTable from '@/components/revenue-cost/DynamicRevenueTable'
 import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
 import ProductionRateModal from '@/components/revenue-cost/ProductionRateModal'
+import FinancialIndicatorsTable from '@/components/revenue-cost/FinancialIndicatorsTable'
 
 // 步骤定义
 const STEPS = [
@@ -44,7 +45,7 @@ const STEPS = [
   { label: 'AI推荐结构', value: 1 },
   { label: '收入建模', value: 2 },
   { label: '成本建模', value: 3 },
-  { label: '利润税金', value: 4 },
+  { label: '项目投资现金流量', value: 4 },
 ]
 
 /**
@@ -107,6 +108,9 @@ const RevenueCostModeling: React.FC = () => {
     分年数据: number[]
   }>>([])
   
+  // 建设期利息详情状态
+  const [constructionInterestDetails, setConstructionInterestDetails] = useState<any>(null)
+  
   // 弹窗状态控制
   const [editModalOpened, setEditModalOpened] = useState(false)
   const [depreciationTableOpened, setDepreciationTableOpened] = useState(false)
@@ -139,8 +143,12 @@ const RevenueCostModeling: React.FC = () => {
           revenueCostApi.getByProjectId(id!) // 加载收入成本数据
         ])
         
+        let projectData = null
+        let estimateData = null
+        
+        // 首先处理项目数据
         if (projectResponse.success && projectResponse.data) {
-          const projectData = projectResponse.data.project || projectResponse.data
+          projectData = projectResponse.data.project || projectResponse.data
           setProject(projectData)
           
           // 初始化还款期为运营期
@@ -161,11 +169,12 @@ const RevenueCostModeling: React.FC = () => {
             color: 'red',
           })
           navigate('/dashboard')
+          return
         }
         
-        // 加载投资估算数据
+        // 然后处理投资估算数据
         if (estimateResponse.success && estimateResponse.data?.estimate) {
-          const estimateData = estimateResponse.data.estimate
+          estimateData = estimateResponse.data.estimate
           console.log('✅ 成功加载投资估算数据:', estimateData)
           console.log('📋 投资估算详细字段:', {
             construction_cost: estimateData.construction_cost,
@@ -177,6 +186,16 @@ const RevenueCostModeling: React.FC = () => {
             construction_interest: estimateData.construction_interest
           })
           setInvestmentEstimate(estimateData)
+          
+          // 修复：在project和estimateData都设置好后，再检查并自动保存建设期利息详情
+          // 此时projectData已经不为null，可以安全传递
+          await saveConstructionInterestDetailsIfNeeded(estimateData, projectData)
+                
+          // 设置建设期利息详情
+          if (estimateData.construction_interest_details) {
+            setConstructionInterestDetails(estimateData.construction_interest_details);
+            console.log('📋 设置建设期利息详情:', estimateData.construction_interest_details);
+          }
         } else {
           console.warn('⚠️ 投资估算API响应异常:', estimateResponse)
         }
@@ -222,6 +241,158 @@ const RevenueCostModeling: React.FC = () => {
     }
   }, [id, navigate])
 
+  // 检查并自动保存建设期利息详情
+  const saveConstructionInterestDetailsIfNeeded = async (estimateData: any, project: any) => {
+    // 添加参数验证
+    if (!estimateData) {
+      console.log('⚠️ estimateData参数为空，跳过建设期利息详情保存')
+      return
+    }
+    
+    if (!project) {
+      console.log('⚠️ project参数为空，跳过建设期利息详情保存')
+      return
+    }
+    
+    // 检查是否已有建设期利息详情
+    if (estimateData.construction_interest_details) {
+      console.log('✅ 建设期利息详情已存在，跳过保存')
+      return
+    }
+
+    // 检查是否有partF数据（建设期利息数据）
+    if (!estimateData.estimate_data?.partF) {
+      console.log('⚠️ 未找到partF数据，无法生成建设期利息详情')
+      return
+    }
+
+    try {
+      console.log('🔄 开始生成并保存建设期利息详情')
+      console.log('📋 项目ID:', project.id, '项目名称:', project.project_name)
+      
+      // 准备建设期利息详情数据
+      const constructionInterestDetails = prepareConstructionInterestDetails(estimateData.estimate_data, project)
+      
+      // 如果准备失败，直接返回
+      if (!constructionInterestDetails) {
+        console.log('⚠️ 建设期利息详情准备失败，跳过保存')
+        return
+      }
+      
+      // 准备保存数据
+      const saveData = {
+        project_id: project.id,
+        construction_cost: Number(estimateData.construction_cost) || 0,
+        equipment_cost: Number(estimateData.equipment_cost) || 0,
+        installation_cost: Number(estimateData.installation_cost) || 0,
+        other_cost: Number(estimateData.other_cost) || 0,
+        land_cost: Number(estimateData.land_cost) || 0,
+        basic_reserve_rate: 0.05,
+        price_reserve_rate: 0.03,
+        construction_period: Number(estimateData.construction_period) || 3,
+        loan_rate: Number(project.loan_interest_rate) || 0.049,
+        custom_loan_amount: estimateData.custom_loan_amount ? Number(estimateData.custom_loan_amount) : undefined,
+        // 添加建设期利息详情数据
+        construction_interest_details: constructionInterestDetails,
+      }
+
+      console.log('📊 准备保存的建设期利息详情:', constructionInterestDetails)
+      
+      // 调用API保存
+      const response = await investmentApi.save(saveData)
+      
+      if (response.success) {
+        console.log('✅ 建设期利息详情已成功保存到数据库')
+        notifications.show({
+          title: '数据已更新',
+          message: '建设期利息详情已自动保存',
+          color: 'green',
+        })
+        
+        // 更新本地投资估算数据
+        setInvestmentEstimate(prev => prev ? {
+          ...prev,
+          construction_interest_details: constructionInterestDetails
+        } : null)
+      } else {
+        console.error('❌ 保存建设期利息详情失败:', response.error)
+        notifications.show({
+          title: '保存失败',
+          message: response.error || '建设期利息详情保存失败',
+          color: 'red',
+        })
+      }
+    } catch (error: any) {
+      console.error('❌ 保存建设期利息详情时发生错误:', error)
+      console.error('错误详情:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data
+      })
+      notifications.show({
+        title: '保存失败',
+        message: error.response?.data?.error || error.message || '建设期利息详情保存失败',
+        color: 'red',
+      })
+    }
+  }
+
+  // 准备建设期利息详情数据
+  const prepareConstructionInterestDetails = (estimateData: any, project: any) => {
+    // 添加空值检查
+    if (!estimateData?.partF?.分年利息) {
+      console.log('⚠️ 未找到partF.分年利息数据，无法生成建设期利息详情')
+      return null
+    }
+    
+    // 添加project参数的空值检查
+    if (!project) {
+      console.log('⚠️ project参数为空，无法生成建设期利息详情')
+      return null
+    }
+
+    const yearlyInterestData = estimateData.partF.分年利息
+    const constructionYears = project.construction_years || 0
+    
+    console.log('📊 准备建设期利息详情:', {
+      '建设期年限': constructionYears,
+      '分年利息数据条数': yearlyInterestData?.length || 0
+    })
+
+    // 计算各年期末借款余额
+    const calculateEndOfYearBalance = (yearIndex: number): number => {
+      let balance = 0
+      for (let i = 0; i <= yearIndex; i++) {
+        if (yearlyInterestData[i]) {
+          balance += yearlyInterestData[i].当期借款金额 || 0
+        }
+      }
+      return balance
+    }
+
+    // 准备JSON数据结构
+    return {
+      基本信息: {
+        贷款总额: estimateData.partF.贷款总额 || 0,
+        年利率: estimateData.partF.年利率 || project.loan_interest_rate || 0,
+        建设期年限: constructionYears,
+        贷款期限: estimateData.partF.贷款期限 || 0
+      },
+      分年数据: yearlyInterestData.map((data: any, index: number) => ({
+        年份: index + 1,
+        期初借款余额: index === 0 ? 0 : calculateEndOfYearBalance(index - 1),
+        当期借款金额: data?.当期借款金额 || 0,
+        当期利息: data?.当期利息 || 0,
+        期末借款余额: calculateEndOfYearBalance(index)
+      })),
+      汇总信息: {
+        总借款金额: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期借款金额 || 0), 0),
+        总利息: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期利息 || 0), 0),
+        期末借款余额: calculateEndOfYearBalance(yearlyInterestData.length - 1)
+      }
+    }
+  }
+
   // 计算原值和待抵扣进销项税
   useEffect(() => {
     if (!project) return
@@ -251,7 +422,7 @@ const RevenueCostModeling: React.FC = () => {
     }
     
     // 获取第二部分工程其它费用总和和土地费用
-    let partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
+    const partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
     let landCost = 0
     if (investmentEstimate.estimate_data?.partB?.children) {
       const landItem = investmentEstimate.estimate_data.partB.children.find(
@@ -434,6 +605,19 @@ const RevenueCostModeling: React.FC = () => {
     })
 
     setRepaymentTableData(data)
+    
+    // 保存还本付息计划简表数据到store
+    const { setLoanRepaymentTableData } = useRevenueCostStore.getState()
+    setLoanRepaymentTableData({
+      rows: data.map(row => ({
+        序号: row.序号,
+        项目: row.项目,
+        合计: row.合计,
+        建设期: [], // 简表中建设期为空
+        运营期: row.分年数据
+      })),
+      updatedAt: new Date().toISOString()
+    })
   }, [project, investmentEstimate, repaymentPeriod])
 
   /**
@@ -467,27 +651,35 @@ const RevenueCostModeling: React.FC = () => {
 
     // A. 房屋（建筑物）
     const constructionAnnualDepreciation = constructionOriginalValue * (1 - constructionResidualRate / 100) / constructionDepreciationYears
+    const constructionYearlyData = Array.from({ length: operationYears }, (_, i) => {
+      // 折旧年限内，每年按固定额度折旧
+      return i < constructionDepreciationYears ? constructionAnnualDepreciation : 0
+    })
+    // 计算有数值的年份的平均值
+    const constructionNonZeroYears = constructionYearlyData.filter(val => val > 0).length
+    const constructionAverageAnnualAmount = constructionNonZeroYears > 0 ? constructionYearlyData.reduce((sum, val) => sum + val, 0) / constructionNonZeroYears : 0
     data.push({
       序号: 'A',
       资产类别: '🏢 房屋（建筑物）',
       原值: constructionOriginalValue,
-      年折旧摊销额: constructionAnnualDepreciation,
-      分年数据: Array.from({ length: operationYears }, (_, i) => {
-        // 折旧年限内，每年按固定额度折旧
-        return i < constructionDepreciationYears ? constructionAnnualDepreciation : 0
-      })
+      年折旧摊销额: constructionAverageAnnualAmount,
+      分年数据: constructionYearlyData
     })
 
     // D. 设备购置
     const equipmentAnnualDepreciation = equipmentOriginalValue * (1 - equipmentResidualRate / 100) / equipmentDepreciationYears
+    const equipmentYearlyData = Array.from({ length: operationYears }, (_, i) => {
+      return i < equipmentDepreciationYears ? equipmentAnnualDepreciation : 0
+    })
+    // 计算有数值的年份的平均值
+    const equipmentNonZeroYears = equipmentYearlyData.filter(val => val > 0).length
+    const equipmentAverageAnnualAmount = equipmentNonZeroYears > 0 ? equipmentYearlyData.reduce((sum, val) => sum + val, 0) / equipmentNonZeroYears : 0
     data.push({
       序号: 'D',
       资产类别: '⚙️ 设备购置',
       原值: equipmentOriginalValue,
-      年折旧摊销额: equipmentAnnualDepreciation,
-      分年数据: Array.from({ length: operationYears }, (_, i) => {
-        return i < equipmentDepreciationYears ? equipmentAnnualDepreciation : 0
-      })
+      年折旧摊销额: equipmentAverageAnnualAmount,
+      分年数据: equipmentYearlyData
     })
 
     // E. 无形资产（土地） - 从投资估算 partB 土地费用获取
@@ -495,14 +687,18 @@ const RevenueCostModeling: React.FC = () => {
     const intangibleAnnualAmortization = intangibleOriginalValue > 0
       ? intangibleOriginalValue * (1 - intangibleResidualRate / 100) / intangibleAmortizationYears
       : 0
+    const intangibleYearlyData = Array.from({ length: operationYears }, (_, i) => {
+      return i < intangibleAmortizationYears ? intangibleAnnualAmortization : 0
+    })
+    // 计算有数值的年份的平均值
+    const intangibleNonZeroYears = intangibleYearlyData.filter(val => val > 0).length
+    const intangibleAverageAnnualAmount = intangibleNonZeroYears > 0 ? intangibleYearlyData.reduce((sum, val) => sum + val, 0) / intangibleNonZeroYears : 0
     data.push({
       序号: 'E',
       资产类别: '🌍 无形资产（土地）',
       原值: intangibleOriginalValue,
-      年折旧摊销额: intangibleAnnualAmortization,
-      分年数据: Array.from({ length: operationYears }, (_, i) => {
-        return i < intangibleAmortizationYears ? intangibleAnnualAmortization : 0
-      })
+      年折旧摊销额: intangibleAverageAnnualAmount,
+      分年数据: intangibleYearlyData
     })
 
     console.log('📉 折旧摊销表数据:', {
@@ -524,47 +720,9 @@ const RevenueCostModeling: React.FC = () => {
     intangibleAmortizationYears,
     intangibleResidualRate
   ])
-
-  // 自动保存数据到后端
-  useEffect(() => {
-    const saveData = async () => {
-      if (!project?.id) return;
-      
-      try {
-        // 获取最新的store状态
-        const currentState = useRevenueCostStore.getState();
-        
-        console.log('💾 自动保存数据到后端:', {
-          project_id: project.id,
-          model_data: {
-            revenueItems: currentState.revenueItems,
-            productionRates: currentState.productionRates,
-            aiAnalysisResult: currentState.aiAnalysisResult,
-            workflow_step: currentState.currentStep
-          },
-          workflow_step: currentState.currentStep
-        });
-        
-        await revenueCostApi.save({
-          project_id: project.id,
-          model_data: {
-            revenueItems: currentState.revenueItems,
-            productionRates: currentState.productionRates,
-            aiAnalysisResult: currentState.aiAnalysisResult,
-            workflow_step: currentState.currentStep
-          },
-          workflow_step: currentState.currentStep
-        });
-        console.log('✅ 数据已自动保存到数据库');
-      } catch (error) {
-        console.error('❌ 自动保存失败:', error);
-      }
-    };
-
-    // 延迟保存，避免频繁请求
-    const timer = setTimeout(saveData, 2000);
-    return () => clearTimeout(timer);
-  }, [currentStep, revenueItems, productionRates, aiAnalysisResult, project?.id]);
+  
+  // 注意：自动保存已移至 revenueCostStore.ts 中的防抖机制
+  // 所有数据修改都会自动保存到数据库
 
   // 打开编辑弹窗（年限和残值率同时编辑）
   const openEditModal = (
@@ -650,7 +808,7 @@ const RevenueCostModeling: React.FC = () => {
   ) ? Number(Object.keys(stepMap).find(key => stepMap[Number(key)] === currentStep)) : 0
 
   // 步骤导航处理
-  const handleNext = () => {
+  const handleNext = async () => {
     // 步骤1：AI推荐营收结构 - 检查是否锁定
     if (activeStep === 1 && !revenueStructureLocked) {
       notifications.show({
@@ -661,9 +819,198 @@ const RevenueCostModeling: React.FC = () => {
       return
     }
 
+    // 步骤0：基础数据确认 - 保存还本付息计划简表数据
+    if (activeStep === 0) {
+      await saveLoanRepaymentScheduleData();
+    }
+
+    // 步骤2：收入建模 - 保存营业收入表数据
+    if (activeStep === 2) {
+      const { saveRevenueTableData } = useRevenueCostStore.getState();
+      const urbanTaxRate = 0.07; // 默认城市建设维护税税率
+      await saveRevenueTableData(deductibleInputTax, urbanTaxRate);
+    }
+
+    // 步骤3：成本建模 - 保存总成本费用表数据
+    if (activeStep === 3) {
+      const { saveCostTableData } = useRevenueCostStore.getState();
+      await saveCostTableData();
+    }
+
     if (activeStep < STEPS.length - 1) {
       setCurrentStep(stepMap[activeStep + 1] as any)
     }
+  }
+
+  // 保存还本付息计划简表数据
+  const saveLoanRepaymentScheduleData = async () => {
+    if (!project || !repaymentTableData || repaymentTableData.length === 0) {
+      notifications.show({
+        title: '⚠️ 无数据保存',
+        message: '还款期数据为空，跳过还本付息计划保存',
+        color: 'yellow',
+      })
+      return;
+    }
+
+    try {
+      // 准备还本付息计划简表数据
+      const loanRepaymentScheduleData = prepareLoanRepaymentScheduleData();
+      
+      // 添加详细调试日志
+      console.log('🔍 准备保存还本付息计划数据');
+      console.log('📋 项目信息:', {
+        project_id: project.id,
+        project_name: project.project_name,
+        operation_years: project.operation_years,
+        loan_interest_rate: project.loan_interest_rate
+      });
+      console.log('💰 投资估算数据:', {
+        construction_cost: investmentEstimate?.construction_cost,
+        equipment_cost: investmentEstimate?.equipment_cost,
+        installation_cost: investmentEstimate?.installation_cost,
+        other_cost: investmentEstimate?.other_cost,
+        land_cost: investmentEstimate?.land_cost,
+        loan_amount: investmentEstimate?.loan_amount,
+        custom_loan_amount: investmentEstimate?.custom_loan_amount
+      });
+      console.log('📊 还本付息计划数据:', loanRepaymentScheduleData);
+      console.log('📊 还本付息表格原始数据:', repaymentTableData);
+      
+      // 调用投资估算API保存
+      // 验证和清理要发送的数据
+      const requestData = {
+        project_id: project.id,
+        // 传入现有数据以保持完整性
+        construction_cost: Number(investmentEstimate?.construction_cost) || 0,
+        equipment_cost: Number(investmentEstimate?.equipment_cost) || 0,
+        installation_cost: Number(investmentEstimate?.installation_cost) || 0,
+        other_cost: Number(investmentEstimate?.other_cost) || 0,
+        land_cost: Number(investmentEstimate?.land_cost) || 0,
+        basic_reserve_rate: 0.05,
+        price_reserve_rate: 0.03,
+        construction_period: Number(investmentEstimate?.construction_period) || 3,
+        loan_rate: Number(project.loan_interest_rate) || 0.049,
+        custom_loan_amount: investmentEstimate?.custom_loan_amount ? Number(investmentEstimate.custom_loan_amount) : undefined,
+        // 添加还本付息计划简表数据
+        loan_repayment_schedule_simple: loanRepaymentScheduleData,
+      };
+
+      console.log('🔍 发送给后端的完整数据:', JSON.stringify(requestData, null, 2));
+      console.log('🔍 数据类型验证:', {
+        project_id: typeof requestData.project_id,
+        construction_cost: typeof requestData.construction_cost,
+        equipment_cost: typeof requestData.equipment_cost,
+        installation_cost: typeof requestData.installation_cost,
+        other_cost: typeof requestData.other_cost,
+        land_cost: typeof requestData.land_cost,
+        loan_rate: typeof requestData.loan_rate,
+        loan_repayment_schedule_simple: typeof requestData.loan_repayment_schedule_simple,
+        loan_repayment_schedule_simple_value: requestData.loan_repayment_schedule_simple
+      });
+
+      const response = await investmentApi.save(requestData);
+
+      if (response.success) {
+        notifications.show({
+          title: '✅ 保存成功',
+          message: '还本付息计划简表已保存到数据库',
+          color: 'green',
+        })
+      } else {
+        notifications.show({
+          title: '❌ 保存失败',
+          message: response.error || '还本付息计划保存失败',
+          color: 'red',
+        })
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: '❌ 保存失败',
+        message: error.response?.data?.error || '还本付息计划保存失败',
+        color: 'red',
+      })
+    }
+  }
+
+  // 准备还本付息计划简表数据
+  const prepareLoanRepaymentScheduleData = () => {
+    if (!repaymentTableData || repaymentTableData.length === 0) {
+      return null;
+    }
+
+    // 提取贷款总额和利率（从还款期数据计算）
+    const loanAmount = repaymentTableData.find((row: any) => row.序号 === '2.1')?.合计 || 0;
+    const totalInterest = repaymentTableData.find((row: any) => row.序号 === '2.2')?.合计 || 0;
+    
+    console.log('🔍 开始提取还款计划数据');
+    console.log('🔍 贷款总额:', loanAmount, '总利息:', totalInterest);
+    console.log('🔍 原始表格数据:', repaymentTableData.map(row => ({
+      序号: row.序号,
+      项目: row.项目,
+      合计: row.合计,
+      分年数据: row.分年数据
+    })));
+    
+    // 从2号行（当期还本付息）提取每年的数据
+    const mainRow = repaymentTableData.find((row: any) => row.序号 === '2');
+    if (!mainRow || !mainRow.分年数据) {
+      console.log('🔍 未找到主行数据');
+      return null;
+    }
+    
+    // 从2.1行（还本）提取每年还本数据
+    const principalRow = repaymentTableData.find((row: any) => row.序号 === '2.1');
+    
+    // 从2.2行（付息）提取每年付息数据
+    const interestRow = repaymentTableData.find((row: any) => row.序号 === '2.2');
+    
+    // 从1号行（期初借款余额）提取每年期初余额
+    const openingRow = repaymentTableData.find((row: any) => row.序号 === '1');
+    
+    // 从3号行（期末借款余额）提取每年期末余额
+    const closingRow = repaymentTableData.find((row: any) => row.序号 === '3');
+    
+    // 构建还款计划数据
+    const repaymentSchedule = mainRow.分年数据
+      .map((value: any, yearIndex) => {
+        const year = yearIndex + 1;
+        return {
+          年份: year,
+          期初借款余额: openingRow?.分年数据[yearIndex] || 0,
+          当期还本: principalRow?.分年数据[yearIndex] || 0,
+          当期付息: interestRow?.分年数据[yearIndex] || 0,
+          当期还本付息: value || 0,
+          期末借款余额: closingRow?.分年数据[yearIndex] || 0,
+        };
+      })
+      .filter((item) => item.期初借款余额 > 0); // 只保留有效年份的数据
+      
+    console.log('🔍 提取的还款计划数据:', repaymentSchedule);
+
+    return {
+      基本信息: {
+        贷款总额: loanAmount,
+        年利率: project.loan_interest_rate || 0.049,
+        贷款期限: repaymentPeriod,
+        还款方式: 'equal-principal',
+        运营期年限: project.operation_years || 0
+      },
+      还款计划: repaymentSchedule.map((item: any) => ({
+        年份: item.年份,
+        期初借款余额: item.期初借款余额,
+        当期还本: item.当期还本,
+        当期付息: item.当期付息,
+        当期还本付息: item.当期还本付息,
+        期末借款余额: item.期末借款余额,
+      })),
+      汇总信息: {
+        贷款总额: loanAmount,
+        总利息: totalInterest,
+        总还本付息: loanAmount + totalInterest,
+        还款年数: repaymentSchedule.length
+      }
+    };
   }
 
   const handleBack = () => {
@@ -689,10 +1036,10 @@ const RevenueCostModeling: React.FC = () => {
                       </Text>
                     </Group>
                     <Group gap="xs">
-                      <Tooltip label="查看还本付息计划表">
-                        <ActionIcon 
-                          variant="light" 
-                          color="green" 
+                      <Tooltip label="查看还本付息计划简表">
+                        <ActionIcon
+                          variant="light"
+                          color="green"
                           size="lg"
                           onClick={() => setRepaymentPlanOpened(true)}
                           disabled={!investmentEstimate || repaymentPeriod === 0}
@@ -1042,7 +1389,7 @@ const RevenueCostModeling: React.FC = () => {
                           </Table.Td>
                         </Table.Tr>
                         <Table.Tr>
-                          <Table.Td>待抵扣进销项税</Table.Td>
+                          <Table.Td>待抵扣进项税</Table.Td>
                           <Table.Td>
                             <Text fw={600} c="#F7BA1E" size="sm">{deductibleInputTax.toFixed(2)}</Text>
                           </Table.Td>
@@ -1329,8 +1676,45 @@ const RevenueCostModeling: React.FC = () => {
                   </div>
                 )}
             
-                {/* 关闭按钮 */}
-                <Group justify="flex-end">
+                {/* 净值信息标签 */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '16px',
+                  padding: '8px 0',
+                  borderTop: '1px solid #E5E6EB'
+                }}>
+                  <div style={{ display: 'flex', gap: '24px' }}>
+                    <Text size="sm" fw={500} c="#1D2129">
+                      固定资产净值为：
+                      <Text span fw={700} c="#165DFF">
+                        {(depreciationData.filter(d => ['A', 'D'].includes(d.序号)).reduce((sum, row) => {
+                          // 计算固定资产净值 = 原值 - 累计折旧
+                          const totalDepreciation = row.分年数据.reduce((acc, val) => acc + val, 0);
+                          return sum + (row.原值 - totalDepreciation);
+                        }, 0)).toFixed(2)}万元
+                      </Text>
+                      ，
+                      无形资产净值为：
+                      <Text span fw={700} c="#00C48C">
+                        {(depreciationData.filter(d => d.序号 === 'E').reduce((sum, row) => {
+                          // 计算无形资产净值 = 原值 - 累计摊销
+                          const totalAmortization = row.分年数据.reduce((acc, val) => acc + val, 0);
+                          return sum + (row.原值 - totalAmortization);
+                        }, 0)).toFixed(2)}万元
+                      </Text>
+                      。
+                      合计：
+                      <Text span fw={700} c="#F7BA1E">
+                        {(depreciationData.reduce((sum, row) => {
+                          // 计算总净值 = 原值 - 累计折旧/摊销
+                          const totalAmount = row.分年数据.reduce((acc, val) => acc + val, 0);
+                          return sum + (row.原值 - totalAmount);
+                        }, 0)).toFixed(2)}万元
+                      </Text>
+                    </Text>
+                  </div>
                   <Button 
                     onClick={() => setDepreciationTableOpened(false)}
                     style={{ 
@@ -1340,7 +1724,7 @@ const RevenueCostModeling: React.FC = () => {
                   >
                     关闭
                   </Button>
-                </Group>
+                </div>
               </Stack>
             </Modal>
 
@@ -1351,7 +1735,7 @@ const RevenueCostModeling: React.FC = () => {
               title={
                 <Group gap="xs">
                   <IconCurrencyDollar size={20} color="#00C48C" />
-                  <Text fw={600} c="#1D2129">还本付息计划表（等额本金还款）</Text>
+                  <Text fw={600} c="#1D2129">还本付息计划简表（等额本金还款）</Text>
                 </Group>
               }
               size="1400px"
@@ -1374,6 +1758,94 @@ const RevenueCostModeling: React.FC = () => {
                     • 还款期：{repaymentPeriod} 年 | 年利率：{((Number(project?.loan_interest_rate) || 0.049) * 100).toFixed(2)}%
                   </Text>
                 </div>
+
+                {/* 建设期利息详情 */}
+                {constructionInterestDetails && (
+                  <div style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#F0F5FF',
+                    borderRadius: '8px',
+                    border: '1px solid #ADC6FF'
+                  }}>
+                    <Text size="sm" c="#165DFF" fw={500} mb={8}>
+                      💰 建设期利息详情
+                    </Text>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '8px' }}>
+                      <div>
+                        <Text size="xs" c="#86909C">贷款总额</Text>
+                        <Text fw={600} c="#1D2129">{(constructionInterestDetails.基本信息?.贷款总额 || 0).toFixed(2)}万元</Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="#86909C">年利率</Text>
+                        <Text fw={600} c="#1D2129">{((constructionInterestDetails.基本信息?.年利率 || 0) * 100).toFixed(2)}%</Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="#86909C">建设期年限</Text>
+                        <Text fw={600} c="#1D2129">{constructionInterestDetails.基本信息?.建设期年限 || 0}年</Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="#86909C">贷款期限</Text>
+                        <Text fw={600} c="#1D2129">{constructionInterestDetails.基本信息?.贷款期限 || 0}年</Text>
+                      </div>
+                    </div>
+                    
+                    {/* 分年数据表格 */}
+                    {constructionInterestDetails.分年数据 && constructionInterestDetails.分年数据.length > 0 && (
+                      <div style={{ overflowX: 'auto', marginTop: '8px' }}>
+                        <Table
+                          striped
+                          withTableBorder
+                          styles={{
+                            th: {
+                              backgroundColor: '#F7F8FA',
+                              color: '#1D2129',
+                              fontWeight: 600,
+                              fontSize: '12px',
+                              textAlign: 'center',
+                              border: '1px solid #E5E6EB'
+                            },
+                            td: {
+                              fontSize: '12px',
+                              textAlign: 'center',
+                              border: '1px solid #E5E6EB'
+                            }
+                          }}
+                        >
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th>年份</Table.Th>
+                              <Table.Th>期初借款余额</Table.Th>
+                              <Table.Th>当期借款金额</Table.Th>
+                              <Table.Th>当期利息</Table.Th>
+                              <Table.Th>期末借款余额</Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {constructionInterestDetails.分年数据.map((data: any, index: number) => (
+                              <Table.Tr key={index}>
+                                <Table.Td>{data.年份}</Table.Td>
+                                <Table.Td>{data.期初借款余额?.toFixed(2)}</Table.Td>
+                                <Table.Td>{data.当期借款金额?.toFixed(2)}</Table.Td>
+                                <Table.Td>{data.当期利息?.toFixed(2)}</Table.Td>
+                                <Table.Td>{data.期末借款余额?.toFixed(2)}</Table.Td>
+                              </Table.Tr>
+                            ))}
+                            {/* 汇总行 */}
+                            {constructionInterestDetails.汇总信息 && (
+                              <Table.Tr style={{ backgroundColor: '#E6F7FF' }}>
+                                <Table.Td fw={700}>汇总</Table.Td>
+                                <Table.Td fw={700}>{constructionInterestDetails.汇总信息.总借款金额?.toFixed(2)}</Table.Td>
+                                <Table.Td fw={700}>{constructionInterestDetails.汇总信息.总利息?.toFixed(2)}</Table.Td>
+                                <Table.Td fw={700}>{constructionInterestDetails.汇总信息.期末借款余额?.toFixed(2)}</Table.Td>
+                                <Table.Td fw={700}>-</Table.Td>
+                              </Table.Tr>
+                            )}
+                          </Table.Tbody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 还本付息表格 */}
                 {repaymentTableData.length > 0 ? (
@@ -1505,37 +1977,23 @@ const RevenueCostModeling: React.FC = () => {
       case 2:
         return (
           <Stack gap="md">
-            <DynamicRevenueTable />
+            <DynamicRevenueTable deductibleInputTax={deductibleInputTax} />
           </Stack>
         )
 
       case 3:
-        return <DynamicCostTable />
+        return <DynamicCostTable 
+          repaymentTableData={repaymentTableData}
+          depreciationData={depreciationData}
+        />
 
       case 4:
         return (
-          <Card shadow="sm" padding="xl" radius="md" withBorder>
-            <Stack gap="lg">
-              <div>
-                <Text size="lg" fw={600} c="#1D2129" mb="md">
-                  利润税金
-                </Text>
-                <Text size="sm" c="#86909C">
-                  查看利润税金汇总
-                </Text>
-              </div>
-              <div style={{ 
-                padding: '40px', 
-                textAlign: 'center',
-                backgroundColor: '#F7F8FA',
-                borderRadius: '8px'
-              }}>
-                <Text size="sm" c="#86909C">
-                  🚧 功能开发中...
-                </Text>
-              </div>
-            </Stack>
-          </Card>
+          <FinancialIndicatorsTable
+            repaymentTableData={repaymentTableData}
+            depreciationData={depreciationData}
+            investmentEstimate={investmentEstimate}
+          />
         )
 
       default:
@@ -1603,7 +2061,7 @@ const RevenueCostModeling: React.FC = () => {
                 <div>
                   <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {investmentEstimate?.final_total ? Number(investmentEstimate.final_total).toFixed(2) : (project?.total_investment || 0).toFixed(2)} 万元
+                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? investmentEstimate?.final_total ?? project?.total_investment ?? 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>
@@ -1660,11 +2118,7 @@ const RevenueCostModeling: React.FC = () => {
                     color: '#FFFFFF'
                   }}
                   onClick={() => {
-                    notifications.show({
-                      title: '功能开发中',
-                      message: '完成功能即将推出',
-                      color: 'blue',
-                    })
+                    navigate(`/report/${id}`)
                   }}
                 >
                   完成并保存

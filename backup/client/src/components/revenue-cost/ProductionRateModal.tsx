@@ -20,6 +20,28 @@ interface ProductionRateModalProps {
 }
 
 /**
+ * 获取需要显示的达产率配置（只显示变化的前面几年）
+ * 规则：从第1年开始，连续显示直到遇到100%达产率，之后不再显示
+ */
+const getDisplayRates = (rates: ProductionRateConfig[]): ProductionRateConfig[] => {
+  if (rates.length === 0) return []
+  
+  // 按年份排序
+  const sortedRates = [...rates].sort((a, b) => a.yearIndex - b.yearIndex)
+  
+  // 找到第一个100%达产率的年份
+  const firstFullProductionIndex = sortedRates.findIndex(rate => rate.rate >= 1.0)
+  
+  if (firstFullProductionIndex === -1) {
+    // 没有达到100%，显示所有配置
+    return sortedRates
+  } else {
+    // 显示到第一个100%达产率为止（包括该年）
+    return sortedRates.slice(0, firstFullProductionIndex + 1)
+  }
+}
+
+/**
  * 达产率配置弹窗（重写版）
  */
 const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClose }) => {
@@ -32,15 +54,16 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
       if (productionRates.length > 0) {
         setEditedRates([...productionRates])
       } else {
-        // 默认3年达产率
-        setEditedRates([
-          { yearIndex: 1, rate: 0.75 },
-          { yearIndex: 2, rate: 0.85 },
-          { yearIndex: 3, rate: 1.0 },
-        ])
+        // 默认3年达产率配置
+        const defaultRates = [
+          { yearIndex: 1, rate: 0.75 }, // 75%
+          { yearIndex: 2, rate: 0.85 }, // 85%
+          { yearIndex: 3, rate: 1.0 },  // 100%
+        ]
+        setEditedRates(defaultRates)
       }
     }
-  }, [opened])
+  }, [opened, productionRates])
 
   /**
    * 更新达产率
@@ -93,6 +116,21 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
       })
       return
     }
+    
+    // 检查是否要删除的是最后一个100%达产率年份
+    const displayRates = getDisplayRates(editedRates)
+    const isLastFullProduction = displayRates[displayRates.length - 1]?.yearIndex === yearIndex && 
+                                 displayRates[displayRates.length - 1]?.rate >= 1.0
+    
+    if (isLastFullProduction && editedRates.some(r => r.yearIndex > yearIndex)) {
+      notifications.show({
+        title: '无法删除',
+        message: '不能删除100%达产率年份，后面还有依赖此配置的年份',
+        color: 'orange',
+      })
+      return
+    }
+    
     setEditedRates(prev => prev.filter(r => r.yearIndex !== yearIndex))
   }
 
@@ -126,77 +164,102 @@ const ProductionRateModal: React.FC<ProductionRateModalProps> = ({ opened, onClo
       <Stack gap="md">
         <Group justify="space-between">
           <Text size="sm" c="#86909C">
-            设置项目运营期各年份的达产率。默认3年：第1年75%、第2年85%、第3年100%。未配置年份按最后一年执行。
+            设置项目运营期前几年的达产率变化。只显示达产率逐步提升的年份，达到100%后的年份无需配置（自动按100%计算）。
           </Text>
-          <Button
-            size="xs"
-            leftSection={<IconPlus size={14} />}
-            onClick={handleAdd}
-            disabled={maxYear >= 5}
-            variant="light"
-            color="blue"
-          >
-            增加
-          </Button>
+          <Group gap="xs">
+            <Button
+              size="xs"
+              variant="light"
+              color="orange"
+              onClick={() => {
+                const defaultRates = [
+                  { yearIndex: 1, rate: 0.75 }, // 75%
+                  { yearIndex: 2, rate: 0.85 }, // 85%
+                  { yearIndex: 3, rate: 1.0 },  // 100%
+                ]
+                setEditedRates(defaultRates)
+              }}
+            >
+              重置默认
+            </Button>
+            <Button
+              size="xs"
+              leftSection={<IconPlus size={14} />}
+              onClick={handleAdd}
+              disabled={maxYear >= 5}
+              variant="light"
+              color="blue"
+            >
+              增加
+            </Button>
+          </Group>
         </Group>
 
         {editedRates.length > 0 ? (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>年份</Table.Th>
-                <Table.Th>达产率 (%)</Table.Th>
-                <Table.Th>说明</Table.Th>
-                <Table.Th w={60}>操作</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {editedRates.map((item) => (
-                <Table.Tr key={item.yearIndex}>
-                  <Table.Td>
-                    <Text size="sm" fw={500}>
-                      第 {item.yearIndex} 年
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput
-                      value={item.rate * 100}
-                      onChange={(val) => handleRateChange(item.yearIndex, val)}
-                      min={0}
-                      max={100}
-                      step={5}
-                      suffix="%"
-                      size="sm"
-                      styles={{
-                        input: {
-                          width: '120px',
-                          fontWeight: 600,
-                          color: '#165DFF',
-                        },
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs" c="#86909C">
-                      {item.rate < 0.5 ? '逐步建设' : item.rate < 1 ? '逐步达产' : '满产运营'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Tooltip label="删除">
-                      <ActionIcon
-                        variant="subtle"
-                        color="red"
-                        size="sm"
-                        onClick={() => handleDelete(item.yearIndex)}
-                      >
-                        <IconTrash size={14} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Table.Td>
+          <>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>年份</Table.Th>
+                  <Table.Th>达产率 (%)</Table.Th>
+                  <Table.Th>说明</Table.Th>
+                  <Table.Th w={60}>操作</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {getDisplayRates(editedRates).map((item) => (
+                  <Table.Tr key={item.yearIndex}>
+                    <Table.Td>
+                      <Text size="sm" fw={500}>
+                        {item.yearIndex}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <NumberInput
+                        value={item.rate * 100}
+                        onChange={(val) => handleRateChange(item.yearIndex, val)}
+                        min={0}
+                        max={100}
+                        step={5}
+                        suffix="%"
+                        size="sm"
+                        styles={{
+                          input: {
+                            width: '120px',
+                            fontWeight: 600,
+                            color: '#165DFF',
+                          },
+                        }}
+                      />
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="#86909C">
+                        {item.rate < 0.5 ? '逐步建设' : item.rate < 1 ? '逐步达产' : '满产运营'}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Tooltip label="删除">
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          size="sm"
+                          onClick={() => handleDelete(item.yearIndex)}
+                        >
+                          <IconTrash size={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+            
+            {editedRates.length > getDisplayRates(editedRates).length && (
+              <Text size="xs" c="#86909C" style={{ marginTop: '8px' }}>
+                💡 {getDisplayRates(editedRates).length + 1}及以后年份自动按100%达产率计算，无需手动配置
+              </Text>
+            )}
+          </>
         ) : (
           <div
             style={{

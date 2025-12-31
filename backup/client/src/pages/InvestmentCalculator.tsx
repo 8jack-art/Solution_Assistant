@@ -11,7 +11,6 @@ import {
   Card,
   Group,
   Stack,
-  Table,
   Grid,
   Loader,
   Center,
@@ -19,6 +18,9 @@ import {
 import { notifications } from '@mantine/notifications'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { useMediaQuery } from '@mantine/hooks'
+import { CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table'
 
 const InvestmentCalculator: React.FC = () => {
   const [project, setProject] = useState<InvestmentProject | null>(null)
@@ -134,15 +136,20 @@ const InvestmentCalculator: React.FC = () => {
     setLoading(true)
 
     try {
+      // 准备建设期利息详情数据
+      const constructionInterestDetails = prepareConstructionInterestData(calculationResult);
+      
       const response = await investmentApi.save({
         project_id: id!,
         ...formData,
+        // 添加建设期利息详情数据
+        construction_interest_details: constructionInterestDetails,
       })
       if (response.success && response.data) {
         setEstimate(response.data.estimate)
         notifications.show({
           title: '✅ 保存成功',
-          message: '投资估算已保存',
+          message: '投资估算已保存（含建设期利息详情）',
           color: 'green',
         })
       } else {
@@ -161,6 +168,49 @@ const InvestmentCalculator: React.FC = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 准备建设期利息详情数据
+  const prepareConstructionInterestData = (calcResult: any) => {
+    if (!calcResult?.estimate_data?.partF?.分年利息) {
+      return null;
+    }
+
+    const yearlyInterestData = calcResult.estimate_data.partF.分年利息;
+    const constructionYears = formData.construction_period;
+
+    // 计算各年期末借款余额
+    const calculateEndOfYearBalance = (yearIndex: number): number => {
+      let balance = 0;
+      for (let i = 0; i <= yearIndex; i++) {
+        if (yearlyInterestData[i]) {
+          balance += yearlyInterestData[i].当期借款金额 || 0;
+        }
+      }
+      return balance;
+    };
+
+    // 准备JSON数据结构（便于后续调用）
+    return {
+      基本信息: {
+        贷款总额: calcResult.estimate_data.partF.贷款总额 || 0,
+        年利率: calcResult.estimate_data.partF.年利率 || formData.loan_rate || 0,
+        建设期年限: constructionYears,
+        贷款期限: calcResult.estimate_data.partF.贷款期限 || 0
+      },
+      分年数据: yearlyInterestData.map((data: any, index: number) => ({
+        年份: index + 1,
+        期初借款余额: index === 0 ? 0 : calculateEndOfYearBalance(index - 1),
+        当期借款金额: data?.当期借款金额 || 0,
+        当期利息: data?.当期利息 || 0,
+        期末借款余额: calculateEndOfYearBalance(index)
+      })),
+      汇总信息: {
+        总借款金额: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期借款金额 || 0), 0),
+        总利息: yearlyInterestData.reduce((sum: number, data: any) => sum + (data?.当期利息 || 0), 0),
+        期末借款余额: calculateEndOfYearBalance(yearlyInterestData.length - 1)
+      }
+    };
   }
 
   if (!project) {
@@ -226,7 +276,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.construction_cost}
-                      onChange={(e) => setFormData({ ...formData, construction_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, construction_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div>
@@ -237,7 +287,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.equipment_cost}
-                      onChange={(e) => setFormData({ ...formData, equipment_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, equipment_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -251,7 +301,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.installation_cost}
-                      onChange={(e) => setFormData({ ...formData, installation_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, installation_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div>
@@ -262,7 +312,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.other_cost}
-                      onChange={(e) => setFormData({ ...formData, other_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, other_cost: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -275,7 +325,7 @@ const InvestmentCalculator: React.FC = () => {
                     type="number"
                     step="0.01"
                     value={formData.land_cost}
-                    onChange={(e) => setFormData({ ...formData, land_cost: parseFloat(e.target.value) || 0 })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, land_cost: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
 
@@ -288,7 +338,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.basic_reserve_rate}
-                      onChange={(e) => setFormData({ ...formData, basic_reserve_rate: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, basic_reserve_rate: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div>
@@ -299,7 +349,7 @@ const InvestmentCalculator: React.FC = () => {
                       type="number"
                       step="0.01"
                       value={formData.price_reserve_rate}
-                      onChange={(e) => setFormData({ ...formData, price_reserve_rate: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price_reserve_rate: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -314,7 +364,7 @@ const InvestmentCalculator: React.FC = () => {
                       min="1"
                       max="10"
                       value={formData.construction_period}
-                      onChange={(e) => setFormData({ ...formData, construction_period: parseInt(e.target.value) || 1 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, construction_period: parseInt(e.target.value) || 1 })}
                     />
                   </div>
                   <div>
@@ -327,7 +377,7 @@ const InvestmentCalculator: React.FC = () => {
                       min="0"
                       max="1"
                       value={formData.loan_rate}
-                      onChange={(e) => setFormData({ ...formData, loan_rate: parseFloat(e.target.value) || 0 })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, loan_rate: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
@@ -340,7 +390,7 @@ const InvestmentCalculator: React.FC = () => {
                     type="number"
                     step="0.01"
                     value={formData.custom_loan_amount}
-                    onChange={(e) => setFormData({ ...formData, custom_loan_amount: parseFloat(e.target.value) || 0 })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, custom_loan_amount: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
 

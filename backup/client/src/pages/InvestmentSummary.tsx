@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import * as XLSX from 'xlsx-js-style'
 import { projectApi, investmentApi, llmConfigApi } from '@/lib/api'
@@ -19,11 +19,14 @@ import {
   ActionIcon,
   Tooltip,
   Select,
+  Switch,
 } from '@mantine/core'
-import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar } from '@tabler/icons-react'
+import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar, IconInfoCircle, IconCurrencyDollar } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
 import LoadingOverlay from '@/components/LoadingOverlay'
+import ConstructionInterestModal from '@/components/revenue-cost/ConstructionInterestModal'
+import LoanRepaymentScheduleTable from '@/components/revenue-cost/LoanRepaymentScheduleTable'
 
 // 投资估算数据结构
 interface InvestmentItem {
@@ -75,6 +78,150 @@ interface InvestmentEstimate {
   // 迭代信息
   iterationCount: number
   gapRate: number
+  
+  // 额外数据字段
+  construction_interest_details?: any
+  loan_repayment_schedule_simple?: any
+  loan_repayment_schedule_detailed?: any
+}
+
+// 将简化的estimate_data转换为完整的表格数据结构
+const buildFullEstimateStructure = (estimateData: any, projectData: any): InvestmentEstimate => {
+  const constructionCost = estimateData.constructionCost || 0
+  const equipmentCost = estimateData.equipmentCost || 0
+  const installationCost = estimateData.installationCost || 0
+  const otherCost = estimateData.otherCost || 0
+  const landCost = estimateData.landCost || 0
+  const basicReserve = estimateData.basicReserve || 0
+  const priceReserve = estimateData.priceReserve || 0
+  const buildingInvestment = estimateData.buildingInvestment || 0
+  const constructionInterest = estimateData.constructionInterest || 0
+  const totalInvestment = estimateData.totalInvestment || 0
+  
+  // A部分：从estimate_response中获取children数据
+  const partA: InvestmentItem = {
+    id: 'partA',
+    序号: '一',
+    工程或费用名称: '第一部分 工程费用',
+    建设工程费: constructionCost,
+    设备购置费: equipmentCost,
+    安装工程费: installationCost,
+    其它费用: 0,
+    合计: buildingInvestment,
+    占总投资比例: totalInvestment > 0 ? buildingInvestment / totalInvestment : 0,
+    备注: '',
+    children: estimateData.partA?.children || []
+  }
+  
+  // B部分：其它费用（包含土地费用、基本预备费、价差预备费）
+  const partB: InvestmentItem = {
+    id: 'partB',
+    序号: '二',
+    工程或费用名称: '第二部分 其它费用',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: otherCost + landCost + basicReserve + priceReserve,
+    合计: otherCost + landCost + basicReserve + priceReserve,
+    占总投资比例: totalInvestment > 0 ? (otherCost + landCost + basicReserve + priceReserve) / totalInvestment : 0,
+    备注: '',
+    children: [
+      { id: 'B1', 序号: '1', 工程或费用名称: '土地费用', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: landCost, 合计: landCost, 备注: '' },
+      { id: 'B2', 序号: '2', 工程或费用名称: '基本预备费', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: basicReserve, 合计: basicReserve, 备注: '' },
+      { id: 'B3', 序号: '3', 工程或费用名称: '价差预备费', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: priceReserve, 合计: priceReserve, 备注: '' },
+      { id: 'B4', 序号: '4', 工程或费用名称: '其它费用', 建设工程费: 0, 设备购置费: 0, 安装工程费: 0, 其它费用: otherCost, 合计: otherCost, 备注: '' }
+    ]
+  }
+  
+  // C部分：一+二
+  const partC: InvestmentItem = {
+    id: 'partC',
+    序号: '三',
+    工程或费用名称: '第一、二部分合计',
+    建设工程费: constructionCost,
+    设备购置费: equipmentCost,
+    安装工程费: installationCost,
+    其它费用: otherCost + landCost + basicReserve + priceReserve,
+    合计: buildingInvestment + otherCost + landCost + basicReserve + priceReserve,
+    占总投资比例: totalInvestment > 0 ? (buildingInvestment + otherCost + landCost + basicReserve + priceReserve) / totalInvestment : 0,
+    备注: ''
+  }
+  
+  // D部分：建设期利息
+  const partD: InvestmentItem = {
+    id: 'partD',
+    序号: '四',
+    工程或费用名称: '建设期利息',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: 0,
+    合计: constructionInterest,
+    占总投资比例: totalInvestment > 0 ? constructionInterest / totalInvestment : 0,
+    备注: ''
+  }
+  
+  // E部分：三+四 = 项目总投资
+  const partE: InvestmentItem = {
+    id: 'partE',
+    序号: '五',
+    工程或费用名称: '项目总资金',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: 0,
+    合计: totalInvestment - constructionInterest,
+    占总投资比例: totalInvestment > 0 ? (totalInvestment - constructionInterest) / totalInvestment : 0,
+    备注: '不含建设期利息'
+  }
+  
+  // F部分：建设期利息详细信息
+  const partF = {
+    贷款总额: estimateData.loanAmount || 0,
+    年利率: projectData?.loan_interest_rate || 0.049,
+    建设期年限: projectData?.construction_years || 3,
+    分年利息: estimateData.construction_interest_details?.分年数据 || [],
+    合计: constructionInterest,
+    占总投资比例: totalInvestment > 0 ? constructionInterest / totalInvestment : 0
+  }
+  
+  // G部分：总投资
+  const partG: InvestmentItem = {
+    id: 'partG',
+    序号: '六',
+    工程或费用名称: '总投资',
+    建设工程费: 0,
+    设备购置费: 0,
+    安装工程费: 0,
+    其它费用: 0,
+    合计: totalInvestment,
+    占总投资比例: 1,
+    备注: ''
+  }
+  
+  return {
+    projectId: projectData?.id || '',
+    projectName: projectData?.project_name || '',
+    targetInvestment: projectData?.total_investment || 0,
+    constructionYears: projectData?.construction_years || 3,
+    operationYears: projectData?.operation_years || 17,
+    loanRatio: projectData?.loan_ratio || 0,
+    loanInterestRate: projectData?.loan_interest_rate || 0.049,
+    landCost: landCost,
+    partA,
+    partB,
+    partC,
+    partD,
+    partE,
+    partF,
+    partG,
+    iterationCount: estimateData.iterationCount || 8,
+    gapRate: estimateData.gapRate || 0,
+    // 保留建设期利息详情和还本付息计划数据
+    construction_interest_details: estimateData.construction_interest_details,
+    loan_repayment_schedule_simple: estimateData.loan_repayment_schedule_simple,
+    loan_repayment_schedule_detailed: estimateData.loan_repayment_schedule_detailed
+  }
 }
 
 const InvestmentSummary: React.FC = () => {
@@ -85,6 +232,12 @@ const InvestmentSummary: React.FC = () => {
   const autoGenerateRequested = Boolean(locationState?.autoGenerate)
   const [autoGenerateHandled, setAutoGenerateHandled] = useState(false)
   // 禁用响应式布局，使用固定尺寸
+  
+  // 请求取消控制器
+  const abortControllerRef = useRef<AbortController | null>(null)
+  
+  // 标记用户是否手动切换过项目类型（用于区分默认值和用户选择）
+  const userHasManuallySwitched = useRef(false)
   
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -120,6 +273,65 @@ const InvestmentSummary: React.FC = () => {
   const [thirdLevelItems, setThirdLevelItems] = useState<Record<number, any[]>>({})
   const [editingThirdLevelItem, setEditingThirdLevelItem] = useState<{parentIndex: number, itemIndex: number} | null>(null)
   const [thirdLevelItemTemp, setThirdLevelItemTemp] = useState<any>(null)
+  const [showConstructionInterestModal, setShowConstructionInterestModal] = useState(false)
+  const [showLoanRepaymentModal, setShowLoanRepaymentModal] = useState(false)
+  
+  // 项目类型：控制市政公用设施费是否计算（默认农业项目，免市政费）
+  const [projectType, setProjectType] = useState<'agriculture' | 'construction'>('agriculture')
+  
+  // 项目类型变更时重新计算投资估算
+  const handleProjectTypeChange = async (newType: 'agriculture' | 'construction') => {
+    // 标记用户已手动切换过项目类型
+    userHasManuallySwitched.current = true
+    setProjectType(newType)
+    
+    // 立即保存项目类型到数据库（无论是否有估算数据）
+    try {
+      const saveData = {
+        project_id: id!,
+        estimate_data: {
+          projectType: newType
+        }
+      }
+      await investmentApi.save(saveData)
+      console.log(`[handleProjectTypeChange] 已保存项目类型到数据库: ${newType}`)
+    } catch (error) {
+      console.error('保存项目类型失败:', error)
+    }
+    
+    // 如果有估算数据，则重新计算
+    if (estimate) {
+      setGenerating(true)
+      try {
+        const tableItems = extractCurrentTableItems()
+        const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, newType)
+        
+        if (response.success && response.data) {
+          const newEstimate = response.data.summary
+          setEstimate(newEstimate)
+          
+          // 保存到数据库（包含新的projectType和三级子项数据）
+          const estimateWithThirdLevel = {
+            ...newEstimate,
+            thirdLevelItems: thirdLevelItems,
+            projectType: newType
+          }
+          await saveEstimateToDatabase(estimateWithThirdLevel)
+          
+          notifications.show({
+            title: '✨ 重新计算完成',
+            message: `已切换为${newType === 'agriculture' ? '农业' : '建筑'}项目类型，市政公用设施费已${newType === 'agriculture' ? '免除' : '按1.5%计算'}`,
+            color: 'green',
+            autoClose: 4000,
+          })
+        }
+      } catch (error: any) {
+        console.error('切换项目类型失败:', error)
+      } finally {
+        setGenerating(false)
+      }
+    }
+  }
 
   const columnStyles = {
     sequence: { width: '35px', textAlign: 'center' as const },
@@ -158,9 +370,30 @@ const InvestmentSummary: React.FC = () => {
     Object.keys(savedThirdLevelItems).forEach(key => {
       const parentIndex = parseInt(key)
       const thirdItems = savedThirdLevelItems[parentIndex]
+      
+      // 安全检查：确保索引在有效范围内
+      if (parentIndex < 0 || parentIndex >= partAChildren.length) {
+        console.warn(`跳过索引 ${parentIndex}: 超出二级子项数组范围 (0-${partAChildren.length - 1})`)
+        recalculated[parentIndex] = thirdItems
+        return
+      }
+      
       const currentSecondItem = partAChildren[parentIndex]
 
-      if (!thirdItems || thirdItems.length === 0 || !currentSecondItem) {
+      if (!thirdItems || thirdItems.length === 0) {
+        recalculated[parentIndex] = thirdItems
+        return
+      }
+
+      if (!currentSecondItem) {
+        console.warn(`跳过索引 ${parentIndex}: 对应的二级子项不存在`)
+        recalculated[parentIndex] = thirdItems
+        return
+      }
+
+      // 安全检查：确保二级子项有合计属性
+      if (typeof currentSecondItem.合计 !== 'number') {
+        console.warn(`跳过索引 ${parentIndex}: 二级子项缺少有效的合计属性`)
         recalculated[parentIndex] = thirdItems
         return
       }
@@ -244,8 +477,8 @@ const InvestmentSummary: React.FC = () => {
       
       const tableItems = extractCurrentTableItems()
 
-      // 生成投资估算
-      const response = await investmentApi.generateSummary(id!, tableItems)
+      // 生成投资估算（传递当前项目类型，确保市政公用设施费正确计算）
+      const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, projectType)
       
       if (response.success && response.data) {
         // 使用summary作为详细数据
@@ -260,15 +493,16 @@ const InvestmentSummary: React.FC = () => {
             setThirdLevelItems(recalculatedItems)
             console.log('重新生成后已重算三级子项:', recalculatedItems)
             
-            // 保存到数据库（包含重算后的三级子项数据）
+            // 保存到数据库（包含重算后的三级子项数据，同时保存当前项目类型）
             const estimateWithThirdLevel = {
               ...estimateData,
-              thirdLevelItems: recalculatedItems
+              thirdLevelItems: recalculatedItems,
+              projectType: projectType
             }
             saveEstimateToDatabase(estimateWithThirdLevel)
           } else {
-            // 没有三级子项，直接保存
-            saveEstimateToDatabase(estimateData)
+            // 没有三级子项，直接保存（包含当前项目类型）
+            saveEstimateToDatabase({ ...estimateData, projectType: projectType })
           }
         }, 50)
         
@@ -308,66 +542,94 @@ const InvestmentSummary: React.FC = () => {
   const handleRegenerate = async () => {
     if (!project) return
     
-    // 先从数据库加载最新的三级子项数据
-    try {
-      const estimateResponse = await investmentApi.getByProjectId(id!)
-      if (estimateResponse.success && estimateResponse.data?.estimate) {
-        const estimateData = estimateResponse.data.estimate.estimate_data
-        const savedThirdLevelItems = estimateData.thirdLevelItems || {}
-        
-        // 使用保存的三级子项数据重新生成
-        setGenerating(true)
-        
-        try {
-          const tableItems = extractCurrentTableItems()
-          const response = await investmentApi.generateSummary(id!, tableItems)
-          
-          if (response.success && response.data) {
-            const newEstimateData = response.data.summary
-            setEstimate(newEstimateData)
-            
-            // 等待estimate更新后重算三级子项
-            setTimeout(() => {
-              if (Object.keys(savedThirdLevelItems).length > 0) {
-                const recalculatedItems = recalculateThirdLevelItems(savedThirdLevelItems)
-                setThirdLevelItems(recalculatedItems)
-                console.log('刷新后已重算三级子项:', recalculatedItems)
-                
-                // 保留重算后的三级子项数据
-                const estimateWithThirdLevel = {
-                  ...newEstimateData,
-                  thirdLevelItems: recalculatedItems
-                }
-                saveEstimateToDatabase(estimateWithThirdLevel)
-              }
-            }, 50)
-            
-            notifications.show({
-              title: '✨ 刷新成功',
-              message: `投资估算已刷新，迭代${response.data.summary.iterationCount}次`,
-              color: 'green',
-              autoClose: 3000,
-            })
+    // 确定使用的项目类型：
+    // 1. 如果当前状态不是默认值（用户已手动切换过），直接使用当前状态
+    // 2. 如果当前状态是默认值，尝试从数据库加载之前保存的类型
+    // 3. 数据库也没有保存的，使用默认值
+    let effectiveProjectType = projectType
+    
+    // 如果当前使用的是默认值且用户从未手动切换过，才尝试从数据库加载之前保存的类型
+    if (projectType === 'agriculture' && !userHasManuallySwitched.current) {
+      try {
+        const estimateResponse = await investmentApi.getByProjectId(id!)
+        if (estimateResponse.success && estimateResponse.data?.estimate) {
+          const estimateData = estimateResponse.data.estimate.estimate_data
+          if (estimateData?.projectType) {
+            effectiveProjectType = estimateData.projectType
+            setProjectType(effectiveProjectType)
+            console.log(`[handleRegenerate] 从数据库加载项目类型: ${effectiveProjectType}`)
           }
-        } catch (error: any) {
-          console.error('刷新失败:', error)
-          notifications.show({
-            title: '❌ 刷新失败',
-            message: error.response?.data?.error || '请稍后重试',
-            color: 'red',
-            autoClose: 5000,
-          })
-        } finally {
-          setGenerating(false)
         }
-      } else {
-        // 没有保存的数据，直接重新生成
-        await generateEstimate(true)
+      } catch (error) {
+        console.error('加载项目类型失败:', error)
       }
-    } catch (error) {
-      console.error('加载三级子项失败:', error)
-      // 出错时仍然执行刷新，但可能丢失三级子项
-      await generateEstimate(true)
+    }
+    
+    // 使用有效的项目类型重新生成
+    setGenerating(true)
+    
+    try {
+      const tableItems = extractCurrentTableItems()
+      const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, effectiveProjectType)
+      
+      if (response.success && response.data) {
+        const newEstimateData = response.data.summary
+        setEstimate(newEstimateData)
+        
+        // 等待estimate更新后重算三级子项
+        setTimeout(() => {
+          // 重新加载三级子项数据
+          const loadThirdLevelItems = async () => {
+            try {
+              const estimateResponse = await investmentApi.getByProjectId(id!)
+              if (estimateResponse.success && estimateResponse.data?.estimate) {
+                const savedThirdLevelItems = estimateResponse.data.estimate.estimate_data?.thirdLevelItems || {}
+                if (Object.keys(savedThirdLevelItems).length > 0) {
+                  const recalculatedItems = recalculateThirdLevelItems(savedThirdLevelItems)
+                  setThirdLevelItems(recalculatedItems)
+                  console.log('刷新后已重算三级子项:', recalculatedItems)
+                  
+                  // 保留重算后的三级子项数据，同时保存当前的项目类型
+                  const estimateWithThirdLevel = {
+                    ...newEstimateData,
+                    thirdLevelItems: recalculatedItems,
+                    projectType: effectiveProjectType
+                  }
+                  saveEstimateToDatabase(estimateWithThirdLevel)
+                } else {
+                  // 没有三级子项，直接保存
+                  saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
+                }
+              } else {
+                // 没有保存的数据，直接保存当前数据
+                saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
+              }
+            } catch (e) {
+              console.error('加载三级子项失败:', e)
+              // 出错时直接保存当前数据
+              saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
+            }
+          }
+          loadThirdLevelItems()
+        }, 50)
+        
+        notifications.show({
+          title: '✨ 刷新成功',
+          message: `投资估算已刷新，迭代${response.data.summary.iterationCount}次`,
+          color: 'green',
+          autoClose: 3000,
+        })
+      }
+    } catch (error: any) {
+      console.error('刷新失败:', error)
+      notifications.show({
+        title: '❌ 刷新失败',
+        message: error.response?.data?.error || '请稍后重试',
+        color: 'red',
+        autoClose: 5000,
+      })
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -379,17 +641,18 @@ const InvestmentSummary: React.FC = () => {
     try {
       const tableItems = extractCurrentTableItems()
 
-      // 生成投资估算
-      const response = await investmentApi.generateSummary(id!, tableItems)
+      // 生成投资估算（传递当前项目类型，确保市政公用设施费正确计算）
+      const response = await investmentApi.generateSummary(id!, tableItems, undefined, undefined, projectType)
       
       if (response.success && response.data) {
         const estimateData = response.data.summary
         setEstimate(estimateData)
         
-        // 使用传入的三级子项数据（而不是依赖React状态）
+        // 使用传入的三级子项数据（而不是依赖React状态），同时保存当前项目类型
         const estimateWithThirdLevel = {
           ...estimateData,
-          thirdLevelItems: existingThirdLevelItems
+          thirdLevelItems: existingThirdLevelItems,
+          projectType: projectType
         }
         await saveEstimateToDatabase(estimateWithThirdLevel)
         
@@ -603,15 +866,15 @@ const InvestmentSummary: React.FC = () => {
       
       // F部分 - 建设期利息（带详细说明）
       const loanDetails = [
-        `贷款总额: ${(Number(estimate.partF.贷款总额) || 0).toFixed(2)}万元 (占总投资${((Number(estimate.partF.贷款总额) || 0) / (estimate.partG.合计 || 1) * 100).toFixed(2)}%)`,
-        `年利率: ${((estimate.partF.年利率 || 0) * 100).toFixed(1)}%`,
-        `建设期: ${estimate.partF.建设期年限}年`
+        `贷款总额: ${(Number(estimate?.partF?.贷款总额 || 0) || 0).toFixed(2)}万元 (占总投资${((Number(estimate?.partF?.贷款总额 || 0) || 0) / (estimate.partG?.合计 || 1) * 100).toFixed(2)}%)`,
+        `年利率: ${((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}%`,
+        `建设期: ${estimate?.partF?.建设期年限 || 0}年`
       ]
-      if (estimate.partF.分年利息?.length > 0) {
+      if (estimate?.partF?.分年利息?.length > 0) {
         loanDetails.push('各年利息计算:')
-        estimate.partF.分年利息.forEach(year => {
+        estimate?.partF?.分年利息?.forEach(year => {
           loanDetails.push(
-            `第${year.年份}年: (${year.期初本金累计.toFixed(2)} + ${year.当期借款金额.toFixed(2)} ÷ 2) × ${((estimate.partF.年利率 || 0) * 100).toFixed(1)}% = ${year.当期利息.toFixed(2)}万元`
+            `第${year.年份}年: (${year.期初本金累计.toFixed(2)} + ${year.当期借款金额.toFixed(2)} ÷ 2) × ${((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}% = ${year.当期利息.toFixed(2)}万元`
           )
         })
       }
@@ -622,28 +885,28 @@ const InvestmentSummary: React.FC = () => {
         '—',
         '—',
         '—',
-        estimate.partF.合计,
+        estimate?.partF?.合计 || 0,
         '—',
         '—',
         '—',
-        totalInvestment > 0 ? `${(((estimate.partF.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
+        totalInvestment > 0 ? `${(((estimate?.partF?.合计 || 0) / totalInvestment) * 100).toFixed(2)}%` : '',
         loanDetails.join('\n')
       ])
       
       // G部分
       data.push([
-        estimate.partG.序号,
-        estimate.partG.工程或费用名称,
+        estimate.partG?.序号,
+        estimate.partG?.工程或费用名称,
         '—',
         '—',
         '—',
         '—',
-        estimate.partG.合计,
+        estimate.partG?.合计,
         '—',
         '—',
         '—',
         '100.00%',
-        estimate.partG.备注 || ''
+        estimate.partG?.备注 || ''
       ])
       
       // 创建工作表
@@ -875,35 +1138,109 @@ const InvestmentSummary: React.FC = () => {
     if (id) {
       loadProjectAndEstimate()
     }
+    
+    // 组件卸载时取消所有请求
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [id])
 
   const loadProjectAndEstimate = async () => {
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // 创建新的AbortController
+    abortControllerRef.current = new AbortController()
+    
     setLoading(true)
+    console.log(`[数据加载] 开始加载项目${id}的投资估算数据`)
+    
     try {
       // 加载项目信息
       const projectResponse = await projectApi.getById(id!)
       if (projectResponse.success && projectResponse.data?.project) {
         const projectData = projectResponse.data.project
         setProject(projectData)
+        console.log(`[数据加载] 项目信息加载成功:`, projectData.project_name)
         
         // 先检查是否已有投资估算（无论是否autoGenerateRequested，都需要先加载已有数据）
-        const estimateResponse = await investmentApi.getByProjectId(id!)
+        console.log(`[数据加载] 开始加载投资估算数据...`)
+        const estimateResponse = await investmentApi.getByProjectId(id!, {
+          signal: abortControllerRef.current.signal,
+          useCache: false // 禁用缓存，直接从服务器获取
+        })
+        
+        // 添加调试日志
+        console.log(`[数据加载] API响应:`, JSON.stringify(estimateResponse, null, 2))
+        
+        // 检查是否有数据库连接错误
+        if (!estimateResponse.success && estimateResponse.error && estimateResponse.error.includes('数据库')) {
+          console.error('[数据加载] 数据库连接错误:', estimateResponse.error)
+          notifications.show({
+            title: '❌ 数据库连接错误',
+            message: '无法连接到数据库，请稍后重试',
+            color: 'red',
+            autoClose: 6000,
+          })
+          return
+        }
+        
         let existingThirdLevelItems: Record<number, any[]> = {}
         
         if (estimateResponse.success && estimateResponse.data?.estimate) {
-          // 使用estimate_data字段作为详细数据
-          const estimateData = estimateResponse.data.estimate.estimate_data
+          console.log(`[数据加载] 找到投资估算数据`)
+          // 使用estimate_data字段作为详细数据，兼容不同的数据结构
+          let estimateData = estimateResponse.data.estimate.estimate_data
+          
+          console.log(`[数据加载] estimateData:`, estimateData ? '存在' : '不存在')
+          console.log(`[数据加载] estimateData.partA:`, estimateData?.partA ? '存在' : '不存在')
+          console.log(`[数据加载] estimateData.partG:`, estimateData?.partG ? '存在' : '不存在')
+          
+          // 如果estimate_data不存在，尝试直接使用estimate
+          if (!estimateData) {
+            estimateData = estimateResponse.data.estimate
+          }
+          
+          // 数据完整性检查 - 关键修复：如果estimateData为空，则需要从简化的estimate_data构建完整结构
+          if (!estimateData) {
+            console.log('[数据加载] 投资估算数据为空，将自动生成')
+            // 从简化的estimate_data构建完整的表格数据结构
+            estimateData = buildFullEstimateStructure(estimateData, projectData)
+            console.log('[数据加载] 已构建完整结构，partA.children长度:', estimateData?.partA?.children?.length)
+          } else {
+            console.log('[数据加载] 投资估算数据完整')
+          }
+          
+          console.log(`[数据加载] 投资估算数据加载成功，迭代次数: ${estimateData?.iterationCount || '未知'}`)
           
           // 恢复三级子项数据（如果存在）- 先保存到局部变量
           if (estimateData.thirdLevelItems) {
             existingThirdLevelItems = estimateData.thirdLevelItems
             setThirdLevelItems(existingThirdLevelItems)
-            console.log('已恢复三级子项数据:', existingThirdLevelItems)
+            console.log(`[数据加载] 已恢复${Object.keys(existingThirdLevelItems).length}个三级子项数据`)
           }
           
-          // 如果需要自动生成，则重新生成（但保留三级子项）
-          if (autoGenerateRequested && !autoGenerateHandled) {
+          // 恢复项目类型（如果存在）- 优先使用数据库中的值
+          if (estimateData.projectType) {
+            setProjectType(estimateData.projectType)
+            console.log(`[数据加载] 已恢复项目类型: ${estimateData.projectType}`)
+          } else {
+            console.log(`[数据加载] 未找到保存的项目类型，使用默认值: agriculture`)
+          }
+
+          
+          // 检查是否需要自动生成（修复逻辑：只有确实没有数据时才自动生成）
+          const shouldAutoGenerate = autoGenerateRequested &&
+                                !autoGenerateHandled &&
+                                !estimateData
+          
+          if (shouldAutoGenerate) {
             setAutoGenerateHandled(true)
+            console.log(`[数据加载] 确实没有估算数据，开始自动生成投资估算（保留三级子项）`)
             // 直接在这里实现生成逻辑（保留三级子项）
             setGenerating(true)
             try {
@@ -914,10 +1251,11 @@ const InvestmentSummary: React.FC = () => {
                 installation_cost: item.安装工程费 || 0,
                 other_cost: item.其它费用 || 0,
                 remark: item.备注 || ''
-              }))
+              })) || []
               
               const landCostFromProject = projectData.land_cost ?? 0
-              const response = await investmentApi.generateSummary(id!, tableItems, undefined, landCostFromProject)
+              // 生成投资估算（传递当前项目类型，确保市政公用设施费正确计算）
+              const response = await investmentApi.generateSummary(id!, tableItems, undefined, landCostFromProject, projectType)
               if (response.success && response.data) {
                 const newEstimateData = response.data.summary
                 // 使用 setTimeout 确保状态更新触发渲染
@@ -932,18 +1270,41 @@ const InvestmentSummary: React.FC = () => {
                   project_id: id!,
                   estimate_data: estimateWithThirdLevel
                 })
+                console.log(`[数据加载] 自动生成完成，已保存三级子项`)
               }
-            } catch (e) {
-              console.error('生成估算失败:', e)
+            } catch (e: any) {
+              // 忽略被取消的请求
+              if (e.name !== 'AbortError') {
+                console.error('[数据加载] 生成估算失败:', e)
+                notifications.show({
+                  title: '❌ 生成失败',
+                  message: '自动生成投资估算失败，请稍后重试',
+                  color: 'red',
+                  autoClose: 6000,
+                })
+              }
             } finally {
               setGenerating(false)
             }
             return
+          } else if (autoGenerateRequested && !autoGenerateHandled) {
+            console.log(`[数据加载] 已有完整估算数据，跳过自动生成`)
+            setAutoGenerateHandled(true)
+          }
+          
+          // 确保从数据库获取的额外字段被合并到estimateData中
+          if (estimateResponse.data.estimate) {
+            // 合并数据库中保存的建设期利息详情和还本付息计划数据
+            estimateData.construction_interest_details = estimateResponse.data.estimate.construction_interest_details;
+            estimateData.loan_repayment_schedule_simple = estimateResponse.data.estimate.loan_repayment_schedule_simple;
+            estimateData.loan_repayment_schedule_detailed = estimateResponse.data.estimate.loan_repayment_schedule_detailed;
           }
           
           // 使用 setTimeout 确保状态更新触发渲染
           setTimeout(() => setEstimate(estimateData), 0)
+          console.log(`[数据加载] 投资估算数据已设置到组件状态`)
         } else {
+          console.log(`[数据加载] 未找到投资估算数据，${autoGenerateRequested ? '将自动生成' : '显示空状态'}`)
           // 没有估算，自动生成（传递项目数据）
           if (autoGenerateRequested && !autoGenerateHandled) {
             setAutoGenerateHandled(true)
@@ -951,22 +1312,65 @@ const InvestmentSummary: React.FC = () => {
           await generateEstimate(false, projectData)
         }
       } else {
+        const errorMsg = projectResponse.error || '加载项目失败'
+        console.error(`[数据加载] 项目信息加载失败:`, errorMsg)
         notifications.show({
           title: '❌ 加载失败',
-          message: projectResponse.error || '加载项目失败',
+          message: errorMsg,
           color: 'red',
           autoClose: 6000,
         })
       }
     } catch (error: any) {
-      notifications.show({
-        title: '❌ 加载失败',
-        message: error.response?.data?.error || '加载项目失败',
-        color: 'red',
-        autoClose: 6000,
-      })
+      // 忽略被取消的请求
+      if (error.name !== 'AbortError') {
+        const errorMsg = error.response?.data?.error || error.message || '加载项目失败'
+        console.error(`[数据加载] 数据加载异常:`, error)
+        
+        // 尝试从缓存恢复数据（降级策略）
+        const cacheKey = `investment:${id}`
+        const cachedData = (window as any).dataCache?.get?.(cacheKey)
+        
+        if (cachedData) {
+          console.log(`[数据加载] 从缓存恢复数据成功`)
+          notifications.show({
+            title: '⚠️ 使用缓存数据',
+            message: '网络异常，已从缓存恢复数据',
+            color: 'orange',
+            autoClose: 4000,
+          })
+          
+          if (cachedData.success && cachedData.data?.estimate) {
+            let estimateData = cachedData.data.estimate.estimate_data
+            
+            // 确保从数据库获取的额外字段被合并到estimateData中
+            if (cachedData.data.estimate) {
+              // 合并数据库中保存的建设期利息详情和还本付息计划数据
+              if (!estimateData) {
+                estimateData = cachedData.data.estimate
+              }
+              estimateData.construction_interest_details = cachedData.data.estimate.construction_interest_details;
+              estimateData.loan_repayment_schedule_simple = cachedData.data.estimate.loan_repayment_schedule_simple;
+              estimateData.loan_repayment_schedule_detailed = cachedData.data.estimate.loan_repayment_schedule_detailed;
+            }
+            
+            if (estimateData?.thirdLevelItems) {
+              setThirdLevelItems(estimateData.thirdLevelItems)
+            }
+            setTimeout(() => setEstimate(estimateData), 0)
+          }
+        } else {
+          notifications.show({
+            title: '❌ 加载失败',
+            message: errorMsg,
+            color: 'red',
+            autoClose: 6000,
+          })
+        }
+      }
     } finally {
       setLoading(false)
+      console.log(`[数据加载] 数据加载流程完成`)
     }
   }
 
@@ -1032,10 +1436,11 @@ const InvestmentSummary: React.FC = () => {
         // 强制在下一个事件循环中更新状态，确保渲染
         setTimeout(() => setEstimate(estimateData), 0)
         
-        // 保存到数据库（包含三级子项数据）
+        // 保存到数据库（包含三级子项数据和当前项目类型）
         const estimateWithThirdLevel = {
           ...estimateData,
-          thirdLevelItems: thirdLevelItems
+          thirdLevelItems: thirdLevelItems,
+          projectType: projectType
         }
         await saveEstimateToDatabase(estimateWithThirdLevel)
         
@@ -1838,30 +2243,43 @@ const InvestmentSummary: React.FC = () => {
     setShowSubdivideModal(true)
   }
 
-  // 保存估算数据到数据库
+  // 保存估算数据到数据库（包含projectType）
   const saveEstimateToDatabase = async (estimateData: any) => {
     try {
       console.log('=== 开始保存估算数据到数据库 ===')
       console.log('项目ID:', id)
       console.log('估算数据:', estimateData)
       console.log('三级子项数据:', estimateData.thirdLevelItems)
+      console.log('项目类型:', projectType)
       
-      const response = await investmentApi.save({
+      // 确保数据结构正确，并包含projectType
+      const saveData = {
         project_id: id!,
-        estimate_data: estimateData
-      })
+        estimate_data: {
+          ...estimateData,
+          projectType: estimateData.projectType ?? projectType  // 保存项目类型（优先使用传入的值）
+        }
+      }
+      
+      console.log('保存到数据库的数据结构:', saveData)
+      
+      // 使用正确的API调用格式
+      const response = await investmentApi.save(saveData)
       
       if (!response.success) {
         console.error('保存估算数据失败:', response.error)
+        throw new Error(response.error || '保存失败')
       } else {
         console.log('✅ 估算数据已保存到数据库')
         console.log('保存的数据包含三级子项:', !!estimateData.thirdLevelItems)
+        console.log('保存的项目类型:', projectType)
         if (estimateData.thirdLevelItems) {
           console.log('三级子项条目数:', Object.keys(estimateData.thirdLevelItems).length)
         }
       }
     } catch (error) {
       console.error('❌ 保存估算数据失败:', error)
+      throw error
     }
   }
 
@@ -2038,10 +2456,11 @@ const InvestmentSummary: React.FC = () => {
           
           console.log('三级子项已按比例调整，新的三级子项数据:', newThirdLevelItems)
           
-          // 保存三级子项数据到数据库
+          // 保存三级子项数据到数据库（包含当前项目类型）
           const estimateWithThirdLevel = {
             ...newEstimate,
-            thirdLevelItems: newThirdLevelItems
+            thirdLevelItems: newThirdLevelItems,
+            projectType: projectType
           }
           await saveEstimateToDatabase(estimateWithThirdLevel)
           
@@ -2053,10 +2472,11 @@ const InvestmentSummary: React.FC = () => {
             autoClose: 5000,
           })
         } else {
-          // 保存三级子项数据到数据库
+          // 保存三级子项数据到数据库（包含当前项目类型）
           const estimateWithThirdLevel = {
             ...newEstimate,
-            thirdLevelItems: thirdLevelItems
+            thirdLevelItems: thirdLevelItems,
+            projectType: projectType
           }
           await saveEstimateToDatabase(estimateWithThirdLevel)
           
@@ -2088,7 +2508,7 @@ const InvestmentSummary: React.FC = () => {
 
   // 应用百分比调整
   const applyPercentageAdjustment = (percentage: number) => {
-    if (!singleItemTemp || !editingSingleItemIndex === null) return
+    if (!singleItemTemp || editingSingleItemIndex === null) return
     
     // 获取原始值（从editingSubItems中）
     const originalItem = editingSubItems[editingSingleItemIndex!]
@@ -2158,8 +2578,8 @@ const InvestmentSummary: React.FC = () => {
       return
     }
     setEditingLandCost({
-      amount: landItem.合计 || 0,
-      remark: landItem.备注 || ''
+      amount: landItem?.合计 || 0,
+      remark: landItem?.备注 || ''
     })
     setShowEditLandCost(true)
   }
@@ -2209,8 +2629,8 @@ const InvestmentSummary: React.FC = () => {
       })
       return
     }
-    const buildingInvestment = estimate.partE.合计 || 0
-    const currentLoan = estimate.partF.贷款总额 || 0
+    const buildingInvestment = estimate?.partE?.合计 || 0
+    const currentLoan = estimate?.partF?.贷款总额 || 0
     const projectRatio = (project?.loan_ratio || 0) * 100
     
     setEditingLoan({
@@ -2226,7 +2646,7 @@ const InvestmentSummary: React.FC = () => {
   const calculateRoundedLoanAmount = () => {
     if (!estimate) return 0
     
-    const totalInvestment = estimate.partG.合计 || 0
+    const totalInvestment = estimate.partG?.合计 || 0
     let amount = 0
     
     if (editingLoan.mode === 'amount') {
@@ -2582,11 +3002,12 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={async () => {
                 if (estimate && Math.abs(estimate.gapRate) < 1.5) {
-                  // 自动保存投资估算数据
+                  // 自动保存投资估算数据（包含当前项目类型）
                   try {
                     const estimateWithThirdLevel = {
                       ...estimate,
-                      thirdLevelItems: thirdLevelItems
+                      thirdLevelItems: thirdLevelItems,
+                      projectType: projectType
                     }
                     await saveEstimateToDatabase(estimateWithThirdLevel)
                     console.log('✅ 跳转前已自动保存投资估算数据')
@@ -2670,6 +3091,7 @@ const InvestmentSummary: React.FC = () => {
           ) : (
             <Stack gap="md">
               {/* 迭代信息 */}
+              {estimate ? (
 <Card 
   shadow="sm" 
   padding="md" 
@@ -2682,12 +3104,14 @@ const InvestmentSummary: React.FC = () => {
   <Group gap="30px" align="center" justify="start" style={{ width: '100%' }}>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>迭代次数</Text>
-      <Text size="lg" fw={600} c="#165DFF">{estimate.iterationCount} 次</Text>
+      <Text size="lg" fw={600} c="#165DFF">{estimate?.iterationCount || 0} 次</Text>
     </div>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>差距率</Text>
-      <Text size="lg" fw={600} c={(project?.total_investment ?? 0) > (estimate.partG.合计 || 0) ? '#00C48C' : '#FF4D4F'}>
-        {(project?.total_investment ?? 0) > (estimate.partG.合计 || 0) && estimate.gapRate < 0 ? '' : (project?.total_investment ?? 0) > (estimate.partG.合计 || 0) ? '-' : '+'}{Math.abs(estimate.gapRate)?.toFixed(2) || 'N/A'}%
+      <Text size="lg" fw={600} c={(project?.total_investment ?? 0) > (estimate?.partG?.合计 || 0) ? '#00C48C' : '#FF4D4F'}>
+        {estimate?.gapRate !== undefined && estimate?.gapRate !== null 
+          ? `${estimate.gapRate < 0 ? '-' : '+'}${Math.abs(estimate.gapRate).toFixed(2)}%`
+          : 'N/A'}
       </Text>
     </div>
     <div style={{ textAlign: 'center' }}>
@@ -2696,14 +3120,84 @@ const InvestmentSummary: React.FC = () => {
     </div>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
-      <Text size="lg" fw={600} c="#165DFF">{estimate.partG.合计?.toFixed(2) || 0} 万元</Text>
+      <Text size="lg" fw={600} c="#165DFF">{estimate?.partG?.合计?.toFixed(2) || 0} 万元</Text>
     </div>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>建设期利息</Text>
-      <Text size="lg" fw={600} c="#1D2129">{estimate.partF.合计?.toFixed(2) || 0} 万元</Text>
+      <Text size="lg" fw={600} c="#1D2129">{estimate?.partF?.合计?.toFixed(2) || 0} 万元</Text>
+    </div>
+    <div style={{ textAlign: 'center' }}>
+      <Tooltip label="查看建设期利息详情" position="top" withArrow>
+        <ActionIcon
+          onClick={() => setShowConstructionInterestModal(true)}
+          size={32}
+          radius={32}
+          style={{
+            backgroundColor: '#F0F5FF',
+            color: '#165DFF',
+            border: '1px solid #CCE0FF',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+            transition: 'all 0.2s ease',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%'
+          }}
+        >
+          <IconInfoCircle size={18} stroke={1.5} />
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip label="查看还本付息计划简表（等额本金）" position="top" withArrow>
+        <ActionIcon
+          onClick={() => setShowLoanRepaymentModal(true)}
+          size={32}
+          radius={32}
+          style={{
+            backgroundColor: '#F0F5FF',
+            color: '#52C41A',
+            border: '1px solid #CCE0FF',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+            transition: 'all 0.2s ease',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            marginLeft: '10px'
+          }}
+        >
+          <IconCurrencyDollar size={18} stroke={1.5} />
+        </ActionIcon>
+      </Tooltip>
+    </div>
+    
+    {/* 项目类型选择 - 控制市政公用设施费 */}
+    <div style={{ textAlign: 'center' }}>
+      <Text size="xs" c="#86909C" mb={4}>项目类型</Text>
+      <Group gap="xs" justify="center" align="center">
+        <Text size="sm" c={projectType === 'agriculture' ? '#52C41A' : '#4E5969'} fw={projectType === 'agriculture' ? 600 : 400}>农业</Text>
+        <Switch
+          size="xs"
+          checked={projectType === 'construction'}
+          onChange={(e) => handleProjectTypeChange(e.currentTarget.checked ? 'construction' : 'agriculture')}
+          disabled={generating}
+          color="#165DFF"
+          styles={{
+            track: {
+              backgroundColor: projectType === 'construction' ? '#165DFF' : '#E5E6EB',
+            }
+          }}
+        />
+        <Text size="sm" c={projectType === 'construction' ? '#165DFF' : '#4E5969'} fw={projectType === 'construction' ? 600 : 400}>建筑</Text>
+      </Group>
+      <Text size="xs" c={projectType === 'agriculture' ? '#52C41A' : '#165DFF'} mt={4} fw={500}>
+        {projectType === 'agriculture' ? '免市政费' : '市政费1.5%'}
+      </Text>
     </div>
   </Group>
 </Card>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#86909C' }}>
+                  <Text>正在加载投资估算数据...</Text>
+                </div>
+              )}
 
               {/* 投资估算简表 - 完整表格 */}
               <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
@@ -2711,145 +3205,146 @@ const InvestmentSummary: React.FC = () => {
   // 临时注释：隐藏投资估算简表标题
   <Text size="sm" c="#1D2129" fw={600} mb="md">投资估算简表</Text>
   */}
-        <Table withTableBorder withColumnBorders style={{ fontSize: '13px', tableLayout: 'fixed', width: '100%' }}>
-          <Table.Thead>
-            <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
-              <Table.Th style={{ ...columnStyles.sequence, minWidth: columnStyles.sequence.width, maxWidth: columnStyles.sequence.width }}>序号</Table.Th>
-              <Table.Th style={{ ...columnStyles.name, textAlign: 'center', minWidth: columnStyles.name.width, maxWidth: columnStyles.name.width }}>工程或费用名称</Table.Th>
-              <Table.Th style={{ ...columnStyles.construction, minWidth: columnStyles.construction.width, maxWidth: columnStyles.construction.width }}>建设工程费<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.equipment, minWidth: columnStyles.equipment.width, maxWidth: columnStyles.equipment.width }}>设备购置费<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.installation, minWidth: columnStyles.installation.width, maxWidth: columnStyles.installation.width }}>安装工程费<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.other, minWidth: columnStyles.other.width, maxWidth: columnStyles.other.width }}>其它费用<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.total, minWidth: columnStyles.total.width, maxWidth: columnStyles.total.width }}>合计<br />（万元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.unit, minWidth: columnStyles.unit.width, maxWidth: columnStyles.unit.width }}>单位</Table.Th>
-              <Table.Th style={{ ...columnStyles.quantity, minWidth: columnStyles.quantity.width, maxWidth: columnStyles.quantity.width }}>数量</Table.Th>
-              <Table.Th style={{ ...columnStyles.unitPrice, minWidth: columnStyles.unitPrice.width, maxWidth: columnStyles.unitPrice.width }}>单位价值<br />（元）</Table.Th>
-              <Table.Th style={{ ...columnStyles.ratio, minWidth: columnStyles.ratio.width, maxWidth: columnStyles.ratio.width }}>占总投资<br />比例</Table.Th>
-              <Table.Th style={{ ...columnStyles.remark, textAlign: 'center', minWidth: columnStyles.remark.width, maxWidth: columnStyles.remark.width }}>备注</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
+                {estimate && estimate.partA && estimate.partB && estimate.partC && estimate.partD && estimate.partE && estimate.partG ? (
+                  <Table withTableBorder withColumnBorders style={{ fontSize: '13px', tableLayout: 'fixed', width: '100%' }}>
+                    <Table.Thead>
+                      <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
+                        <Table.Th style={{ ...columnStyles.sequence, minWidth: columnStyles.sequence.width, maxWidth: columnStyles.sequence.width }}>序号</Table.Th>
+                        <Table.Th style={{ ...columnStyles.name, textAlign: 'center', minWidth: columnStyles.name.width, maxWidth: columnStyles.name.width }}>工程或费用名称</Table.Th>
+                        <Table.Th style={{ ...columnStyles.construction, minWidth: columnStyles.construction.width, maxWidth: columnStyles.construction.width }}>建设工程费<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.equipment, minWidth: columnStyles.equipment.width, maxWidth: columnStyles.equipment.width }}>设备购置费<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.installation, minWidth: columnStyles.installation.width, maxWidth: columnStyles.installation.width }}>安装工程费<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.other, minWidth: columnStyles.other.width, maxWidth: columnStyles.other.width }}>其它费用<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.total, minWidth: columnStyles.total.width, maxWidth: columnStyles.total.width }}>合计<br />（万元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.unit, minWidth: columnStyles.unit.width, maxWidth: columnStyles.unit.width }}>单位</Table.Th>
+                        <Table.Th style={{ ...columnStyles.quantity, minWidth: columnStyles.quantity.width, maxWidth: columnStyles.quantity.width }}>数量</Table.Th>
+                        <Table.Th style={{ ...columnStyles.unitPrice, minWidth: columnStyles.unitPrice.width, maxWidth: columnStyles.unitPrice.width }}>单位价值<br />（元）</Table.Th>
+                        <Table.Th style={{ ...columnStyles.ratio, minWidth: columnStyles.ratio.width, maxWidth: columnStyles.ratio.width }}>占总投资<br />比例</Table.Th>
+                        <Table.Th style={{ ...columnStyles.remark, textAlign: 'center', minWidth: columnStyles.remark.width, maxWidth: columnStyles.remark.width }}>备注</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
 
-                  <Table.Tbody>
-                    {/* A部分主行 */}
-                    <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
-                      <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partA.序号}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.name }}>{estimate.partA.工程或费用名称}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.construction }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.equipment }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.installation }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.other }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
-                        {estimate.partA.合计?.toFixed(2) || '0.00'}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                                <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG.合计 > 0
-                          ? `${(((estimate.partA.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
-                          : ''}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.remark }}>{estimate.partA.备注}</Table.Td>
-                    </Table.Tr>
-                    {/* A部分子项 */}
-                    {estimate.partA.children?.map((item, index) => (
-                      <React.Fragment key={`A-${index}`}>
-                        {/* 二级子项 */}
-                        <Table.Tr>
-                          <Table.Td style={{ ...columnStyles.sequence }}>{item.序号}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.name }}>{item.工程或费用名称}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.construction }}>{item.建设工程费?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.equipment }}>{item.设备购置费?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.installation }}>{item.安装工程费?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.total }}>{item.合计?.toFixed(2) || '0.00'}</Table.Td>
-                          <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
-                          <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
-                          <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                          <Table.Td style={{ ...columnStyles.ratio }}>
-                            {estimate.partG?.合计 && estimate.partG.合计 > 0
-                              ? `${(((item.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
-                              : ''}
-                          </Table.Td>
-                          <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>{item.备注 || ''}</Table.Td>
-                        </Table.Tr>
-
-                        {/* 三级子项 */}
-                        {thirdLevelItems[index]?.map((subItem: any, subIndex: number) => {
-                          const totalPrice = (subItem.quantity * subItem.unit_price) / 10000
-                          const constructionCost = totalPrice * subItem.construction_ratio
-                          const equipmentCost = totalPrice * subItem.equipment_ratio
-                          const installationCost = totalPrice * subItem.installation_ratio
-                          const otherCost = totalPrice * subItem.other_ratio
-                          
-                          return (
-                            <Table.Tr key={`A-${index}-${subIndex}`}>
-                              <Table.Td style={{ ...columnStyles.sequence, fontSize: '11px' }}>{subIndex + 1}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.name, fontSize: '11px', paddingLeft: '24px' }}>{subItem.name}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.construction, fontSize: '11px' }}>{constructionCost > 0 ? constructionCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.equipment, fontSize: '11px' }}>{equipmentCost > 0 ? equipmentCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.installation, fontSize: '11px' }}>{installationCost > 0 ? installationCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.other, fontSize: '11px' }}>{otherCost > 0 ? otherCost.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.total, fontSize: '11px' }}>{totalPrice > 0 ? totalPrice.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.unit, fontSize: '11px' }}>{subItem.unit || ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.quantity, fontSize: '11px' }}>{formatQuantity(subItem.quantity, subItem.unit)}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.unitPrice, fontSize: '11px' }}>{subItem.unit_price > 0 ? subItem.unit_price.toFixed(2) : ''}</Table.Td>
-                              <Table.Td style={{ ...columnStyles.ratio, fontSize: '11px' }}>
-                                {estimate.partG?.合计 && estimate.partG.合计 > 0
-                                  ? `${((totalPrice / estimate.partG.合计) * 100).toFixed(2)}%`
-                                  : ''}
-                              </Table.Td>
-                              <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}></Table.Td>
-                            </Table.Tr>
-                          )
-                        })}
-                      </React.Fragment>
-                    ))}
-
-                    {/* B部分主行 */}
-                    <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
-                      <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partB.序号}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.name }}>{estimate.partB.工程或费用名称}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.construction }}>0.00</Table.Td>
-                      <Table.Td style={{ ...columnStyles.equipment }}>0.00</Table.Td>
-                      <Table.Td style={{ ...columnStyles.installation }}>0.00</Table.Td>
-                      <Table.Td style={{ ...columnStyles.other }}>{calculatePartBOtherTotal().toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
-                        {typeof estimate.partB.合计 === 'number' ? estimate.partB.合计.toFixed(2) : '0.00'}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                      <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG.合计 > 0
-                          ? `${(((estimate.partB.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
-                          : ''}
-                      </Table.Td>
-                      <Table.Td style={{ ...columnStyles.remark }}>{estimate.partB.备注}</Table.Td>
-                    </Table.Tr>
-                    {/* B部分子项 */}
-                    {estimate.partB.children?.map((item, index) => (
-                      <Table.Tr key={`B-${index}`}>
-                        <Table.Td style={{ ...columnStyles.sequence }}>{item.序号}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.name }}>{item.工程或费用名称}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.construction }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.equipment }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.installation }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || item.合计?.toFixed(2) || '0.00'}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.total }}>
-                          {typeof item.合计 === 'number' ? item.合计.toFixed(2) : '0.00'}
+                    <Table.Tbody>
+                      {/* A部分主行 */}
+                      <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
+                        <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partA.序号}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.name }}>{estimate.partA.工程或费用名称}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.construction }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.equipment }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.installation }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.other }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
+                          {estimate.partA.合计?.toFixed(2) || '0.00'}
                         </Table.Td>
                         <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
                         <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                         <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                        <Table.Td style={{ ...columnStyles.ratio }}>
-                          {estimate.partG?.合计 && estimate.partG.合计 > 0
-                            ? `${(((item.合计 || item.其它费用 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                                  <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
+                          {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                            ? `${(((estimate.partA.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
                             : ''}
                         </Table.Td>
-                        <Table.Td style={{ ...columnStyles.remark, fontSize: '13px' }}>{item.备注}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.remark }}>{estimate.partA.备注}</Table.Td>
                       </Table.Tr>
-                    ))}
+                      {/* A部分子项 */}
+                      {estimate.partA.children?.map((item, index) => (
+                        <React.Fragment key={`A-${index}`}>
+                          {/* 二级子项 */}
+                          <Table.Tr>
+                            <Table.Td style={{ ...columnStyles.sequence }}>{item.序号}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.name }}>{item.工程或费用名称}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.construction }}>{item.建设工程费?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.equipment }}>{item.设备购置费?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.installation }}>{item.安装工程费?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.total }}>{item.合计?.toFixed(2) || '0.00'}</Table.Td>
+                            <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
+                            <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
+                            <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
+                            <Table.Td style={{ ...columnStyles.ratio }}>
+                              {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                                ? `${(((item.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
+                                : ''}
+                            </Table.Td>
+                            <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>{item.备注 || ''}</Table.Td>
+                          </Table.Tr>
+
+                          {/* 三级子项 */}
+                          {thirdLevelItems[index]?.map((subItem: any, subIndex: number) => {
+                            const totalPrice = (subItem.quantity * subItem.unit_price) / 10000
+                            const constructionCost = totalPrice * subItem.construction_ratio
+                            const equipmentCost = totalPrice * subItem.equipment_ratio
+                            const installationCost = totalPrice * subItem.installation_ratio
+                            const otherCost = totalPrice * subItem.other_ratio
+                            
+                            return (
+                              <Table.Tr key={`A-${index}-${subIndex}`}>
+                                <Table.Td style={{ ...columnStyles.sequence, fontSize: '11px' }}>{subIndex + 1}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.name, fontSize: '11px', paddingLeft: '24px' }}>{subItem.name}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.construction, fontSize: '11px' }}>{constructionCost > 0 ? constructionCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.equipment, fontSize: '11px' }}>{equipmentCost > 0 ? equipmentCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.installation, fontSize: '11px' }}>{installationCost > 0 ? installationCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.other, fontSize: '11px' }}>{otherCost > 0 ? otherCost.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.total, fontSize: '11px' }}>{totalPrice > 0 ? totalPrice.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.unit, fontSize: '11px' }}>{subItem.unit || ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.quantity, fontSize: '11px' }}>{formatQuantity(subItem.quantity, subItem.unit)}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.unitPrice, fontSize: '11px' }}>{subItem.unit_price > 0 ? subItem.unit_price.toFixed(2) : ''}</Table.Td>
+                                <Table.Td style={{ ...columnStyles.ratio, fontSize: '11px' }}>
+                                  {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                                    ? `${((totalPrice / estimate.partG?.合计) * 100).toFixed(2)}%`
+                                    : ''}
+                                </Table.Td>
+                                <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}></Table.Td>
+                              </Table.Tr>
+                            )
+                          })}
+                        </React.Fragment>
+                      ))}
+
+                      {/* B部分主行 */}
+                      <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
+                        <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partB.序号}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.name }}>{estimate.partB.工程或费用名称}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.construction }}>0.00</Table.Td>
+                        <Table.Td style={{ ...columnStyles.equipment }}>0.00</Table.Td>
+                        <Table.Td style={{ ...columnStyles.installation }}>0.00</Table.Td>
+                        <Table.Td style={{ ...columnStyles.other }}>{calculatePartBOtherTotal().toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
+                          {typeof estimate.partB.合计 === 'number' ? estimate.partB.合计.toFixed(2) : '0.00'}
+                        </Table.Td>
+                        <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
+                        <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
+                          {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                            ? `${(((estimate.partB.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
+                            : ''}
+                        </Table.Td>
+                        <Table.Td style={{ ...columnStyles.remark }}>{estimate.partB.备注}</Table.Td>
+                      </Table.Tr>
+                      {/* B部分子项 */}
+                      {estimate.partB.children?.map((item, index) => (
+                        <Table.Tr key={`B-${index}`}>
+                          <Table.Td style={{ ...columnStyles.sequence }}>{item.序号}</Table.Td>
+                          <Table.Td style={{ ...columnStyles.name }}>{item.工程或费用名称}</Table.Td>
+                          <Table.Td style={{ ...columnStyles.construction }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.equipment }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.installation }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.other }}>{item.其它费用?.toFixed(2) || item.合计?.toFixed(2) || '0.00'}</Table.Td>
+                          <Table.Td style={{ ...columnStyles.total }}>
+                            {typeof item.合计 === 'number' ? item.合计.toFixed(2) : '0.00'}
+                          </Table.Td>
+                          <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
+                          <Table.Td style={{ ...columnStyles.ratio }}>
+                            {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                              ? `${(((item.合计 || item.其它费用 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
+                              : ''}
+                          </Table.Td>
+                          <Table.Td style={{ ...columnStyles.remark, fontSize: '13px' }}>{item.备注}</Table.Td>
+                        </Table.Tr>
+                      ))}
 
                     {/* C部分 - 白色背景 */}
                     <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
@@ -2866,8 +3361,8 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG.合计 > 0
-                          ? `${(((estimate.partC.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                        {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                          ? `${(((estimate.partC.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
                           : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark }}>{estimate.partC.备注}</Table.Td>
@@ -2888,8 +3383,8 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG.合计 > 0
-                          ? `${(((estimate.partD.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                        {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                          ? `${(((estimate.partD.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
                           : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark }}>{estimate.partD.备注}</Table.Td>
@@ -2910,8 +3405,8 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG.合计 > 0
-                          ? `${(((estimate.partE.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                        {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                          ? `${(((estimate.partE.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
                           : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>{estimate.partE.备注}</Table.Td>
@@ -2926,26 +3421,26 @@ const InvestmentSummary: React.FC = () => {
                       <Table.Td style={{ ...columnStyles.installation }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.other }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
-                        {estimate.partF.合计?.toFixed(2) || '0.00'}
+                        {estimate?.partF?.合计?.toFixed(2) || '0.00'}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
-                        {estimate.partG?.合计 && estimate.partG.合计 > 0
-                          ? `${(((estimate.partF.合计 || 0) / estimate.partG.合计) * 100).toFixed(2)}%`
+                        {estimate.partG?.合计 && estimate.partG?.合计 > 0
+                          ? `${(((estimate?.partF?.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
                           : ''}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.remark, fontSize: '11px' }}>
-                        <div>贷款总额: {(Number(estimate.partF.贷款总额) || 0).toFixed(2)}万元 (占总投资{((Number(estimate.partF.贷款总额) || 0) / (estimate.partG.合计 || 1) * 100).toFixed(2)}%)</div>
-                        <div>年利率: {((estimate.partF.年利率 || 0) * 100).toFixed(1)}%</div>
-                        <div>建设期: {estimate.partF.建设期年限}年</div>
-                        {estimate.partF.分年利息?.length > 0 && (
+                        <div>贷款总额: {(Number(estimate?.partF?.贷款总额) || 0).toFixed(2)}万元 (占总投资{((Number(estimate?.partF?.贷款总额) || 0) / (estimate.partG?.合计 || 1) * 100).toFixed(2)}%)</div>
+                        <div>年利率: {((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}%</div>
+                        <div>建设期: {estimate?.partF?.建设期年限}年</div>
+                        {estimate?.partF?.分年利息?.length > 0 && (
                           <div style={{ marginTop: '4px' }}>
                             <div>各年利息计算:</div>
-                            {estimate.partF.分年利息.map((year, idx) => (
+                            {estimate?.partF?.分年利息?.map((year, idx) => (
                               <div key={idx} style={{ fontSize: '10px', color: '#666' }}>
-                                第{year.年份}年: ({year.期初本金累计.toFixed(2)} + {year.当期借款金额.toFixed(2)} ÷ 2) × {((estimate.partF.年利率 || 0) * 100).toFixed(1)}% = {year.当期利息.toFixed(2)}万元
+                                第{year.年份}年: ({year.期初本金累计.toFixed(2)} + {year.当期借款金额.toFixed(2)} ÷ 2) × {((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}% = {year.当期利息.toFixed(2)}万元
                               </div>
                             ))}
                           </div>
@@ -2955,23 +3450,28 @@ const InvestmentSummary: React.FC = () => {
 
                     {/* G部分 - 白色背景 */}
                     <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
-                      <Table.Td style={{ ...columnStyles.sequence, fontSize: '15px', color: '#165DFF' }}>{estimate.partG.序号}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.name, fontSize: '15px', color: '#165DFF' }}>{estimate.partG.工程或费用名称}</Table.Td>
+                      <Table.Td style={{ ...columnStyles.sequence, fontSize: '15px', color: '#165DFF' }}>{estimate.partG?.序号}</Table.Td>
+                      <Table.Td style={{ ...columnStyles.name, fontSize: '15px', color: '#165DFF' }}>{estimate.partG?.工程或费用名称}</Table.Td>
                       <Table.Td style={{ ...columnStyles.construction, fontSize: '15px', color: '#165DFF' }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.equipment, fontSize: '15px', color: '#165DFF' }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.installation, fontSize: '15px', color: '#165DFF' }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.other, fontSize: '15px', color: '#165DFF' }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.total, fontWeight: 700, fontSize: '15px', color: '#165DFF' }}>
-                        {typeof estimate.partG.合计 === 'number' ? estimate.partG.合计.toFixed(2) : '0.00'}
+                        {typeof estimate.partG?.合计 === 'number' ? estimate.partG?.合计.toFixed(2) : '0.00'}
                       </Table.Td>
                       <Table.Td style={{ ...columnStyles.unit, fontSize: '15px', color: '#165DFF' }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.quantity, fontSize: '15px', color: '#165DFF' }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.unitPrice, fontSize: '15px', color: '#165DFF' }}></Table.Td>
                       <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700, fontSize: '15px', color: '#165DFF' }}>100.00%</Table.Td>
-                      <Table.Td style={{ ...columnStyles.remark, fontSize: '15px', color: '#165DFF' }}>{estimate.partG.备注}</Table.Td>
+                      <Table.Td style={{ ...columnStyles.remark, fontSize: '15px', color: '#165DFF' }}>{estimate.partG?.备注}</Table.Td>
                     </Table.Tr>
                   </Table.Tbody>
                 </Table>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#86909C' }}>
+                  <Text>正在加载投资估算数据...</Text>
+                </div>
+              )}
               </Card>
             </Stack>
           )}
@@ -4214,6 +4714,32 @@ const InvestmentSummary: React.FC = () => {
             </Group>
           </Stack>
         )}
+      </Modal>
+
+      {/* 建设期利息详情Modal */}
+      <ConstructionInterestModal
+        opened={showConstructionInterestModal}
+        onClose={() => setShowConstructionInterestModal(false)}
+        estimate={estimate}
+      />
+      
+      {/* 还本付息计划简表Modal */}
+      <Modal
+        opened={showLoanRepaymentModal}
+        onClose={() => setShowLoanRepaymentModal(false)}
+        title={
+          <Group gap="xs">
+            <IconCurrencyDollar size={20} color="#00C48C" />
+            <Text fw={600} c="#1D2129">还本付息计划简表（等额本金还款）</Text>
+          </Group>
+        }
+        size="xl"
+        centered
+      >
+        <LoanRepaymentScheduleTable
+          showCard={false}
+          estimate={estimate}
+        />
       </Modal>
     </div>
   )
