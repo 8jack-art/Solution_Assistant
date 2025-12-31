@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Card,
   Group,
@@ -9,8 +9,6 @@ import {
   Tooltip,
   Progress,
   Badge,
-  Switch,
-  Select,
 } from '@mantine/core'
 import { 
   IconCopy, 
@@ -18,8 +16,6 @@ import {
   IconEye,
   IconEyeOff,
   IconRefresh,
-  IconPlayerPlay,
-  IconPlayerPause,
   IconCheck,
   IconClock,
   IconGauge,
@@ -40,9 +36,16 @@ interface EnhancedStreamingOutputProps {
   estimatedTotalChars?: number // 预估总字符数
 }
 
+// 节流配置：内容更新最小间隔（毫秒）
+const CONTENT_UPDATE_THROTTLE = 50
+
 /**
- * 增强版流式输出组件
+ * 增强版流式输出组件 - 优化版
  * 集成打字机效果、进度显示和更好的用户体验
+ * 优化内容：
+ * 1. 修复自动滚动逻辑，避免与Mantine ScrollArea冲突
+ * 2. 添加节流机制，减少渲染频率
+ * 3. 使用useMemo缓存行数据计算
  */
 const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
   content,
@@ -64,10 +67,16 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
   const [elapsedTime, setElapsedTime] = useState(0)
   const [speed, setSpeed] = useState(0) // 当前生成速度（字符/秒）
   
+  // 使用useRef存储节流相关的状态
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-
+  const lastScrollTopRef = useRef<number>(0)
+  const lastUpdateTimeRef = useRef<number>(0)
+  
+  // 节流后的内容状态
+  const [throttledContent, setThrottledContent] = useState(content)
+  
   // 打字机效果
   const { displayedText, isComplete: typewriterComplete } = useTypewriter(
     content,
@@ -83,13 +92,61 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
   // 使用完整内容或打字机效果内容
   const finalContent = showTypewriter && !isGenerating ? displayedText : content
 
-  // 自动滚动到底部
+  // 内容节流：避免频繁更新导致UI抖动
   useEffect(() => {
-    if (isAutoScroll && scrollAreaRef.current && finalContent) {
-      const scrollElement = scrollAreaRef.current
-      scrollElement.scrollTop = scrollElement.scrollHeight
+    const now = Date.now()
+    
+    // 如果距离上次更新时间超过节流间隔，直接更新
+    if (now - lastUpdateTimeRef.current >= CONTENT_UPDATE_THROTTLE) {
+      setThrottledContent(content)
+      lastUpdateTimeRef.current = now
+    } else {
+      // 否则设置一个定时器延迟更新
+      const timer = setTimeout(() => {
+        setThrottledContent(content)
+        lastUpdateTimeRef.current = Date.now()
+      }, CONTENT_UPDATE_THROTTLE)
+      
+      return () => clearTimeout(timer)
     }
-  }, [finalContent, isAutoScroll])
+  }, [content])
+
+  // 自动滚动到底部 - 优化版
+  useEffect(() => {
+    if (isAutoScroll && scrollAreaRef.current && throttledContent) {
+      // 使用requestAnimationFrame确保在DOM更新后执行滚动
+      const scrollToBottom = () => {
+        const scrollElement = scrollAreaRef.current
+        if (scrollElement) {
+          const targetScrollTop = scrollElement.scrollHeight - scrollElement.clientHeight
+          
+          // 如果当前位置已经接近底部，才执行滚动
+          if (scrollElement.scrollTop >= targetScrollTop - 50) {
+            scrollElement.scrollTop = targetScrollTop
+          }
+        }
+      }
+      
+      // 延迟滚动，确保内容已渲染
+      requestAnimationFrame(scrollToBottom)
+    }
+  }, [throttledContent, isAutoScroll])
+
+  // 记录滚动位置变化，用于检测用户是否手动滚动
+  useEffect(() => {
+    if (!scrollAreaRef.current) return
+    
+    const scrollElement = scrollAreaRef.current
+    const handleScroll = () => {
+      lastScrollTopRef.current = scrollElement.scrollTop
+    }
+    
+    scrollElement.addEventListener('scroll', handleScroll, { passive: true })
+    
+    return () => {
+      scrollElement.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   // 计时器和速度计算
   useEffect(() => {
@@ -186,23 +243,27 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
     ? ((estimatedTotalChars - finalContent.length) / speed) * 1000
     : 0
 
-  // 获取行数
-  const getLineCount = () => {
-    if (!finalContent) return 0
-    return finalContent.split('\n').length
-  }
+  // 获取行数 - 使用useMemo缓存
+  const lineCount = useMemo(() => {
+    if (!throttledContent) return 0
+    return throttledContent.split('\n').length
+  }, [throttledContent])
+
+  // 使用useMemo缓存行数据计算，避免每次渲染都重新计算
+  const lines = useMemo(() => {
+    if (!throttledContent) return []
+    return throttledContent.split('\n')
+  }, [throttledContent])
 
   // 渲染内容
   const renderContent = () => {
-    if (!finalContent) {
+    if (!throttledContent) {
       return (
         <Text c="#86909C" style={{ padding: '20px', textAlign: 'center' }}>
           {isGenerating ? '正在生成内容...' : '暂无生成内容...'}
         </Text>
       )
     }
-
-    const lines = finalContent.split('\n')
     
     return (
       <div
@@ -219,7 +280,7 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
       >
         {lines.map((line, index) => (
           <div
-            key={index}
+            key={`line-${index}`}  // 使用索引作为key，配合稳定的lines数组
             style={{
               display: 'flex',
               minHeight: '22px',
@@ -340,11 +401,11 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
         <Group gap="md" wrap="wrap">
           <Group gap="xs">
             <Text size="xs" c="#86909C">行数:</Text>
-            <Text size="xs" fw={600} c="#165DFF">{getLineCount()}</Text>
+            <Text size="xs" fw={600} c="#165DFF">{lineCount}</Text>
           </Group>
           <Group gap="xs">
             <Text size="xs" c="#86909C">字符:</Text>
-            <Text size="xs" fw={600} c="#165DFF">{finalContent.length}</Text>
+            <Text size="xs" fw={600} c="#165DFF">{throttledContent.length}</Text>
           </Group>
           {isGenerating && (
             <Group gap="xs">
@@ -424,7 +485,7 @@ const EnhancedStreamingOutput: React.FC<EnhancedStreamingOutputProps> = ({
         </div>
 
         {/* 底部操作栏 */}
-        {showControls && finalContent && (
+        {showControls && throttledContent && (
           <Group justify="space-between" align="center">
             <Text size="xs" c="#86909C">
               {isAutoScroll ? '自动滚动已开启' : '自动滚动已关闭'} • 

@@ -1,5 +1,6 @@
 import { pool } from '../db/config.js'
 import { LLMService, LLMMessage } from '../lib/llm.js'
+import { sseManager } from './sseManager.js'
 // @ts-ignore
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx'
 // @ts-ignore
@@ -436,53 +437,92 @@ ${JSON.stringify(financialIndicators, null, 2)}
     prompt: string
   ): Promise<void> {
     try {
+      console.log('='.repeat(60))
+      console.log('streamLLMResponse 开始')
+      console.log('报告ID:', reportId)
+      console.log('LLM配置 provider:', llmConfig.provider)
+      console.log('LLM配置 model:', llmConfig.model)
+      console.log('提示词长度:', prompt.length)
+      
       const messages: LLMMessage[] = [{ role: 'user', content: prompt }]
       
       // 使用流式LLM调用
+      console.log('调用 LLMService.generateContentStream...')
       const result = await LLMService.generateContentStream(llmConfig, messages, {
         maxTokens: 8000,
         temperature: 0.7
       })
       
+      console.log('generateContentStream 返回结果:')
+      console.log('  success:', result.success)
+      console.log('  stream:', result.stream ? '存在' : '不存在')
+      console.log('  error:', result.error || '无')
+      
       if (!result.success || !result.stream) {
+        console.error('LLM流式调用失败:', result.error)
         throw new Error(`LLM流式调用失败: ${result.error}`)
       }
       
       // 处理流式响应
+      console.log('开始处理流式响应...')
       const reader = result.stream.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let fullContent = ''
+      let chunkCount = 0
       
       try {
         while (true) {
+          console.log(`等待读取数据块... (当前chunk: ${chunkCount})`)
           const { done, value } = await reader.read()
           
-          if (done) break
+          if (done) {
+            console.log('流式响应读取完成')
+            break
+          }
+          
+          console.log(`收到数据块，大小: ${value.length} bytes`)
+          chunkCount++
           
           // 解码当前数据块
           buffer += decoder.decode(value, { stream: true })
+          console.log(`缓冲区内容长度: ${buffer.length}`)
           
           // 处理SSE格式的数据
           const lines = buffer.split('\n')
           buffer = lines.pop() || '' // 保留最后一个不完整的行
+          console.log(`处理了 ${lines.length} 行数据`)
           
           for (const line of lines) {
             if (line.trim() === '') continue
+            
             if (line.startsWith('data: ')) {
               const data = line.slice(6).trim()
               
               // 跳过 [DONE] 消息
-              if (data === '[DONE]') continue
+              if (data === '[DONE]') {
+                console.log('收到 [DONE] 消息')
+                continue
+              }
               
               try {
                 const parsed = JSON.parse(data)
                 const content = parsed.choices?.[0]?.delta?.content || ''
+                console.log(`解析到内容，长度: ${content.length}`)
                 
                 if (content) {
                   fullContent += content
                   
-                  // 实时保存内容到数据库
+                  // 将内容切分成更小的块（每2-3个字符推送一次），实现更流畅的打字机效果
+                  const chars = content.split('')
+                  for (let i = 0; i < chars.length; i++) {
+                    const char = chars[i]
+                    // 通过SSE管理器实时推送到前端（逐字符推送）
+                    sseManager.appendContent(reportId, char)
+                  }
+                  console.log(`已推送 ${chars.length} 个字符到SSE管理器，累计内容长度: ${fullContent.length}`)
+                  
+                  // 同时保存到数据库（用于断线重连）
                   await pool.execute(
                     'UPDATE generated_reports SET report_content = ?, updated_at = NOW() WHERE id = ?',
                     [fullContent, reportId]
@@ -491,18 +531,25 @@ ${JSON.stringify(financialIndicators, null, 2)}
                   // 保存到历史记录
                   await pool.execute(
                     'INSERT INTO report_generation_history (report_id, chunk_content, chunk_order) VALUES (?, ?, ?)',
-                    [reportId, content, Math.floor(fullContent.length / 500)] // 简单的序号
+                    [reportId, content, Math.floor(fullContent.length / 500)]
                   )
                 }
               } catch (parseError) {
-                console.error('解析流式数据失败:', parseError)
+                console.warn('解析流式数据失败，可能不是有效的JSON:', data.substring(0, 100))
               }
             }
           }
         }
       } finally {
+        console.log('释放reader锁')
         reader.releaseLock()
       }
+      
+      console.log(`流式处理完成，总内容长度: ${fullContent.length}`)
+      
+      // 标记报告完成，通过SSE推送最终内容
+      sseManager.complete(reportId, fullContent)
+      console.log('SSE推送完成')
       
       // 更新报告状态为完成
       await pool.execute(
@@ -512,11 +559,16 @@ ${JSON.stringify(financialIndicators, null, 2)}
       
     } catch (error) {
       console.error('流式处理LLM响应失败:', error)
+      console.error('错误堆栈:', error instanceof Error ? error.stack : '未知')
+      
+      // 通过SSE推送错误信息
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      sseManager.fail(reportId, errorMessage)
       
       // 更新报告状态为失败
       await pool.execute(
         'UPDATE generated_reports SET generation_status = ?, error_message = ?, updated_at = NOW() WHERE id = ?',
-        ['failed', error instanceof Error ? error.message : '未知错误', reportId]
+        ['failed', errorMessage, reportId]
       )
       
       throw error

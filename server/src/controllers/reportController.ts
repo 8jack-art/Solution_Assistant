@@ -6,6 +6,7 @@ import { InvestmentProjectModel } from '../models/InvestmentProject.js'
 import { LLMService } from '../lib/llm.js'
 import { LLMConfigModel } from '../models/LLMConfig.js'
 import { ReportService } from '../services/reportService.js'
+import { sseManager } from '../services/sseManager.js'
 
 // 验证Schema
 const generateReportSchema = z.object({
@@ -213,29 +214,25 @@ export class ReportController {
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Cache-Control'
+        'Access-Control-Allow-Headers': 'Cache-Control',
+        'X-Accel-Buffering': 'no' // 禁用Nginx缓冲
       })
 
-      // 发送初始状态
-      res.write(`data: ${JSON.stringify({
-        type: 'status',
-        status: report.generation_status,
-        content: report.report_content || '',
-        title: report.report_title
-      })}\n\n`)
+      console.log(`[SSE] 客户端连接，报告ID: ${reportId}`)
 
-      // 如果报告已完成，发送完成事件
+      // 如果报告已完成，直接发送完成事件
       if (report.generation_status === 'completed') {
         res.write(`data: ${JSON.stringify({
           type: 'completed',
           content: report.report_content || '',
-          title: report.report_title
+          title: report.report_title,
+          progress: (report.report_content || '').length
         })}\n\n`)
         res.end()
         return
       }
 
-      // 如果报告失败，发送错误事件
+      // 如果报告失败，直接发送错误事件
       if (report.generation_status === 'failed') {
         res.write(`data: ${JSON.stringify({
           type: 'error',
@@ -245,95 +242,46 @@ export class ReportController {
         return
       }
 
-      // 定期检查报告状态
-      const checkInterval = setInterval(async () => {
-        try {
-          const [currentReports] = await (pool as any).execute(
-            'SELECT * FROM generated_reports WHERE id = ?',
-            [reportId]
-          ) as any[]
+      // 如果报告已暂停，发送暂停状态
+      if (report.generation_status === 'paused') {
+        res.write(`data: ${JSON.stringify({
+          type: 'status',
+          status: 'paused',
+          content: report.report_content || '',
+          progress: (report.report_content || '').length
+        })}\n\n`)
+        res.end()
+        return
+      }
 
-          if (!currentReports || currentReports.length === 0) {
-            clearInterval(checkInterval)
-            res.write(`data: ${JSON.stringify({
-              type: 'error',
-              error: '报告不存在'
-            })}\n\n`)
-            res.end()
-            return
-          }
+      // 使用SSE管理器注册连接，实现真正的实时推送
+      sseManager.register(reportId, res)
 
-          const currentReport = currentReports[0]
-
-          // 获取历史记录
-          const [history] = await (pool as any).execute(
-            'SELECT * FROM report_generation_history WHERE report_id = ? ORDER BY chunk_order ASC',
-            [reportId]
-          ) as any[]
-
-          // 构建完整内容
-          let fullContent = ''
-          if (history && history.length > 0) {
-            fullContent = history.map(h => h.chunk_content || '').join('')
-          } else if (currentReport.report_content) {
-            fullContent = currentReport.report_content
-          }
-
-          // 发送内容更新
-          res.write(`data: ${JSON.stringify({
-            type: 'content',
-            status: currentReport.generation_status,
-            content: fullContent,
-            title: currentReport.report_title,
-            progress: history ? history.length : 0
-          })}\n\n`)
-
-          // 如果生成完成或失败，结束连接
-          if (currentReport.generation_status === 'completed' || 
-              currentReport.generation_status === 'failed') {
-            
-            if (currentReport.generation_status === 'completed') {
-              res.write(`data: ${JSON.stringify({
-                type: 'completed',
-                content: fullContent,
-                title: currentReport.report_title
-              })}\n\n`)
-            } else {
-              res.write(`data: ${JSON.stringify({
-                type: 'error',
-                error: currentReport.report_content || '生成失败'
-              })}\n\n`)
-            }
-            
-            clearInterval(checkInterval)
-            res.end()
-          }
-        } catch (error) {
-          console.error('检查报告状态失败:', error)
-          clearInterval(checkInterval)
-          res.write(`data: ${JSON.stringify({
-            type: 'error',
-            error: '检查状态失败'
-          })}\n\n`)
-          res.end()
-        }
-      }, 1000) // 每秒检查一次
+      // 如果有已生成的内容，先发送
+      if (report.report_content) {
+        sseManager.appendContent(reportId, report.report_content)
+      }
 
       // 设置超时，避免长时间占用连接
       setTimeout(() => {
-        clearInterval(checkInterval)
-        res.end()
+        console.log(`[SSE] 连接超时，关闭报告ID: ${reportId}`)
+        sseManager.unregister(reportId)
       }, 300000) // 5分钟超时
 
       req.on('close', () => {
-        clearInterval(checkInterval)
+        console.log(`[SSE] 客户端断开连接，报告ID: ${reportId}`)
       })
     } catch (error) {
       console.error('流式获取报告失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          error: '服务器内部错误'
+        })}\n\n`)
+        res.end()
+      } catch (e) {
+        // 响应可能已关闭
+      }
     }
   }
 

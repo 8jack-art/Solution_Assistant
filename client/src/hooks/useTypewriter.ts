@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 export interface UseTypewriterOptions {
   speed?: number // 打字速度（毫秒）
@@ -14,7 +14,8 @@ export interface UseTypewriterReturn {
 }
 
 /**
- * 打字机效果Hook
+ * 打字机效果Hook - 优化版
+ * 使用useRef追踪索引，避免不必要的重渲染
  */
 export const useTypewriter = (
   fullText: string,
@@ -24,44 +25,53 @@ export const useTypewriter = (
 
   const [displayedText, setDisplayedText] = useState('')
   const [isComplete, setIsComplete] = useState(false)
-  const [currentIndex, setCurrentIndex] = useState(0)
-
+  
+  // 使用useRef追踪当前索引，避免依赖数组中的currentIndex导致频繁重执行
+  const indexRef = useRef(0)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
-
+  
+  // 清理函数
+  const cleanup = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }, [])
+  
   useEffect(() => {
     // 如果禁用，则直接显示完整文本
     if (disabled) {
       setDisplayedText(fullText)
       setIsComplete(true)
-      setCurrentIndex(fullText.length)
+      indexRef.current = fullText.length
       return
     }
 
     if (!fullText) {
       setDisplayedText('')
       setIsComplete(false)
-      setCurrentIndex(0)
+      indexRef.current = 0
       return
     }
 
     // 清理之前的定时器
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
+    cleanup()
 
     // 重置状态
     setDisplayedText('')
     setIsComplete(false)
-    setCurrentIndex(0)
+    indexRef.current = 0
     startTimeRef.current = Date.now()
 
     // 开始打字机效果
     const startTypewriter = () => {
       const typeNextChar = () => {
-        if (currentIndex < fullText.length) {
-          setDisplayedText(fullText.slice(0, currentIndex + 1))
-          setCurrentIndex(currentIndex + 1)
+        if (indexRef.current < fullText.length) {
+          const nextIndex = indexRef.current + 1
+          // 使用函数式更新避免依赖currentIndex
+          setDisplayedText(fullText.slice(0, nextIndex))
+          indexRef.current = nextIndex
           
           timeoutRef.current = setTimeout(typeNextChar, speed)
         } else {
@@ -83,25 +93,21 @@ export const useTypewriter = (
 
     // 清理函数
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
+      cleanup()
     }
-  }, [fullText, speed, onComplete, startDelay, disabled, currentIndex])
+  }, [fullText, speed, onComplete, startDelay, disabled, cleanup])
 
   // 组件卸载时清理
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
+      cleanup()
     }
-  }, [])
+  }, [cleanup])
 
   return {
     displayedText,
     isComplete,
-    currentIndex
+    currentIndex: indexRef.current
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Container,
@@ -142,6 +142,18 @@ const InvestmentReport: React.FC = () => {
 
   // 引用
   const eventSourceRef = useRef<EventSource | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const streamDataRef = useRef<{
+    content: string
+    progress: number
+    isComplete: boolean
+    lastUpdateTime: number
+  }>({
+    content: '',
+    progress: 0,
+    isComplete: false,
+    lastUpdateTime: 0,
+  })
 
   // 加载项目数据
   useEffect(() => {
@@ -213,12 +225,16 @@ const InvestmentReport: React.FC = () => {
     }
   }, [id, navigate])
 
-  // 清理EventSource
+  // 清理连接
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
       }
     }
   }, [])
@@ -274,116 +290,174 @@ const InvestmentReport: React.FC = () => {
     }
   }
 
-  // 开始流式接收
-  const startStreaming = (reportId: string) => {
+  // 开始流式接收（使用fetch + ReadableStream，支持认证）
+  const startStreaming = useCallback((reportId: string) => {
     console.log(`[SSE] 开始流式连接，报告ID: ${reportId}`)
     
     // 清理之前的连接
     if (eventSourceRef.current) {
-      console.log('[SSE] 关闭之前的连接')
+      console.log('[SSE] 关闭之前的EventSource连接')
       eventSourceRef.current.close()
       eventSourceRef.current = null
     }
-
-    try {
-      const eventSource = new EventSource(`http://localhost:3001/api/report/stream/${reportId}`, {
-        withCredentials: true
-      })
-      eventSourceRef.current = eventSource
-
-      console.log('[SSE] EventSource 创建成功，URL:', `http://localhost:3001/api/report/stream/${reportId}`)
-
-      eventSource.onopen = () => {
-        console.log('[SSE] 连接已建立')
-      }
-
-      eventSource.onmessage = (event) => {
-        try {
-          console.log('[SSE] 收到消息:', event.data)
-          const data = JSON.parse(event.data)
-          console.log('[SSE] 解析后的数据:', data)
-          
-          switch (data.type) {
-            case 'status':
-              console.log('[SSE] 状态更新:', data.status)
-              if (data.status === 'failed') {
-                setIsGenerating(false)
-                notifications.show({
-                  title: '生成失败',
-                  message: '报告生成失败',
-                  color: 'red',
-                })
-              }
-              break
-              
-            case 'content':
-              console.log('[SSE] 内容更新，长度:', data.content?.length || 0)
-              console.log('[SSE] 进度:', data.progress || 0)
-              setReportContent(data.content || '')
-              setGenerationProgress(data.progress || 0)
-              break
-              
-            case 'completed':
-              console.log('[SSE] 生成完成')
-              setReportContent(data.content || '')
-              setGenerationProgress(100)
-              setIsGenerating(false)
-              notifications.show({
-                title: '✅ 生成完成',
-                message: '报告生成已完成',
-                color: 'green',
-                autoClose: 4000,
-              })
-              break
-              
-            case 'error':
-              console.error('[SSE] 生成错误:', data.error)
-              setIsGenerating(false)
-              notifications.show({
-                title: '❌ 生成失败',
-                message: data.error || '生成过程中发生错误',
-                color: 'red',
-                autoClose: 6000,
-              })
-              break
-              
-            default:
-              console.log('[SSE] 未知消息类型:', data.type)
-          }
-        } catch (error) {
-          console.error('[SSE] 解析数据失败:', error)
-          console.error('[SSE] 原始数据:', event.data)
-        }
-      }
-
-      eventSource.onerror = (error) => {
-        console.error('[SSE] 连接错误:', error)
-        setIsGenerating(false)
-        
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close()
-          eventSourceRef.current = null
-        }
-        
-        notifications.show({
-          title: '🔌 连接断开',
-          message: '与服务器的连接已断开，请检查网络连接',
-          color: 'orange',
-          autoClose: 5000,
-        })
-      }
-
-    } catch (error) {
-      console.error('[SSE] 创建连接失败:', error)
-      setIsGenerating(false)
-      notifications.show({
-        title: '❌ 连接失败',
-        message: '无法建立与服务器的连接',
-        color: 'red',
-        autoClose: 6000,
-      })
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
     }
-  }
+    
+    // 重置数据
+    streamDataRef.current = {
+      content: '',
+      progress: 0,
+      isComplete: false,
+      lastUpdateTime: 0,
+    }
+    
+    // 创建AbortController
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+    
+    const fetchStream = async () => {
+      try {
+        // 获取认证token
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+        
+        // 使用相对路径
+        const baseUrl = import.meta.env.VITE_API_URL || ''
+        const url = `${baseUrl}/api/report/stream/${reportId}`
+        
+        console.log('[SSE] 发起fetch请求:', url)
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'text/event-stream',
+            'Accept': 'text/event-stream',
+          },
+          signal: abortController.signal,
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        if (!response.body) {
+          throw new Error('响应体为空')
+        }
+        
+        console.log('[SSE] fetch连接成功，开始读取流')
+        
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        
+        while (!abortController.signal.aborted) {
+          const { done, value } = await reader.read()
+          
+          if (done) {
+            console.log('[SSE] 流读取完成')
+            break
+          }
+          
+          // 解码数据块
+          const chunk = decoder.decode(value, { stream: true })
+          buffer += chunk
+          
+          // 按行处理SSE格式
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || '' // 保留未完整的数据
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6).trim()
+              if (!dataStr) continue
+              
+              try {
+                const data = JSON.parse(dataStr)
+                console.log('[SSE] 收到数据:', data.type, data.progress ? `进度${data.progress}%` : '')
+                
+                // 节流更新UI（至少间隔50ms）
+                const now = Date.now()
+                const shouldUpdate = 
+                  data.type === 'completed' || 
+                  data.type === 'error' ||
+                  data.type === 'status' ||
+                  now - streamDataRef.current.lastUpdateTime >= 50
+                
+                if (shouldUpdate) {
+                  streamDataRef.current.lastUpdateTime = now
+                  
+                  switch (data.type) {
+                    case 'status':
+                      console.log('[SSE] 状态更新:', data.status)
+                      if (data.status === 'failed') {
+                        setIsGenerating(false)
+                        notifications.show({
+                          title: '生成失败',
+                          message: '报告生成失败',
+                          color: 'red',
+                        })
+                      }
+                      break
+                      
+                    case 'content':
+                      streamDataRef.current.content = data.content || ''
+                      streamDataRef.current.progress = data.progress || 0
+                      setReportContent(streamDataRef.current.content)
+                      setGenerationProgress(streamDataRef.current.progress)
+                      break
+                      
+                    case 'completed':
+                      streamDataRef.current.content = data.content || ''
+                      streamDataRef.current.progress = 100
+                      streamDataRef.current.isComplete = true
+                      setReportContent(streamDataRef.current.content)
+                      setGenerationProgress(100)
+                      setIsGenerating(false)
+                      notifications.show({
+                        title: '✅ 生成完成',
+                        message: '报告生成已完成',
+                        color: 'green',
+                        autoClose: 4000,
+                      })
+                      break
+                      
+                    case 'error':
+                      console.error('[SSE] 生成错误:', data.error)
+                      setIsGenerating(false)
+                      notifications.show({
+                        title: '❌ 生成失败',
+                        message: data.error || '生成过程中发生错误',
+                        color: 'red',
+                        autoClose: 6000,
+                      })
+                      break
+                  }
+                }
+              } catch (parseError) {
+                console.warn('[SSE] 解析SSE数据失败:', parseError, '原始数据:', dataStr)
+              }
+            }
+          }
+        }
+        
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('[SSE] fetch流读取失败:', error)
+          setIsGenerating(false)
+          notifications.show({
+            title: '🔌 连接断开',
+            message: error.message || '与服务器的连接已断开',
+            color: 'orange',
+            autoClose: 5000,
+          })
+        }
+      }
+    }
+    
+    fetchStream()
+  }, [])
 
   // 暂停生成
   const handlePause = async () => {
@@ -393,6 +467,11 @@ const InvestmentReport: React.FC = () => {
       await reportApi.pauseGeneration(currentReport.id)
       setIsGenerating(false)
       
+      // 关闭流连接
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
@@ -445,6 +524,11 @@ const InvestmentReport: React.FC = () => {
       await reportApi.stopGeneration(currentReport.id)
       setIsGenerating(false)
       
+      // 关闭流连接
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
@@ -820,7 +904,7 @@ const InvestmentReport: React.FC = () => {
                   showTypewriter={true}
                   typewriterSpeed={30}
                   showProgress={true}
-                  estimatedTotalChars={8000}
+                  estimatedTotalChars={20000}
                   onCopy={() => {
                     navigator.clipboard.writeText(reportContent).then(() => {
                       notifications.show({
