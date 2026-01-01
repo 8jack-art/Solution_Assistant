@@ -18,8 +18,8 @@ export const llmProviders: LLMProviderConfig[] = [
     id: 'zhipuai',
     name: '智谱AI',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    defaultModel: 'glm-4.5-flash',
-    models: ['glm-3-turbo', 'glm-4', 'glm-4v', 'glm-4-plus', 'glm-4-air', 'glm-4-airx', 'glm-4-flash', 'glm-4.5-flash']
+    defaultModel: 'glm-4-flash',
+    models: ['glm-3-turbo', 'glm-4', 'glm-4v', 'glm-4-plus', 'glm-4-air', 'glm-4-airx', 'glm-4-flash', 'glm-4.6', 'glm-4.7']
   },
   {
     id: 'volcano',

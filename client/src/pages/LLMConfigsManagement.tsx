@@ -177,7 +177,7 @@ const LLMConfigsManagement: React.FC = () => {
   const getRecommendedModels = (providerId: string): string[] => {
     const recommendedMap: Record<string, string[]> = {
       'bailian': ['qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen2.5-72b-instruct'],
-      'zhipuai': ['glm-4.5-flash', 'glm-4.6', 'glm-4-air'],
+      'zhipuai': ['glm-4-flash', 'glm-4.6', 'glm-4.7', 'glm-4', 'glm-4-air', 'glm-3-turbo'],
       'volcano': ['doubao-seed-1-6-251015', 'deepseek-v3-250324', 'doubao-pro-32k'],
       'siliconflow': ['deepseek-ai/DeepSeek-V3.2', 'Qwen/Qwen2.5-72B-Instruct'],
       'custom': []
@@ -743,6 +743,8 @@ const LLMConfigsManagement: React.FC = () => {
                       required
                       size="md"
                       error={formErrors.base_url}
+                      disabled={selectedProvider?.id === 'zhipuai'}
+                      description={selectedProvider?.id === 'zhipuai' ? '智谱AI地址为固定值，不可修改' : ''}
                     />
 
                     {/* 模型选择 */}

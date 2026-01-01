@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { LLMConfigModel } from '../models/LLMConfig.js';
 import { LLMService, generateInvestmentPrompt, analyzeProjectInfoPrompt, analyzeEngineeringItemsPrompt, subdivideEngineeringItemPrompt } from '../lib/llm.js';
+import { ZhipuAIService } from '../services/zhipuService.js';
 import { llmProviders } from '../lib/llmProviders.js';
 import { pool } from '../db/config.js';
 const createConfigSchema = z.object({
@@ -286,13 +287,35 @@ export class LLMController {
     static async testConnection(req, res) {
         try {
             const configData = testConnectionSchema.parse(req.body);
-            const result = await LLMService.testConnection({
-                name: configData.provider,
-                provider: configData.provider,
-                apiKey: configData.api_key,
-                baseUrl: configData.base_url,
-                model: configData.model
-            });
+            let result;
+            // 检查是否是智谱AI，如果是则使用新的SDK
+            if (configData.provider.toLowerCase().includes('zhipu') ||
+                configData.provider.toLowerCase().includes('智谱') ||
+                configData.provider.toLowerCase().includes('glm')) {
+                console.log('检测到智谱AI配置，使用Node.js SDK测试');
+                result = await ZhipuAIService.testConnection({
+                    id: 'test',
+                    name: configData.provider,
+                    provider: configData.provider,
+                    api_key: configData.api_key,
+                    base_url: configData.base_url,
+                    model: configData.model,
+                    user_id: 'test',
+                    is_default: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                });
+            }
+            else {
+                // 使用原有的HTTP调用方式
+                result = await LLMService.testConnection({
+                    name: configData.provider,
+                    provider: configData.provider,
+                    apiKey: configData.api_key,
+                    baseUrl: configData.base_url,
+                    model: configData.model
+                });
+            }
             if (result.success) {
                 res.json({
                     success: true,
@@ -397,10 +420,24 @@ export class LLMController {
                 constructionYears: construction_years,
                 industry
             });
-            const result = await LLMService.generateContent(config, messages, {
-                maxTokens: 2000,
-                temperature: 0.3
-            });
+            let result;
+            // 检查是否是智谱AI，如果是则使用新的SDK
+            if (config.provider.toLowerCase().includes('zhipu') ||
+                config.provider.toLowerCase().includes('智谱') ||
+                config.provider.toLowerCase().includes('glm')) {
+                console.log('检测到智谱AI配置，使用Node.js SDK生成内容');
+                result = await ZhipuAIService.generateContent(config, messages, {
+                    maxTokens: 2000,
+                    temperature: 0.3
+                });
+            }
+            else {
+                // 使用原有的HTTP调用方式
+                result = await LLMService.generateContent(config, messages, {
+                    maxTokens: 2000,
+                    temperature: 0.3
+                });
+            }
             if (result.success) {
                 res.json({
                     success: true,
@@ -462,10 +499,24 @@ export class LLMController {
             console.log('使用配置:', config.name);
             console.log('Provider:', config.provider);
             console.log('Model:', config.model);
-            const result = await LLMService.generateContent(config, messages, {
-                maxTokens: 4000, // 智谱AI需要更大的token限制，避免截断
-                temperature: 0.3
-            });
+            let result;
+            // 检查是否是智谱AI，如果是则使用新的SDK
+            if (config.provider.toLowerCase().includes('zhipu') ||
+                config.provider.toLowerCase().includes('智谱') ||
+                config.provider.toLowerCase().includes('glm')) {
+                console.log('检测到智谱AI配置，使用Node.js SDK分析项目信息');
+                result = await ZhipuAIService.generateContent(config, messages, {
+                    maxTokens: 4000,
+                    temperature: 0.3
+                });
+            }
+            else {
+                // 使用原有的HTTP调用方式
+                result = await LLMService.generateContent(config, messages, {
+                    maxTokens: 4000,
+                    temperature: 0.3
+                });
+            }
             console.log('LLM返回内容长度:', result.content?.length || 0, '字符');
             console.log('LLM返回内容预览:', result.content?.substring(0, 300) || '空');
             if (result.success && result.content) {
@@ -552,10 +603,24 @@ export class LLMController {
             console.log('使用配置:', config.name);
             console.log('Provider:', config.provider);
             console.log('Model:', config.model);
-            const result = await LLMService.generateContent(config, messages, {
-                maxTokens: 4000, // 智谱AI需要更大的token限制，避免截断
-                temperature: 0.5
-            });
+            let result;
+            // 检查是否是智谱AI，如果是则使用新的SDK
+            if (config.provider.toLowerCase().includes('zhipu') ||
+                config.provider.toLowerCase().includes('智谱') ||
+                config.provider.toLowerCase().includes('glm')) {
+                console.log('检测到智谱AI配置，使用Node.js SDK分析工程子项');
+                result = await ZhipuAIService.generateContent(config, messages, {
+                    maxTokens: 4000,
+                    temperature: 0.5
+                });
+            }
+            else {
+                // 使用原有的HTTP调用方式
+                result = await LLMService.generateContent(config, messages, {
+                    maxTokens: 4000,
+                    temperature: 0.5
+                });
+            }
             console.log('LLM返回内容长度:', result.content?.length || 0, '字符');
             if (result.success && result.content) {
                 try {
@@ -672,10 +737,24 @@ export class LLMController {
             console.log('子项名称:', item_name);
             console.log('子项金额:', total_amount, '万元');
             console.log('使用配置:', config.name);
-            const result = await LLMService.generateContent(config, messages, {
-                maxTokens: 2000,
-                temperature: 0.5
-            });
+            let result;
+            // 检查是否是智谱AI，如果是则使用新的SDK
+            if (config.provider.toLowerCase().includes('zhipu') ||
+                config.provider.toLowerCase().includes('智谱') ||
+                config.provider.toLowerCase().includes('glm')) {
+                console.log('检测到智谱AI配置，使用Node.js SDK细分子项');
+                result = await ZhipuAIService.generateContent(config, messages, {
+                    maxTokens: 2000,
+                    temperature: 0.5
+                });
+            }
+            else {
+                // 使用原有的HTTP调用方式
+                result = await LLMService.generateContent(config, messages, {
+                    maxTokens: 2000,
+                    temperature: 0.5
+                });
+            }
             console.log('LLM返回内容长度:', result.content?.length || 0, '字符');
             if (result.success && result.content) {
                 try {

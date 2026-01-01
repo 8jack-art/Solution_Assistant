@@ -278,6 +278,14 @@ export class LLMService {
      */
     static async generateContentStream(config, messages, options) {
         try {
+            // 详细日志记录流式请求开始
+            console.log('='.repeat(60));
+            console.log('LLM generateContentStream 开始');
+            console.log('Provider:', config.provider);
+            console.log('Model:', config.model);
+            console.log('Base URL:', config.base_url);
+            console.log('Messages数量:', messages.length);
+            console.log('Options:', options);
             // 构建完整的API路径
             let apiUrl = config.base_url;
             // 如果 baseUrl 不包含 chat/completions，则添加
@@ -286,6 +294,7 @@ export class LLMService {
                 apiUrl = config.base_url.replace(/\/$/, '');
                 apiUrl = `${apiUrl}/chat/completions`;
             }
+            console.log('最终API URL:', apiUrl);
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 180000); // 180秒超时（3分钟）
             // 构建请求体（根据提供商配置）
@@ -296,30 +305,74 @@ export class LLMService {
                 temperature: options?.temperature || 0.7,
                 stream: true
             }, config.provider);
+            console.log(`[${config.provider}] 请求体:`, JSON.stringify(requestBody).substring(0, 300) + '...');
+            console.log(`[${config.provider}] stream参数已设置: true`);
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${config.api_key}`
+                    // 百炼可能使用不同的认证方式
+                    ...(config.provider.toLowerCase().includes('bailian') || config.provider.toLowerCase().includes('百炼') ? {
+                        'Authorization': `Bearer ${config.api_key}`,
+                        'X-DashScope-SSE': 'enable',
+                        // 百炼可能需要API Key作为API-Key header
+                        ...(config.api_key.startsWith('sk-') ? { 'API-Key': config.api_key } : {})
+                    } : {
+                        'Authorization': `Bearer ${config.api_key}`
+                    })
                 },
                 body: JSON.stringify(requestBody),
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
+            console.log(`[${config.provider}] HTTP状态:`, response.status, response.statusText);
+            console.log(`[${config.provider}] Content-Type:`, response.headers.get('content-type'));
+            console.log(`[${config.provider}] Response OK:`, response.ok);
             if (!response.ok) {
                 const errorData = await response.text();
+                console.error(`[${config.provider}] HTTP错误:`, response.status, errorData.substring(0, 500));
                 return {
                     success: false,
                     error: `HTTP ${response.status}: ${errorData}`
                 };
             }
+            // 检查响应体
+            console.log(`[${config.provider}] response.body:`, response.body);
+            console.log(`[${config.provider}] response.body类型:`, typeof response.body);
+            if (!response.body) {
+                console.error(`[${config.provider}] 错误: response.body为空，流式响应失败`);
+                return {
+                    success: false,
+                    error: '流式响应体为空，可能是提供商不支持流式输出或配置错误'
+                };
+            }
+            // 检查是否是ReadableStream
+            const isReadableStream = response.body && typeof response.body.getReader === 'function';
+            console.log(`[${config.provider}] 是ReadableStream:`, isReadableStream);
+            // 如果不是ReadableStream，尝试获取Reader
+            if (!isReadableStream) {
+                console.warn(`[${config.provider}] 警告: response.body不是标准的ReadableStream，尝试其他方法获取流`);
+                // 某些环境下可能需要特殊处理
+                if (response.body instanceof ReadableStream) {
+                    console.log(`[${config.provider}] 是标准ReadableStream`);
+                }
+                else {
+                    console.error(`[${config.provider}] 无法获取流，可能需要降级到非流式请求`);
+                    return {
+                        success: false,
+                        error: '无法获取流式响应，建议检查LLM配置或切换到非流式输出'
+                    };
+                }
+            }
             // 返回流式响应
+            console.log(`[${config.provider}] 流式响应创建成功，返回stream对象`);
             return {
                 success: true,
                 stream: response.body
             };
         }
         catch (error) {
+            console.error(`[${config.provider}] 流式生成异常:`, error);
             if (error instanceof Error && error.name === 'AbortError') {
                 return {
                     success: false,
