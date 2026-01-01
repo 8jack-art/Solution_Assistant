@@ -21,6 +21,7 @@
     "server"
   ],
   "dependencies": {
-    "bcryptjs": "^3.0.3"
+    "bcryptjs": "^3.0.3",
+    "eventsource": "^4.1.0"
   }
 }

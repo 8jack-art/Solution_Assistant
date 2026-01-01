@@ -1329,7 +1329,7 @@ export const calculateOtherTaxesAndSurcharges = (
         : 1;
 
       costConfig.fuelPower.items.forEach((item: any) => {
-        let consumption = item.consumption || 0;
+        const consumption = item.consumption || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
         if (['汽油', '柴油'].includes(item.name)) {
@@ -1409,7 +1409,7 @@ export const calculateOtherTaxesAndSurcharges = (
               : 1;
 
             costConfig.fuelPower.items.forEach((item: any) => {
-              let consumption = item.consumption || 0;
+              const consumption = item.consumption || 0;
               let amount = 0;
               // 对汽油和柴油进行特殊处理：单价×数量/10000
               if (['汽油', '柴油'].includes(item.name)) {

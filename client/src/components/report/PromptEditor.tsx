@@ -160,7 +160,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
   // 格式化内容
   const formatContent = () => {
     // 简单的格式化：去除多余空行，统一标点符号
-    let formatted = value
+    const formatted = value
       .replace(/\n{3,}/g, '\n\n') // 最多保留2个连续换行
       .replace(/，{2,}/g, '，') // 最多保留1个连续逗号
       .replace(/。{2,}/g, '。') // 最多保留1个连续句号

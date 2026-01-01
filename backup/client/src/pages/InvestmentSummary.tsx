@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import * as XLSX from 'xlsx-js-style'
-import { projectApi, investmentApi, llmConfigApi } from '@/lib/api'
+import { projectApi, investmentApi, llmConfigApi, dataCache } from '@/lib/api'
 import {
   Container,
   Paper,
@@ -274,7 +274,7 @@ const InvestmentSummary: React.FC = () => {
   const [editingThirdLevelItem, setEditingThirdLevelItem] = useState<{parentIndex: number, itemIndex: number} | null>(null)
   const [thirdLevelItemTemp, setThirdLevelItemTemp] = useState<any>(null)
   const [showConstructionInterestModal, setShowConstructionInterestModal] = useState(false)
-  const [showLoanRepaymentModal, setShowLoanRepaymentModal] = useState(false)
+
   
   // 项目类型：控制市政公用设施费是否计算（默认农业项目，免市政费）
   const [projectType, setProjectType] = useState<'agriculture' | 'construction'>('agriculture')
@@ -874,7 +874,7 @@ const InvestmentSummary: React.FC = () => {
         loanDetails.push('各年利息计算:')
         estimate?.partF?.分年利息?.forEach(year => {
           loanDetails.push(
-            `第${year.年份}年: (${year.期初本金累计.toFixed(2)} + ${year.当期借款金额.toFixed(2)} ÷ 2) × ${((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}% = ${year.当期利息.toFixed(2)}万元`
+            `第${year.年份}年: (${Number(year.期初本金累计 || 0).toFixed(2)} + ${Number(year.当期借款金额 || 0).toFixed(2)} ÷ 2) × ${((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}% = ${Number(year.当期利息 || 0).toFixed(2)}万元`
           )
         })
       }
@@ -1136,6 +1136,9 @@ const InvestmentSummary: React.FC = () => {
 
   useEffect(() => {
     if (id) {
+      // 清除该项目的缓存，确保获取最新数据
+      dataCache.invalidate(`investment:${id}`)
+      console.log('[数据加载] 已清除缓存，强制从服务器获取最新数据')
       loadProjectAndEstimate()
     }
     
@@ -1205,11 +1208,14 @@ const InvestmentSummary: React.FC = () => {
             estimateData = estimateResponse.data.estimate
           }
           
-          // 数据完整性检查 - 关键修复：如果estimateData为空，则需要从简化的estimate_data构建完整结构
-          if (!estimateData) {
-            console.log('[数据加载] 投资估算数据为空，将自动生成')
+          // 数据完整性检查 - 检查 estimateData 是否包含完整结构
+          const isCompleteStructure = estimateData?.partA?.children?.length > 0 && 
+                                     estimateData?.partG?.合计 > 0
+          
+          if (!estimateData || !isCompleteStructure) {
+            console.log('[数据加载] 投资估算数据为空或不完整，将自动生成完整结构')
             // 从简化的estimate_data构建完整的表格数据结构
-            estimateData = buildFullEstimateStructure(estimateData, projectData)
+            estimateData = buildFullEstimateStructure(estimateData || {}, projectData)
             console.log('[数据加载] 已构建完整结构，partA.children长度:', estimateData?.partA?.children?.length)
           } else {
             console.log('[数据加载] 投资估算数据完整')
@@ -2248,20 +2254,33 @@ const InvestmentSummary: React.FC = () => {
     try {
       console.log('=== 开始保存估算数据到数据库 ===')
       console.log('项目ID:', id)
-      console.log('估算数据:', estimateData)
+      console.log('估算数据包含partA:', !!estimateData?.partA)
+      console.log('估算数据包含partG:', !!estimateData?.partG)
       console.log('三级子项数据:', estimateData.thirdLevelItems)
       console.log('项目类型:', projectType)
+      
+      // 确保数据结构完整 - 如果不完整，从原始数据构建
+      let finalEstimateData = estimateData
+      const isCompleteStructure = estimateData?.partA?.children?.length > 0 && 
+                                   estimateData?.partG?.合计 > 0
+      
+      if (!isCompleteStructure && project) {
+        console.log('⚠️ 估算数据结构不完整，将使用buildFullEstimateStructure构建完整结构')
+        finalEstimateData = buildFullEstimateStructure(estimateData || {}, project)
+        console.log('已构建完整结构，partA.children长度:', finalEstimateData?.partA?.children?.length)
+      }
       
       // 确保数据结构正确，并包含projectType
       const saveData = {
         project_id: id!,
         estimate_data: {
-          ...estimateData,
+          ...finalEstimateData,
           projectType: estimateData.projectType ?? projectType  // 保存项目类型（优先使用传入的值）
         }
       }
       
-      console.log('保存到数据库的数据结构:', saveData)
+      console.log('保存到数据库的数据结构 - partA存在:', !!saveData.estimate_data.partA)
+      console.log('保存到数据库的数据结构 - partG.合计:', saveData.estimate_data.partG?.合计)
       
       // 使用正确的API调用格式
       const response = await investmentApi.save(saveData)
@@ -3146,26 +3165,7 @@ const InvestmentSummary: React.FC = () => {
           <IconInfoCircle size={18} stroke={1.5} />
         </ActionIcon>
       </Tooltip>
-      <Tooltip label="查看还本付息计划简表（等额本金）" position="top" withArrow>
-        <ActionIcon
-          onClick={() => setShowLoanRepaymentModal(true)}
-          size={32}
-          radius={32}
-          style={{
-            backgroundColor: '#F0F5FF',
-            color: '#52C41A',
-            border: '1px solid #CCE0FF',
-            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-            transition: 'all 0.2s ease',
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            marginLeft: '10px'
-          }}
-        >
-          <IconCurrencyDollar size={18} stroke={1.5} />
-        </ActionIcon>
-      </Tooltip>
+
     </div>
     
     {/* 项目类型选择 - 控制市政公用设施费 */}
@@ -3440,7 +3440,7 @@ const InvestmentSummary: React.FC = () => {
                             <div>各年利息计算:</div>
                             {estimate?.partF?.分年利息?.map((year, idx) => (
                               <div key={idx} style={{ fontSize: '10px', color: '#666' }}>
-                                第{year.年份}年: ({year.期初本金累计.toFixed(2)} + {year.当期借款金额.toFixed(2)} ÷ 2) × {((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}% = {year.当期利息.toFixed(2)}万元
+                                第{year.年份}年: ({Number(year.期初本金累计 || 0).toFixed(2)} + {Number(year.当期借款金额 || 0).toFixed(2)} ÷ 2) × {((estimate?.partF?.年利率 || 0) * 100).toFixed(1)}% = {Number(year.当期利息 || 0).toFixed(2)}万元
                               </div>
                             ))}
                           </div>
@@ -4722,25 +4722,7 @@ const InvestmentSummary: React.FC = () => {
         onClose={() => setShowConstructionInterestModal(false)}
         estimate={estimate}
       />
-      
-      {/* 还本付息计划简表Modal */}
-      <Modal
-        opened={showLoanRepaymentModal}
-        onClose={() => setShowLoanRepaymentModal(false)}
-        title={
-          <Group gap="xs">
-            <IconCurrencyDollar size={20} color="#00C48C" />
-            <Text fw={600} c="#1D2129">还本付息计划简表（等额本金还款）</Text>
-          </Group>
-        }
-        size="xl"
-        centered
-      >
-        <LoanRepaymentScheduleTable
-          showCard={false}
-          estimate={estimate}
-        />
-      </Modal>
+
     </div>
   )
 }

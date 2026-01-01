@@ -149,7 +149,7 @@ const CKEditor5Input: React.FC<CKEditor5InputProps> = ({
 
   // 格式化内容
   const formatContent = useCallback(() => {
-    let formatted = value
+    const formatted = value
       .replace(/<p><\/p>/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .replace(/，{2,}/g, '，')

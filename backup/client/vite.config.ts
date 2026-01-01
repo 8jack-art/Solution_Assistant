@@ -15,6 +15,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: '0.0.0.0', // 允许外部访问
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
@@ -23,8 +24,20 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    // 排除stream模块以避免外部化警告
-    exclude: ['stream'],
+    // 排除 Node.js 内置模块和可能导致问题的模块
+    exclude: [
+      'stream',
+      'events',
+      '@ckeditor/ckeditor5-build-classic',
+      '@ckeditor/ckeditor5-build-inline'
+    ],
+    // 强制重建依赖以解决类继承问题
+    force: true
+  },
+  build: {
+    // 忽略source map错误
+    sourcemap: false,
+    // 添加 rollup 配置
   },
   define: {
     // 抑制React Router Future Flag警告

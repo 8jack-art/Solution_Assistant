@@ -26,7 +26,7 @@ import {
   ActionIcon,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { useDisclosure, useMediaQuery } from '@mantine/hooks'
+import { useDisclosure } from '@mantine/hooks'
 import {
   IconPlus,
   IconRefresh,
@@ -83,7 +83,6 @@ const LLMConfigsManagement: React.FC = () => {
   const [deletingConfigId, setDeletingConfigId] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: unknown } | null>(null)
   const navigate = useNavigate()
-  const isMobile = useMediaQuery('(max-width: 768px)')
   
   // 获取当前用户信息
   const getCurrentUser = () => {
@@ -597,31 +596,31 @@ const LLMConfigsManagement: React.FC = () => {
           zIndex: 100,
         }}
       >
-        <Container size="xl" px={isMobile ? 'sm' : 'lg'} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Container size="xl" px="lg" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Group gap="sm">
             <ThemeIcon size={32} radius="md" variant="light" color="blue">
               <IconApi size={20} />
             </ThemeIcon>
-            <Title order={isMobile ? 5 : 3} c="#1D2129" style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 600 }}>
+            <Title order={3} c="#1D2129" style={{ fontSize: '20px', fontWeight: 600 }}>
               LLM 配置管理
             </Title>
           </Group>
           <Button 
             variant="subtle" 
-            size={isMobile ? 'xs' : 'sm'}
+            size="sm"
             onClick={() => navigate('/dashboard')}
             leftSection={<IconRefresh size={16} />}
-            style={{ height: isMobile ? '28px' : '32px' }}
+            style={{ height: '32px' }}
           >
             返回首页
           </Button>
         </Container>
       </Paper>
 
-      <Container size="xl" py={isMobile ? 'md' : 'lg'} px={isMobile ? 'sm' : 'lg'} style={{ maxWidth: '1400px', margin: '0 auto' }}>
-        <Grid gutter={isMobile ? 'md' : 'lg'}>
+      <Container size="xl" py="lg" px="lg" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        <Grid gutter="lg">
           {/* 表单区域 */}
-          <Grid.Col span={{ base: 12, lg: 5 }}>
+          <Grid.Col span={5}>
             <Card 
               shadow="sm" 
               padding={isMobile ? 'md' : 'lg'} 

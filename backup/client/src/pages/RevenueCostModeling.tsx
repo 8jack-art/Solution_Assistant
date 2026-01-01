@@ -1773,11 +1773,11 @@ const RevenueCostModeling: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '8px' }}>
                       <div>
                         <Text size="xs" c="#86909C">贷款总额</Text>
-                        <Text fw={600} c="#1D2129">{(constructionInterestDetails.基本信息?.贷款总额 || 0).toFixed(2)}万元</Text>
+                        <Text fw={600} c="#1D2129">{Number(constructionInterestDetails.基本信息?.贷款总额 || 0).toFixed(2)}万元</Text>
                       </div>
                       <div>
                         <Text size="xs" c="#86909C">年利率</Text>
-                        <Text fw={600} c="#1D2129">{((constructionInterestDetails.基本信息?.年利率 || 0) * 100).toFixed(2)}%</Text>
+                        <Text fw={600} c="#1D2129">{(Number(constructionInterestDetails.基本信息?.年利率 || 0) * 100).toFixed(2)}%</Text>
                       </div>
                       <div>
                         <Text size="xs" c="#86909C">建设期年限</Text>

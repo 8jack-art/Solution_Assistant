@@ -269,6 +269,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   console.log('FinancialIndicatorsTable - investmentEstimate:', investmentEstimate);
   console.log('FinancialIndicatorsTable - investmentEstimate.partF:', investmentEstimate?.partF);
   console.log('FinancialIndicatorsTable - investmentEstimate.partF.分年利息:', investmentEstimate?.partF?.分年利息);
+  console.log('FinancialIndicatorsTable - investmentEstimate.construction_interest_details:', investmentEstimate?.construction_interest_details);
+  console.log('FinancialIndicatorsTable - investmentEstimate.estimate_data?.construction_interest:', investmentEstimate?.estimate_data?.construction_interest);
   const [showProfitTaxModal, setShowProfitTaxModal] = useState(false)
   
   // 表格弹窗状态
@@ -623,7 +625,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         const partATotal = constructionFee + equipmentFee + installationFee + otherFee
 
         // 从 estimate_data.partB 提取第二部分工程其它费用
-        let partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
+        const partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
         let landCost = 0  // 土地费用
         if (investmentEstimate.estimate_data?.partB?.children) {
           const landItem = investmentEstimate.estimate_data.partB.children.find(
@@ -688,7 +690,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       const partATotal = constructionFee + equipmentFee + installationFee + otherFee
 
       // 从 estimate_data.partB 提取第二部分工程其它费用
-      let partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
+      const partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
       let landCost = 0  // 土地费用
       if (investmentEstimate.estimate_data?.partB?.children) {
         const landItem = investmentEstimate.estimate_data.partB.children.find(
@@ -792,7 +794,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       // 1.2 外购燃料及动力费（除税）
       let fuelPowerCost = 0;
       (costConfig.fuelPower.items || []).forEach((item: any) => {
-        let consumption = item.consumption || 0;
+        const consumption = item.consumption || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
         if (['汽油', '柴油'].includes(item.name)) {
@@ -934,7 +936,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
 
     let yearInputTax = 0;
     costConfig.fuelPower.items.forEach((item: any) => {
-      let consumption = item.consumption || 0;
+      const consumption = item.consumption || 0;
       let amount = 0;
       // 对汽油和柴油进行特殊处理：单价×数量/10000
       if (['汽油', '柴油'].includes(item.name)) {
@@ -1017,7 +1019,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       // 1.2 外购燃料及动力费（除税）
       let fuelPowerCost = 0;
       (costConfig.fuelPower.items || []).forEach((item: any) => {
-        let consumption = item.consumption || 0;
+        const consumption = item.consumption || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
         if (['汽油', '柴油'].includes(item.name)) {
@@ -1614,7 +1616,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       // 1.2 外购燃料及动力费（除税）
       let fuelPowerCost = 0;
       (costConfig.fuelPower.items || []).forEach((item: any) => {
-        let consumption = item.consumption || 0;
+        const consumption = item.consumption || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
         if (['汽油', '柴油'].includes(item.name)) {
@@ -2147,10 +2149,52 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     const avgIncomeTax = calculateIncomeTax(undefined) / operationYears;
     const avgNetProfit = calculateNetProfit(undefined) / operationYears;
     
-    // 计算建设期利息
-    const constructionInterest = investmentEstimate?.partF?.合计 || 
-      (investmentEstimate?.partF?.分年利息 ? 
-        investmentEstimate.partF.分年利息.reduce((sum: number, val: number) => sum + (val || 0), 0) : 0);
+    // 计算建设期利息 - 添加详细调试日志
+    console.log('🔍 [建设期利息计算] 开始计算建设期利息');
+    console.log('🔍 [建设期利息计算] investmentEstimate?.partF?.合计:', investmentEstimate?.partF?.合计);
+    console.log('🔍 [建设期利息计算] investmentEstimate?.partF?.分年利息:', investmentEstimate?.partF?.分年利息);
+    console.log('🔍 [建设期利息计算] investmentEstimate?.construction_interest_details:', investmentEstimate?.construction_interest_details);
+    console.log('🔍 [建设期利息计算] investmentEstimate?.estimate_data?.construction_interest:', investmentEstimate?.estimate_data?.construction_interest);
+    
+    // 尝试从多个路径获取建设期利息
+    let constructionInterest = 0;
+    let interestSource = '';
+    
+    // 路径1: partF.合计
+    if (investmentEstimate?.partF?.合计 !== undefined && investmentEstimate?.partF?.合计 !== null) {
+      constructionInterest = Number(investmentEstimate.partF.合计);
+      interestSource = 'partF.合计';
+      console.log('✅ [建设期利息计算] 从 partF.合计 获取:', constructionInterest);
+    }
+    // 路径2: partF.分年利息 求和
+    else if (investmentEstimate?.partF?.分年利息 && Array.isArray(investmentEstimate.partF.分年利息)) {
+      constructionInterest = investmentEstimate.partF.分年利息.reduce((sum: number, val: any) => {
+        const yearInterest = typeof val === 'object' ? (val.当期利息 || 0) : val;
+        return sum + (yearInterest || 0);
+      }, 0);
+      interestSource = 'partF.分年利息求和';
+      console.log('✅ [建设期利息计算] 从 partF.分年利息 求和获取:', constructionInterest);
+    }
+    // 路径3: construction_interest_details.分年数据 求和
+    else if (investmentEstimate?.construction_interest_details?.分年数据 && Array.isArray(investmentEstimate.construction_interest_details.分年数据)) {
+      constructionInterest = investmentEstimate.construction_interest_details.分年数据.reduce((sum: number, val: any) => {
+        const yearInterest = typeof val === 'object' ? (val.当期利息 || 0) : val;
+        return sum + (yearInterest || 0);
+      }, 0);
+      interestSource = 'construction_interest_details.分年数据求和';
+      console.log('✅ [建设期利息计算] 从 construction_interest_details.分年数据 求和获取:', constructionInterest);
+    }
+    // 路径4: estimate_data.construction_interest
+    else if (investmentEstimate?.estimate_data?.construction_interest !== undefined) {
+      constructionInterest = Number(investmentEstimate.estimate_data.construction_interest);
+      interestSource = 'estimate_data.construction_interest';
+      console.log('✅ [建设期利息计算] 从 estimate_data.construction_interest 获取:', constructionInterest);
+    }
+    else {
+      console.warn('⚠️ [建设期利息计算] 未找到建设期利息数据！');
+    }
+    
+    console.log('🔍 [建设期利息计算] 最终值:', constructionInterest, '来源:', interestSource);
     
     // 计算项目总投资 = 建设投资 + 建设期利息 + 流动资金
     const totalInvestment = calculateConstructionInvestment(undefined) + constructionInterest + calculateWorkingCapital(undefined);
@@ -4525,10 +4569,37 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   const avgIncomeTax = calculateIncomeTax(undefined) / operationYears;
                   const avgNetProfit = calculateNetProfit(undefined) / operationYears;
                   
-                  // 计算建设期利息
-                  const constructionInterest = investmentEstimate?.partF?.合计 || 
-                    (investmentEstimate?.partF?.分年利息 ? 
-                      investmentEstimate.partF.分年利息.reduce((sum: number, val: number) => sum + (val || 0), 0) : 0);
+                  // 计算建设期利息 - 使用与handleExportFinancialSummary相同的逻辑
+                  let constructionInterest = 0;
+                  let interestSource = '';
+                  
+                  // 路径1: partF.合计
+                  if (investmentEstimate?.partF?.合计 !== undefined && investmentEstimate?.partF?.合计 !== null) {
+                    constructionInterest = Number(investmentEstimate.partF.合计);
+                    interestSource = 'partF.合计';
+                  }
+                  // 路径2: partF.分年利息 求和
+                  else if (investmentEstimate?.partF?.分年利息 && Array.isArray(investmentEstimate.partF.分年利息)) {
+                    constructionInterest = investmentEstimate.partF.分年利息.reduce((sum: number, val: any) => {
+                      const yearInterest = typeof val === 'object' ? (val.当期利息 || 0) : val;
+                      return sum + (yearInterest || 0);
+                    }, 0);
+                    interestSource = 'partF.分年利息求和';
+                  }
+                  // 路径3: construction_interest_details.分年数据 求和
+                  else if (investmentEstimate?.construction_interest_details?.分年数据 && Array.isArray(investmentEstimate.construction_interest_details.分年数据)) {
+                    constructionInterest = investmentEstimate.construction_interest_details.分年数据.reduce((sum: number, val: any) => {
+                      const yearInterest = typeof val === 'object' ? (val.当期利息 || 0) : val;
+                      return sum + (yearInterest || 0);
+                    }, 0);
+                    interestSource = 'construction_interest_details.分年数据求和';
+                  }
+                  // 路径4: estimate_data.construction_interest
+                  else if (investmentEstimate?.estimate_data?.construction_interest !== undefined) {
+                    constructionInterest = Number(investmentEstimate.estimate_data.construction_interest);
+                    interestSource = 'estimate_data.construction_interest';
+                  }
+                  console.log('✅ [Modal建设期利息] 最终值:', constructionInterest, '来源:', interestSource);
                   
                   // 计算项目总投资 = 建设投资 + 建设期利息 + 流动资金
                   const totalInvestment = calculateConstructionInvestment(undefined) + constructionInterest + calculateWorkingCapital(undefined);

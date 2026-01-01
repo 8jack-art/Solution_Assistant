@@ -102,7 +102,7 @@ const AnnualInvestmentTable: React.FC<AnnualInvestmentTableProps> = ({
     const partATotal = constructionFee + equipmentFee + installationFee + otherFee
 
     // 从 estimate_data.partB 提取第二部分工程其它费用
-    let partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
+    const partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
     let landCost = 0  // 土地费用
     if (investmentEstimate.estimate_data?.partB?.children) {
       const landItem = investmentEstimate.estimate_data.partB.children.find(

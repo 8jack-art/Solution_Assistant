@@ -359,7 +359,7 @@ function calculateBiddingFeeByBrackets(amount: number, brackets: BiddingFeeBrack
   if (amount <= 0) return 0
   
   let fee = 0
-  let remaining = amount
+  const remaining = amount
   let previousThreshold = 0
   
   for (const bracket of brackets) {

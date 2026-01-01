@@ -265,7 +265,7 @@ const JsonDataViewer: React.FC<JsonDataViewerProps> = ({
   const handleCopy = async () => {
     try {
       // 复制当前标签的数据，如果为空则复制完整数据
-      let jsonToCopy: any = data
+      const jsonToCopy: any = data
       
       if (!jsonToCopy) {
         notifications.show({

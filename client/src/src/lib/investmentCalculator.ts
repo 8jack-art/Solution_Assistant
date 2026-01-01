@@ -104,7 +104,7 @@ export function calculateInvestmentEstimate(params: ProjectParams): InvestmentEs
     projectType
   } = params
 
-  let partAItems = generatePartAItems(projectName, targetInvestment, params.aiGeneratedItems)
+  const partAItems = generatePartAItems(projectName, targetInvestment, params.aiGeneratedItems)
   enforceMinimumShare(partAItems)
 
   const adjustmentTrackers = partAItems.map(() => 0)

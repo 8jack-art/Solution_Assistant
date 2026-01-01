@@ -213,11 +213,11 @@ const LoanRepaymentScheduleTable: React.FC<LoanRepaymentScheduleTableProps> = ({
 
     // 计算运营期还款数据
     // 优先从数据库读取运营期数据，如果没有则计算
-    let yearlyPrincipal: number[] = Array(operationYears).fill(0);
-    let yearlyInterest: number[] = Array(operationYears).fill(0);
-    let yearlyPayment: number[] = Array(operationYears).fill(0);
-    let beginningBalance: number[] = Array(operationYears).fill(0);
-    let endingBalance: number[] = Array(operationYears).fill(0);
+    const yearlyPrincipal: number[] = Array(operationYears).fill(0);
+    const yearlyInterest: number[] = Array(operationYears).fill(0);
+    const yearlyPayment: number[] = Array(operationYears).fill(0);
+    const beginningBalance: number[] = Array(operationYears).fill(0);
+    const endingBalance: number[] = Array(operationYears).fill(0);
 
     // 检查数据库中是否已保存运营期数据
     if (savedLoanData.loanRepaymentScheduleSimple?.还款计划) {

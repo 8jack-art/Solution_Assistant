@@ -45,7 +45,7 @@ export function estimateInvestment(params: EstimateParams): EstimateResult {
   const basicReserve = baseInvestment * basicReserveRate
   const priceReserve = baseInvestment * priceReserveRate
   
-  let buildingInvestment = baseInvestment + basicReserve + priceReserve
+  const buildingInvestment = baseInvestment + basicReserve + priceReserve
   
   const maxIterations = 100
   const tolerance = 0.0001
