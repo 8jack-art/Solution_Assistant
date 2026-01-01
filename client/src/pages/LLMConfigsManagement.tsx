@@ -747,16 +747,15 @@ const LLMConfigsManagement: React.FC = () => {
                               <Button
                                 type="button"
                                 variant={formData.model === model ? 'filled' : 'light'}
-                                size="xs"
+                                size="sm"
                                 onClick={() => handleFieldChange('model', model)}
                                 style={{
-                                  height: '28px',
                                   backgroundColor: formData.model === model ? '#1E6FFF' : undefined,
                                   color: formData.model === model ? '#FFFFFF' : '#1D2129',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                  padding: '0 8px',
-                                  maxWidth: '120px',
+                                  borderRadius: '6px',
+                                  fontSize: '13px',
+                                  padding: '0 12px',
+                                  maxWidth: '140px',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
@@ -781,12 +780,11 @@ const LLMConfigsManagement: React.FC = () => {
 
                     {/* 操作按钮 */}
                     <Group gap="sm" mt="md">
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         loading={loading}
                         size="md"
-                        style={{ 
-                          height: '40px',
+                        style={{
                           backgroundColor: '#1E6FFF',
                         }}
                         leftSection={editingId ? <IconCheck size={16} /> : <IconPlus size={16} />}
@@ -794,16 +792,16 @@ const LLMConfigsManagement: React.FC = () => {
                         {loading ? '保存中...' : (editingId ? '更新配置' : '创建配置')}
                       </Button>
                       
-                      <Button 
+                      <Button
                         type="button"
                         variant="outline"
                         onClick={() => handleTest()}
                         loading={testLoading}
                         disabled={!formData.provider || !formData.base_url || !formData.model}
                         size="md"
-                        style={{ 
-                          height: '40px',
-                          borderColor: '#E5E6EB',
+                        style={{
+                          borderColor: '#1E6FFF',
+                          color: '#1E6FFF',
                         }}
                         leftSection={<IconFlame size={16} />}
                       >
@@ -845,14 +843,16 @@ const LLMConfigsManagement: React.FC = () => {
                     </Text>
                   </div>
                   
-                  <Button 
-                    variant="light" 
-                    size="xs"
-                    onClick={() => { loadProviders(); loadConfigs(); }}
-                    leftSection={<IconRefresh size={14} />}
-                  >
-                    刷新
-                  </Button>
+                  <Tooltip label="刷新列表">
+                    <ActionIcon
+                      variant="light"
+                      color="blue"
+                      size="lg"
+                      onClick={() => { loadProviders(); loadConfigs(); }}
+                    >
+                      <IconRefresh size={18} />
+                    </ActionIcon>
+                  </Tooltip>
                 </Group>
 
                 <Divider />
@@ -986,54 +986,49 @@ const LLMConfigsManagement: React.FC = () => {
 
                             {/* 操作按钮 */}
                             <Group gap="xs" mt="xs">
-                              <Button 
+                              <Button
                                 variant="light"
-                                size="xs"
+                                size="sm"
                                 onClick={() => handleTest(config)}
                                 disabled={testLoading}
-                                leftSection={<IconFlame size={12} />}
+                                leftSection={<IconFlame size={14} />}
                               >
                                 测试
                               </Button>
                               
-                              <Button 
+                              <Button
                                 variant="light"
-                                size="xs"
+                                size="sm"
                                 onClick={() => handleEdit(config)}
                                 disabled={!canEdit}
-                                leftSection={<IconEdit size={12} />}
-                                style={{ 
-                                  height: '28px',
+                                leftSection={<IconEdit size={14} />}
+                                style={{
                                   color: canEdit ? '#1E6FFF' : undefined,
                                 }}
                               >
                                 编辑
                               </Button>
                               
-                              <Button 
+                              <Button
                                 variant="subtle"
-                                size="xs"
+                                size="sm"
                                 onClick={() => handleSetDefault(config.id)}
                                 disabled={config.is_default || !canSetDefault}
-                                leftSection={<IconStar size={12} />}
-                                style={{ 
-                                  height: '28px',
+                                leftSection={<IconStar size={14} />}
+                                style={{
                                   color: (config.is_default || !canSetDefault) ? '#C9CDD4' : '#1D2129',
                                 }}
                               >
                                 设为默认
                               </Button>
                               
-                              <Button 
+                              <Button
                                 variant="subtle"
                                 color="red"
-                                size="xs"
+                                size="sm"
                                 onClick={() => handleDeleteClick(config.id)}
                                 disabled={!canDelete}
-                                leftSection={<IconTrash size={12} />}
-                                style={{ 
-                                  height: '28px',
-                                }}
+                                leftSection={<IconTrash size={14} />}
                               >
                                 删除
                               </Button>
@@ -1069,10 +1064,10 @@ const LLMConfigsManagement: React.FC = () => {
           确定要删除此 LLM 配置吗？此操作不可恢复。
         </Text>
         <Group justify="flex-end" gap="sm">
-          <Button variant="subtle" color="gray" onClick={closeDeleteModal}>
+          <Button variant="subtle" color="gray" size="sm" onClick={closeDeleteModal}>
             取消
           </Button>
-          <Button color="red" onClick={confirmDelete} leftSection={<IconTrash size={14} />}>
+          <Button color="red" size="sm" onClick={confirmDelete} leftSection={<IconTrash size={14} />}>
             删除
           </Button>
         </Group>

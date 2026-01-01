@@ -335,10 +335,10 @@ const ModernConfigList: React.FC<ModernConfigListProps> = ({
           </Alert>
           
           <Group justify="flex-end" gap="sm">
-            <Button variant="subtle" onClick={closeDeleteModal}>
+            <Button variant="subtle" size="sm" onClick={closeDeleteModal}>
               取消
             </Button>
-            <Button color="red" onClick={confirmDelete} leftSection={<IconTrash size={16} />}>
+            <Button color="red" size="sm" onClick={confirmDelete} leftSection={<IconTrash size={16} />}>
               删除
             </Button>
           </Group>
@@ -554,8 +554,8 @@ const ConfigCard: React.FC<ConfigCardProps> = ({
               <Group gap="xs" mt="md">
                 <Button
                   variant="light"
-                  size="xs"
-                  leftSection={<IconFlame size={12} />}
+                  size="sm"
+                  leftSection={<IconFlame size={14} />}
                   onClick={(e) => {
                     e.stopPropagation()
                     onTest(config)
@@ -567,8 +567,8 @@ const ConfigCard: React.FC<ConfigCardProps> = ({
                 
                 <Button
                   variant="light"
-                  size="xs"
-                  leftSection={<IconEdit size={12} />}
+                  size="sm"
+                  leftSection={<IconEdit size={14} />}
                   onClick={(e) => {
                     e.stopPropagation()
                     onEdit(config)
@@ -580,8 +580,8 @@ const ConfigCard: React.FC<ConfigCardProps> = ({
                 {!config.is_default && (
                   <Button
                     variant="subtle"
-                    size="xs"
-                    leftSection={<IconStar size={12} />}
+                    size="sm"
+                    leftSection={<IconStar size={14} />}
                     onClick={(e) => {
                       e.stopPropagation()
                       onSetDefault(config)
@@ -594,8 +594,8 @@ const ConfigCard: React.FC<ConfigCardProps> = ({
                 <Button
                   variant="subtle"
                   color="red"
-                  size="xs"
-                  leftSection={<IconTrash size={12} />}
+                  size="sm"
+                  leftSection={<IconTrash size={14} />}
                   onClick={(e) => {
                     e.stopPropagation()
                     onDelete()
