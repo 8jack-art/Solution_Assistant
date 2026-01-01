@@ -8,6 +8,7 @@ import LLMConfigsManagement from '@/pages/LLMConfigsManagement'
 import LLMConfigsDebug from '@/pages/LLMConfigsDebug'
 import RevenueCostModeling from '@/pages/RevenueCostModeling'
 import InvestmentReport from '@/pages/InvestmentReport'
+import RichTextEditorTest from '@/pages/RichTextEditorTest'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 const AppRoutes: React.FC = () => {
@@ -53,6 +54,11 @@ const AppRoutes: React.FC = () => {
       <Route path="/report/:id" element={
         <ProtectedRoute>
           <InvestmentReport />
+        </ProtectedRoute>
+      } />
+      <Route path="/rich-text-test" element={
+        <ProtectedRoute>
+          <RichTextEditorTest />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

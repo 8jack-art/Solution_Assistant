@@ -36,6 +36,8 @@ import {
 import { notifications } from '@mantine/notifications'
 import { projectApi, reportApi, investmentApi } from '@/lib/api'
 import TiptapInput from '@/components/report/TiptapInput'
+import TestTiptap2 from '@/components/report/TestTiptap2'
+import SimpleHTMLInput from '@/components/report/SimpleHTMLInput'
 import RichTextOutput from '@/components/report/RichTextOutput'
 import WordPreview from '@/components/report/WordPreview'
 
@@ -809,14 +811,56 @@ const InvestmentReport: React.FC = () => {
                 searchable
               />
 
-              {/* 提示词编辑器 - 使用CKEditor 5 */}
-              <TiptapInput
-                value={customPrompt}
-                onChange={setCustomPrompt}
-                placeholder="请输入报告生成的提示词..."
-                minHeight={300}
-                showTemplateButtons={true}
-              />
+              {/* 提示词编辑器容器 - 调试用 */}
+              <div style={{ 
+                border: '3px solid #FF0000', 
+                padding: '16px', 
+                borderRadius: '8px', 
+                backgroundColor: '#FFF0F0',
+                position: 'relative',
+                zIndex: 9999
+              }}>
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '-10px', 
+                  left: '10px', 
+                  backgroundColor: '#FF0000', 
+                  color: '#FFFFFF', 
+                  padding: '4px 8px', 
+                  borderRadius: '4px', 
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}>
+                  TiptapInput 容器
+                </div>
+                
+                {/* 修复后的Tiptap编辑器 */}
+                <TiptapInput
+                  value={customPrompt}
+                  onChange={setCustomPrompt}
+                  placeholder="请输入报告生成的提示词..."
+                  minHeight={300}
+                  showTemplateButtons={true}
+                />
+                
+                {/* 测试简单HTML编辑器（暂时注释） */}
+                {/* <SimpleHTMLInput
+                  value={customPrompt}
+                  onChange={setCustomPrompt}
+                  placeholder="请输入报告生成的提示词..."
+                  minHeight={300}
+                  showTemplateButtons={true}
+                /> */}
+                
+                {/* 测试Tiptap编辑器（暂时注释） */}
+                {/* <TestTiptap2
+                  value={customPrompt}
+                  onChange={setCustomPrompt}
+                  placeholder="请输入报告生成的提示词..."
+                  minHeight={300}
+                  showTemplateButtons={true}
+                /> */}
+              </div>
 
               {/* 控制按钮 */}
               <Group justify="space-between">
