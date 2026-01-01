@@ -10,6 +10,7 @@ const InvestmentSummary = lazy(() => import('@/pages/InvestmentSummary'))
 const LLMConfigsManagement = lazy(() => import('@/pages/LLMConfigsManagement'))
 const LLMConfigsDebug = lazy(() => import('@/pages/LLMConfigsDebug'))
 const RevenueCostModeling = lazy(() => import('@/pages/RevenueCostModeling'))
+const ReportGeneration = lazy(() => import('@/pages/ReportGeneration'))
 
 const PageLoader: React.FC = () => (
   <Center style={{ height: '100vh', flexDirection: 'column' }}>
@@ -57,6 +58,11 @@ const AppRoutes: React.FC = () => {
         <Route path="/revenue-cost/:id" element={
           <ProtectedRoute>
             <RevenueCostModeling />
+          </ProtectedRoute>
+        } />
+        <Route path="/report/:projectId" element={
+          <ProtectedRoute>
+            <ReportGeneration />
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

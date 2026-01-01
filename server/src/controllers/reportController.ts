@@ -1,1120 +1,575 @@
-import { Response } from 'express'
-import { z } from 'zod'
+import { Request, Response } from 'express'
 import { pool } from '../db/config.js'
-import { ApiResponse, AuthRequest } from '../types/index.js'
-import { InvestmentProjectModel } from '../models/InvestmentProject.js'
-import { LLMService } from '../lib/llm.js'
-import { LLMConfigModel } from '../models/LLMConfig.js'
 import { ReportService } from '../services/reportService.js'
 import { sseManager } from '../services/sseManager.js'
-
-// 验证Schema
-const generateReportSchema = z.object({
-  project_id: z.string().min(1, '项目ID不能为空'),
-  template_id: z.string().optional(),
-  custom_prompt: z.string().optional(),
-  report_title: z.string().min(1, '报告标题不能为空'),
-  use_default_config: z.boolean().default(true),
-  config_id: z.string().optional(),
-})
-
-const createTemplateSchema = z.object({
-  name: z.string().min(1, '模板名称不能为空'),
-  description: z.string().optional(),
-  prompt_template: z.string().min(1, '提示词模板不能为空'),
-  is_default: z.boolean().default(false),
-})
-
-const updateTemplateSchema = createTemplateSchema.partial()
-
-const exportReportSchema = z.object({
-  report_id: z.string().min(1, '报告ID不能为空'),
-  format: z.enum(['docx']).default('docx'),
-  title: z.string().optional(),
-})
-
-const previewReportSchema = z.object({
-  content: z.string().min(1, '内容不能为空'),
-  format: z.enum(['html', 'markdown']).default('html'),
-})
+import { v4 as uuidv4 } from 'uuid'
 
 /**
- * 投资方案报告控制器
+ * 报告控制器
+ * 处理报告生成相关的 API 请求
  */
 export class ReportController {
   /**
-   * 生成投资方案报告
+   * 创建新的报告记录
    */
-  static async generate(req: AuthRequest, res: Response) {
+  static async create(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
+      const { projectId, templateId, title } = req.body
+      const userId = (req as any).user?.id || (req as any).userId
+
+      if (!projectId) {
+        res.status(400).json({ success: false, error: '缺少项目ID' })
+        return
+      }
 
       if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
+        res.status(401).json({ success: false, error: '未授权' })
+        return
       }
 
-      const validatedData = generateReportSchema.parse(req.body)
-
-      // 验证项目存在且有权限
-      const project = await InvestmentProjectModel.findById(validatedData.project_id)
-      if (!project) {
-        return res.status(404).json({
-          success: false,
-          error: '项目不存在'
-        })
-      }
-
-      if (!isAdmin && project.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权操作此项目'
-        })
-      }
-
-      // 获取LLM配置
-      let llmConfig
-      if (validatedData.use_default_config) {
-        llmConfig = await LLMConfigModel.findDefaultByUserId(userId)
-      } else if (validatedData.config_id) {
-        llmConfig = await LLMConfigModel.findById(validatedData.config_id)
-      }
-
-      if (!llmConfig) {
-        return res.status(400).json({
-          success: false,
-          error: '未找到可用的LLM配置，请先配置LLM服务'
-        })
-      }
-
-      // 获取模板或使用自定义提示词
-      let promptTemplate = validatedData.custom_prompt
-      if (validatedData.template_id && !promptTemplate) {
-        const [templates] = await (pool as any).execute(
-          'SELECT prompt_template FROM report_templates WHERE id = ?',
-          [validatedData.template_id]
-        ) as any[]
-        
-        if (!templates || templates.length === 0) {
-          return res.status(404).json({
-            success: false,
-            error: '模板不存在'
-          })
-        }
-        
-        promptTemplate = templates[0].prompt_template
-      }
-
-      if (!promptTemplate) {
-        return res.status(400).json({
-          success: false,
-          error: '请选择模板或提供自定义提示词'
-        })
-      }
-
-      // 创建报告记录
-      const [insertResult] = await (pool as any).execute(
-        `INSERT INTO generated_reports
-         (project_id, template_id, user_id, report_title, generation_status)
-         VALUES (?, ?, ?, ?, 'generating')`,
-        [
-          validatedData.project_id,
-          validatedData.template_id || null,
-          userId,
-          validatedData.report_title
-        ]
-      ) as any[]
-
-      // 获取插入的报告ID（UUID）
-      const [reportRows] = await (pool as any).execute(
-        'SELECT id FROM generated_reports ORDER BY created_at DESC LIMIT 1'
-      ) as any[]
+      const reportId = uuidv4()
       
-      const reportId = reportRows[0]?.id
+      await pool.execute(
+        `INSERT INTO generated_reports 
+         (id, project_id, template_id, user_id, report_title, generation_status) 
+         VALUES (?, ?, ?, ?, ?, 'pending')`,
+        [reportId, projectId, templateId || null, userId, title || '投资项目方案报告']
+      )
 
-      // 异步流式生成报告
-      ReportService.generateReportStream(reportId, llmConfig, promptTemplate, project)
-        .catch(error => {
-          console.error('异步流式生成报告失败:', error)
-          // 更新报告状态为失败
-          pool.execute(
-            'UPDATE generated_reports SET generation_status = ?, report_content = ? WHERE id = ?',
-            ['failed', error.message, reportId]
-          )
-        })
-
-      res.json({
-        success: true,
-        data: {
-          report_id: reportId,
-          message: '报告生成已开始，请使用流式接口获取生成进度'
-        }
-      })
+      res.json({ success: true, reportId })
     } catch (error) {
-      console.error('生成报告失败:', error)
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({
-          success: false,
-          error: '输入验证失败',
-          message: error.errors[0].message
-        })
-      }
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
+      console.error('创建报告失败:', error)
+      res.status(500).json({ success: false, error: '创建报告失败' })
     }
   }
 
   /**
-   * 流式获取报告生成内容
+   * 启动流式报告生成 (SSE)
    */
-  static async stream(req: AuthRequest, res: Response) {
+  static async generate(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-      const { reportId } = req.params
+      const { id } = req.params
+      const { promptTemplate } = req.body
+      const userId = (req as any).user?.id || (req as any).userId
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
+      console.log('='.repeat(60))
+      console.log('启动报告生成:', id)
+      console.log('提示词长度:', promptTemplate?.length || 0)
 
-      // 验证报告存在且有权限
-      const [reports] = await (pool as any).execute(
+      // 获取报告信息
+      const [reports] = await pool.execute(
         'SELECT * FROM generated_reports WHERE id = ?',
-        [reportId]
+        [id]
       ) as any[]
-
-      if (!reports || reports.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '报告不存在'
-        })
+      
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
       }
 
       const report = reports[0]
 
-      // 验证权限
-      if (!isAdmin && report.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权查看此报告'
+      // 检查报告是否属于当前用户
+      if (report.user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权操作此报告' })
+        return
+      }
+
+      // 获取 LLM 配置
+      const [configs] = await pool.execute(
+        'SELECT * FROM llm_configs WHERE user_id = ? AND is_default = TRUE',
+        [userId]
+      ) as any[]
+      
+      if (configs.length === 0) {
+        // 如果没有默认配置，尝试获取第一个配置
+        const [allConfigs] = await pool.execute(
+          'SELECT * FROM llm_configs WHERE user_id = ? LIMIT 1',
+          [userId]
+        ) as any[]
+        
+        if (allConfigs.length === 0) {
+          res.status(400).json({ success: false, error: '未配置 LLM，请先配置大模型' })
+          return
+        }
+        
+        configs.push(allConfigs[0])
+      }
+
+      const llmConfig = configs[0]
+      
+      // 获取项目信息
+      const [projects] = await pool.execute(
+        'SELECT * FROM investment_projects WHERE id = ?',
+        [report.project_id]
+      ) as any[]
+      
+      if (projects.length === 0) {
+        res.status(404).json({ success: false, error: '项目不存在' })
+        return
+      }
+
+      const project = projects[0]
+
+      // 设置 SSE 响应头
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no') // 禁用 Nginx 缓冲
+
+      // 注册 SSE 连接
+      sseManager.register(id, res)
+
+      // 更新报告状态为生成中
+      await pool.execute(
+        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
+        ['generating', id]
+      )
+
+      // 启动流式生成
+      console.log('开始调用 ReportService.generateReportStream...')
+      await ReportService.generateReportStream(id, llmConfig, promptTemplate, project)
+      
+      console.log('流式生成调用完成')
+    } catch (error) {
+      console.error('生成报告失败:', error)
+      
+      // 尝试发送错误到前端
+      const { id } = req.params
+      if (sseManager.isConnected(id)) {
+        sseManager.fail(id, error instanceof Error ? error.message : '生成报告失败')
+      }
+      
+      // 更新报告状态为失败
+      try {
+        await pool.execute(
+          'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
+          ['failed', id]
+        )
+      } catch {
+        // 忽略数据库更新错误
+      }
+      
+      // 关闭响应
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: '生成报告失败' })
+      } else {
+        res.end()
+      }
+    }
+  }
+
+  /**
+   * 获取 SSE 事件流 (用于前端连接)
+   */
+  static async stream(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
+
+      console.log('SSE 连接请求，报告ID:', id)
+
+      // 获取报告信息验证权限
+      const [reports] = await pool.execute(
+        'SELECT * FROM generated_reports WHERE id = ?',
+        [id]
+      ) as any[]
+      
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
+      }
+
+      const report = reports[0]
+
+      // 检查报告是否属于当前用户
+      if (report.user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权操作此报告' })
+        return
+      }
+
+      // 设置 SSE 响应头
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no')
+
+      // 注册 SSE 连接
+      sseManager.register(id, res)
+
+      // 如果报告已有内容，发送已有内容
+      if (report.report_content) {
+        sseManager.send(id, {
+          type: 'content',
+          status: report.generation_status,
+          content: report.report_content,
+          progress: report.report_content.length
         })
       }
 
-      // 设置SSE响应头
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Cache-Control',
-        'X-Accel-Buffering': 'no' // 禁用Nginx缓冲
-      })
-
-      console.log(`[SSE] 客户端连接，报告ID: ${reportId}`)
-
-      // 如果报告已完成，直接发送完成事件
-      if (report.generation_status === 'completed') {
-        res.write(`data: ${JSON.stringify({
-          type: 'completed',
-          content: report.report_content || '',
-          title: report.report_title,
-          progress: (report.report_content || '').length
-        })}\n\n`)
-        res.end()
-        return
+      // 如果已完成或失败，发送完成事件
+      if (['completed', 'failed', 'paused'].includes(report.generation_status)) {
+        sseManager.send(id, {
+          type: report.generation_status === 'completed' ? 'completed' : 'error',
+          status: report.generation_status,
+          content: report.report_content || ''
+        })
       }
 
-      // 如果报告失败，直接发送错误事件
-      if (report.generation_status === 'failed') {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          error: report.report_content || '生成失败'
-        })}\n\n`)
-        res.end()
-        return
-      }
-
-      // 如果报告已暂停，发送暂停状态
-      if (report.generation_status === 'paused') {
-        res.write(`data: ${JSON.stringify({
-          type: 'status',
-          status: 'paused',
-          content: report.report_content || '',
-          progress: (report.report_content || '').length
-        })}\n\n`)
-        res.end()
-        return
-      }
-
-      // 使用SSE管理器注册连接，实现真正的实时推送
-      sseManager.register(reportId, res)
-
-      // 如果有已生成的内容，先发送
-      if (report.report_content) {
-        sseManager.appendContent(reportId, report.report_content)
-      }
-
-      // 设置超时，避免长时间占用连接
-      setTimeout(() => {
-        console.log(`[SSE] 连接超时，关闭报告ID: ${reportId}`)
-        sseManager.unregister(reportId)
-      }, 300000) // 5分钟超时
-
-      req.on('close', () => {
-        console.log(`[SSE] 客户端断开连接，报告ID: ${reportId}`)
-      })
+      console.log('SSE 连接已建立，报告状态:', report.generation_status)
     } catch (error) {
-      console.error('流式获取报告失败:', error)
-      try {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          error: '服务器内部错误'
-        })}\n\n`)
-        res.end()
-      } catch (e) {
-        // 响应可能已关闭
-      }
+      console.error('SSE 连接失败:', error)
+      res.status(500).json({ success: false, error: '连接失败' })
     }
   }
 
   /**
    * 获取报告详情
    */
-  static async getById(req: AuthRequest, res: Response) {
+  static async getById(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
       const { id } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      const [reports] = await (pool as any).execute(
-        'SELECT * FROM generated_reports WHERE id = ?',
+      const [reports] = await pool.execute(
+        `SELECT r.*, t.name as template_name, t.prompt_template 
+         FROM generated_reports r 
+         LEFT JOIN report_templates t ON r.template_id = t.id 
+         WHERE r.id = ?`,
         [id]
       ) as any[]
-
-      if (!reports || reports.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '报告不存在'
-        })
-      }
-
-      const report = reports[0]
-
-      // 验证权限
-      if (!isAdmin && report.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权查看此报告'
-        })
-      }
-
-      // 解析JSON字段
-      if (report.report_data && typeof report.report_data === 'string') {
-        try {
-          report.report_data = JSON.parse(report.report_data)
-        } catch (e) {
-          console.warn('解析report_data失败:', e)
-        }
-      }
-
-      res.json({
-        success: true,
-        data: { report }
-      })
-    } catch (error) {
-      console.error('获取报告详情失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 获取项目的所有报告
-   */
-  static async getByProjectId(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-      const { projectId } = req.params
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      // 验证项目存在且有权限
-      const project = await InvestmentProjectModel.findById(projectId)
-      if (!project) {
-        return res.status(404).json({
-          success: false,
-          error: '项目不存在'
-        })
-      }
-
-      if (!isAdmin && project.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权查看此项目'
-        })
-      }
-
-      const [reports] = await (pool as any).execute(
-        'SELECT * FROM generated_reports WHERE project_id = ? ORDER BY created_at DESC',
-        [projectId]
-      ) as any[]
-
-      res.json({
-        success: true,
-        data: { reports }
-      })
-    } catch (error) {
-      console.error('获取项目报告列表失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 删除报告
-   */
-  static async delete(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-      const { id } = req.params
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      const [reports] = await (pool as any).execute(
-        'SELECT * FROM generated_reports WHERE id = ?',
-        [id]
-      ) as any[]
-
-      if (!reports || reports.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '报告不存在'
-        })
-      }
-
-      const report = reports[0]
-
-      // 验证权限
-      if (!isAdmin && report.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权删除此报告'
-        })
-      }
-
-      // 删除报告（会级联删除历史记录）
-      await (pool as any).execute('DELETE FROM generated_reports WHERE id = ?', [id])
-
-      res.json({
-        success: true,
-        message: '报告删除成功'
-      })
-    } catch (error) {
-      console.error('删除报告失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 创建报告模板
-   */
-  static async createTemplate(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      const validatedData = createTemplateSchema.parse(req.body)
-
-      // 如果设置为默认，先取消其他默认模板
-      if (validatedData.is_default) {
-        await (pool as any).execute(
-          'UPDATE report_templates SET is_default = FALSE WHERE user_id = ?',
-          [userId]
-        )
-      }
-
-      const [insertResult] = await (pool as any).execute(
-        `INSERT INTO report_templates 
-         (user_id, name, description, prompt_template, is_default) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [
-          userId,
-          validatedData.name,
-          validatedData.description || null,
-          validatedData.prompt_template,
-          validatedData.is_default
-        ]
-      ) as any[]
-
-      const templateId = insertResult.insertId
-
-      res.status(201).json({
-        success: true,
-        data: {
-          template: {
-            id: templateId,
-            ...validatedData
-          }
-        }
-      })
-    } catch (error) {
-      console.error('创建报告模板失败:', error)
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({
-          success: false,
-          error: '输入验证失败',
-          message: error.errors[0].message
-        })
-      }
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 获取报告模板列表
-   */
-  static async getTemplates(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      let query = 'SELECT * FROM report_templates WHERE user_id = ? OR is_system = TRUE'
-      let params = [userId]
-
-      // 如果是管理员，可以获取所有模板
-      if (isAdmin) {
-        query = 'SELECT * FROM report_templates'
-        params = []
-      }
-
-      const [templates] = await (pool as any).execute(query, params) as any[]
-
-      res.json({
-        success: true,
-        data: { templates }
-      })
-    } catch (error) {
-      console.error('获取报告模板列表失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 更新报告模板
-   */
-  static async updateTemplate(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-      const { id } = req.params
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      const validatedData = updateTemplateSchema.parse(req.body)
-
-      // 验证模板存在且有权限
-      const [templates] = await (pool as any).execute(
-        'SELECT * FROM report_templates WHERE id = ?',
-        [id]
-      ) as any[]
-
-      if (!templates || templates.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '模板不存在'
-        })
-      }
-
-      const template = templates[0]
-
-      // 验证权限（系统模板只有管理员可以修改）
-      if (template.is_system && !isAdmin) {
-        return res.status(403).json({
-          success: false,
-          error: '无权修改系统模板'
-        })
-      }
-
-      if (!isAdmin && template.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权修改此模板'
-        })
-      }
-
-      // 如果设置为默认，先取消其他默认模板
-      if (validatedData.is_default) {
-        await (pool as any).execute(
-          'UPDATE report_templates SET is_default = FALSE WHERE user_id = ? AND id != ?',
-          [userId, id]
-        )
-      }
-
-      const updateFields: string[] = []
-      const updateValues: any[] = []
-
-      if (validatedData.name !== undefined) {
-        updateFields.push('name = ?')
-        updateValues.push(validatedData.name)
-      }
-      if (validatedData.description !== undefined) {
-        updateFields.push('description = ?')
-        updateValues.push(validatedData.description)
-      }
-      if (validatedData.prompt_template !== undefined) {
-        updateFields.push('prompt_template = ?')
-        updateValues.push(validatedData.prompt_template)
-      }
-      if (validatedData.is_default !== undefined) {
-        updateFields.push('is_default = ?')
-        updateValues.push(validatedData.is_default)
-      }
-
-      if (updateFields.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: '没有需要更新的字段'
-        })
-      }
-
-      updateFields.push('updated_at = NOW()')
-      updateValues.push(id)
-
-      await (pool as any).execute(
-        `UPDATE report_templates SET ${updateFields.join(', ')} WHERE id = ?`,
-        updateValues
-      )
-
-      res.json({
-        success: true,
-        message: '模板更新成功'
-      })
-    } catch (error) {
-      console.error('更新报告模板失败:', error)
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({
-          success: false,
-          error: '输入验证失败',
-          message: error.errors[0].message
-        })
-      }
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 删除报告模板
-   */
-  static async deleteTemplate(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-      const { id } = req.params
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      // 验证模板存在且有权限
-      const [templates] = await (pool as any).execute(
-        'SELECT * FROM report_templates WHERE id = ?',
-        [id]
-      ) as any[]
-
-      if (!templates || templates.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '模板不存在'
-        })
-      }
-
-      const template = templates[0]
-
-      // 验证权限（系统模板只有管理员可以删除）
-      if (template.is_system && !isAdmin) {
-        return res.status(403).json({
-          success: false,
-          error: '无权删除系统模板'
-        })
-      }
-
-      if (!isAdmin && template.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权删除此模板'
-        })
-      }
-
-      await (pool as any).execute('DELETE FROM report_templates WHERE id = ?', [id])
-
-      res.json({
-        success: true,
-        message: '模板删除成功'
-      })
-    } catch (error) {
-      console.error('删除报告模板失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 设置默认模板
-   */
-  static async setDefaultTemplate(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-      const { template_id } = req.body
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      if (!template_id) {
-        return res.status(400).json({
-          success: false,
-          error: '模板ID不能为空'
-        })
-      }
-
-      // 验证模板存在且有权限
-      const [templates] = await (pool as any).execute(
-        'SELECT * FROM report_templates WHERE id = ?',
-        [template_id]
-      ) as any[]
-
-      if (!templates || templates.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '模板不存在'
-        })
-      }
-
-      const template = templates[0]
-
-      // 验证权限（系统模板不能设置为个人默认）
-      if (template.is_system) {
-        return res.status(400).json({
-          success: false,
-          error: '系统模板不能设置为个人默认'
-        })
-      }
-
-      if (template.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权操作此模板'
-        })
-      }
-
-      // 取消其他默认模板，设置当前为默认
-      await (pool as any).execute(
-        'UPDATE report_templates SET is_default = FALSE WHERE user_id = ?',
-        [userId]
-      )
-
-      await (pool as any).execute(
-        'UPDATE report_templates SET is_default = TRUE WHERE id = ?',
-        [template_id]
-      )
-
-      res.json({
-        success: true,
-        message: '默认模板设置成功'
-      })
-    } catch (error) {
-      console.error('设置默认模板失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 预览报告内容
-   */
-  static async preview(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      const validatedData = previewReportSchema.parse(req.body)
-
-      // 生成预览HTML
-      const previewHtml = ReportService.generatePreview(validatedData.content, validatedData.format)
-
-      res.json({
-        success: true,
-        data: {
-          preview: previewHtml,
-          format: validatedData.format
-        }
-      })
-    } catch (error) {
-      console.error('预览报告失败:', error)
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({
-          success: false,
-          error: '输入验证失败',
-          message: error.errors[0].message
-        })
-      }
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
-    }
-  }
-
-  /**
-   * 导出Word文档
-   */
-  static async export(req: AuthRequest, res: Response) {
-    try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      const validatedData = exportReportSchema.parse(req.body)
-
-      // 验证报告存在且有权限
-      const [reports] = await (pool as any).execute(
-        'SELECT * FROM generated_reports WHERE id = ?',
-        [validatedData.report_id]
-      ) as any[]
-
-      if (!reports || reports.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '报告不存在'
-        })
-      }
-
-      const report = reports[0]
-
-      // 验证权限
-      if (!isAdmin && report.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权导出此报告'
-        })
-      }
-
-      // 获取完整内容
-      let content = report.report_content || ''
       
-      // 如果有历史记录，从历史记录构建完整内容
-      if (!content) {
-        const [history] = await (pool as any).execute(
-          'SELECT chunk_content FROM report_generation_history WHERE report_id = ? ORDER BY chunk_order ASC',
-          [validatedData.report_id]
-        ) as any[]
-
-        if (history && history.length > 0) {
-          content = history.map(h => h.chunk_content || '').join('')
-        }
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
       }
 
-      if (!content) {
-        return res.status(400).json({
-          success: false,
-          error: '报告内容为空，无法导出'
-        })
+      const report = reports[0]
+
+      // 检查权限
+      if (report.user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权查看此报告' })
+        return
       }
 
-      // 生成Word文档
-      const docxBuffer = await ReportService.generateWordDocument(
-        content,
-        validatedData.title || report.report_title
-      )
-
-      // 设置响应头
-      const filename = `${validatedData.title || report.report_title}.docx`
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`)
-      res.setHeader('Content-Length', docxBuffer.length)
-
-      res.send(docxBuffer)
+      res.json({ success: true, report })
     } catch (error) {
-      console.error('导出Word文档失败:', error)
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({
-          success: false,
-          error: '输入验证失败',
-          message: error.errors[0].message
-        })
-      }
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
+      console.error('获取报告失败:', error)
+      res.status(500).json({ success: false, error: '获取报告失败' })
+    }
+  }
+
+  /**
+   * 获取项目的报告列表
+   */
+  static async getByProjectId(req: Request, res: Response): Promise<void> {
+    try {
+      const { projectId } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
+
+      const [reports] = await pool.execute(
+        `SELECT r.*, t.name as template_name 
+         FROM generated_reports r 
+         LEFT JOIN report_templates t ON r.template_id = t.id 
+         WHERE r.project_id = ? AND r.user_id = ?
+         ORDER BY r.created_at DESC`,
+        [projectId, userId]
+      ) as any[]
+
+      res.json({ success: true, reports })
+    } catch (error) {
+      console.error('获取报告列表失败:', error)
+      res.status(500).json({ success: false, error: '获取报告列表失败' })
     }
   }
 
   /**
    * 暂停报告生成
    */
-  static async pauseGeneration(req: AuthRequest, res: Response) {
+  static async pause(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
       const { id } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      // 验证报告存在且有权限
-      const [reports] = await (pool as any).execute(
+      // 验证权限
+      const [reports] = await pool.execute(
         'SELECT * FROM generated_reports WHERE id = ?',
         [id]
       ) as any[]
-
-      if (!reports || reports.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '报告不存在'
-        })
+      
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
       }
 
-      const report = reports[0]
-
-      // 验证权限
-      if (!isAdmin && report.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权操作此报告'
-        })
+      if (reports[0].user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权操作此报告' })
+        return
       }
 
-      // 更新状态为暂停
-      await (pool as any).execute(
-        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
-        ['paused', id]
-      )
-
-      res.json({
-        success: true,
-        message: '报告生成已暂停'
-      })
+      await ReportService.pauseReportGeneration(id)
+      
+      res.json({ success: true, message: '已暂停' })
     } catch (error) {
-      console.error('暂停报告生成失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
+      console.error('暂停失败:', error)
+      res.status(500).json({ success: false, error: '暂停失败' })
     }
   }
 
   /**
    * 继续报告生成
    */
-  static async resumeGeneration(req: AuthRequest, res: Response) {
+  static async resume(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
       const { id } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      // 验证报告存在且有权限
-      const [reports] = await (pool as any).execute(
+      // 验证权限
+      const [reports] = await pool.execute(
         'SELECT * FROM generated_reports WHERE id = ?',
         [id]
       ) as any[]
-
-      if (!reports || reports.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '报告不存在'
-        })
+      
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
       }
 
-      const report = reports[0]
-
-      // 验证权限
-      if (!isAdmin && report.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权操作此报告'
-        })
+      if (reports[0].user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权操作此报告' })
+        return
       }
 
-      // 只有暂停状态才能继续
-      if (report.generation_status !== 'paused') {
-        return res.status(400).json({
-          success: false,
-          error: '只有暂停的报告才能继续生成'
-        })
-      }
-
-      // 更新状态为生成中
-      await (pool as any).execute(
-        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
-        ['generating', id]
-      )
-
-      // 这里可以添加异步继续生成的逻辑
-      // ReportService.resumeReportGeneration(id, report)
-
-      res.json({
-        success: true,
-        message: '报告生成已继续'
-      })
+      await ReportService.resumeReportGeneration(id)
+      
+      res.json({ success: true, message: '已继续' })
     } catch (error) {
-      console.error('继续报告生成失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
+      console.error('继续失败:', error)
+      res.status(500).json({ success: false, error: '继续失败' })
     }
   }
 
   /**
    * 停止报告生成
    */
-  static async stopGeneration(req: AuthRequest, res: Response) {
+  static async stop(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.userId
-      const isAdmin = req.user?.isAdmin
       const { id } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: '用户未认证'
-        })
-      }
-
-      // 验证报告存在且有权限
-      const [reports] = await (pool as any).execute(
+      // 验证权限
+      const [reports] = await pool.execute(
         'SELECT * FROM generated_reports WHERE id = ?',
         [id]
       ) as any[]
+      
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
+      }
 
-      if (!reports || reports.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: '报告不存在'
-        })
+      if (reports[0].user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权操作此报告' })
+        return
+      }
+
+      // 断开 SSE 连接
+      sseManager.unregister(id)
+
+      await ReportService.stopReportGeneration(id)
+      
+      res.json({ success: true, message: '已停止' })
+    } catch (error) {
+      console.error('停止失败:', error)
+      res.status(500).json({ success: false, error: '停止失败' })
+    }
+  }
+
+  /**
+   * 导出 Word 文档
+   */
+  static async export(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
+
+      // 获取报告内容
+      const [reports] = await pool.execute(
+        'SELECT * FROM generated_reports WHERE id = ?',
+        [id]
+      ) as any[]
+      
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
       }
 
       const report = reports[0]
 
-      // 验证权限
-      if (!isAdmin && report.user_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          error: '无权操作此报告'
-        })
+      // 检查权限
+      if (report.user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权导出此报告' })
+        return
       }
 
-      // 更新状态为停止
-      await (pool as any).execute(
-        'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
-        ['stopped', id]
+      if (!report.report_content) {
+        res.status(400).json({ success: false, error: '报告内容为空' })
+        return
+      }
+
+      // 生成 Word 文档
+      const buffer = await ReportService.generateWordDocument(
+        report.report_content,
+        report.report_title
       )
 
-      res.json({
-        success: true,
-        message: '报告生成已停止'
+      // 设置响应头
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(report.report_title)}.docx"`)
+
+      res.send(buffer)
+    } catch (error) {
+      console.error('导出失败:', error)
+      res.status(500).json({ success: false, error: '导出失败' })
+    }
+  }
+
+  /**
+   * 获取模板列表
+   */
+  static async getTemplates(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user?.id || (req as any).userId
+
+      const [templates] = await pool.execute(
+        `SELECT * FROM report_templates 
+         WHERE user_id = ? OR is_system = TRUE 
+         ORDER BY is_system DESC, created_at DESC`,
+        [userId]
+      ) as any[]
+
+      res.json({ success: true, templates })
+    } catch (error) {
+      console.error('获取模板列表失败:', error)
+      res.status(500).json({ success: false, error: '获取模板列表失败' })
+    }
+  }
+
+  /**
+   * 保存模板
+   */
+  static async saveTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      const { name, description, promptTemplate, isDefault } = req.body
+      const userId = (req as any).user?.id || (req as any).userId
+
+      if (!name || !promptTemplate) {
+        res.status(400).json({ success: false, error: '模板名称和提示词不能为空' })
+        return
+      }
+
+      const templateId = uuidv4()
+      
+      await pool.execute(
+        `INSERT INTO report_templates 
+         (id, user_id, name, description, prompt_template, is_default, is_system) 
+         VALUES (?, ?, ?, ?, ?, ?, FALSE)`,
+        [templateId, userId, name, description || '', promptTemplate, isDefault || false]
+      )
+
+      res.json({ success: true, templateId })
+    } catch (error) {
+      console.error('保存模板失败:', error)
+      res.status(500).json({ success: false, error: '保存模板失败' })
+    }
+  }
+
+  /**
+   * 删除模板
+   */
+  static async deleteTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
+
+      // 检查是否为系统模板
+      const [templates] = await pool.execute(
+        'SELECT * FROM report_templates WHERE id = ?',
+        [id]
+      ) as any[]
+      
+      if (templates.length === 0) {
+        res.status(404).json({ success: false, error: '模板不存在' })
+        return
+      }
+
+      if (templates[0].is_system) {
+        res.status(403).json({ success: false, error: '系统模板不能删除' })
+        return
+      }
+
+      if (templates[0].user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权删除此模板' })
+        return
+      }
+
+      await pool.execute(
+        'DELETE FROM report_templates WHERE id = ?',
+        [id]
+      )
+
+      res.json({ success: true })
+    } catch (error) {
+      console.error('删除模板失败:', error)
+      res.status(500).json({ success: false, error: '删除模板失败' })
+    }
+  }
+
+  /**
+   * 获取项目的汇总数据（用于变量替换）
+   */
+  static async getProjectSummary(req: Request, res: Response): Promise<void> {
+    try {
+      const { projectId } = req.params
+      const userId = (req as any).user?.id || (req as any).userId
+
+      // 获取项目基本信息
+      const [projects] = await pool.execute(
+        'SELECT * FROM investment_projects WHERE id = ? AND user_id = ?',
+        [projectId, userId]
+      ) as any[]
+      
+      if (projects.length === 0) {
+        res.status(404).json({ success: false, error: '项目不存在' })
+        return
+      }
+
+      const project = projects[0]
+
+      // 收集项目数据
+      const projectData = await ReportService.collectProjectData(projectId)
+
+      res.json({ 
+        success: true, 
+        data: {
+          project: {
+            id: project.id,
+            name: project.project_name,
+            description: project.project_info || '',
+            totalInvestment: project.total_investment,
+            constructionYears: project.construction_years,
+            operationYears: project.operation_years,
+            industry: project.industry || '',
+            location: project.location || ''
+          },
+          investment: projectData.investment,
+          revenueCost: projectData.revenueCost,
+          financialIndicators: projectData.financialIndicators
+        }
       })
     } catch (error) {
-      console.error('停止报告生成失败:', error)
-      res.status(500).json({
-        success: false,
-        error: '服务器内部错误'
-      })
+      console.error('获取项目汇总数据失败:', error)
+      res.status(500).json({ success: false, error: '获取项目汇总数据失败' })
     }
   }
 }
