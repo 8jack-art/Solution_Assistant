@@ -480,7 +480,15 @@ export class ReportController {
       const { name, description, promptTemplate, isDefault } = req.body
       const userId = ReportController.getUserId(req)
 
-      if (!name || !promptTemplate) {
+      if (!name) {
+        res.status(400).json({ success: false, error: '模板名称不能为空' })
+        return
+      }
+
+      // 如果没有提供提示词，则为重命名操作
+      if (!promptTemplate) {
+        // 重命名：检查是否有模板ID或其他标识
+        // 这里简化处理，新建模板时必须有提示词
         res.status(400).json({ success: false, error: '模板名称和提示词不能为空' })
         return
       }
@@ -539,6 +547,53 @@ export class ReportController {
     } catch (error) {
       console.error('删除模板失败:', error)
       res.status(500).json({ success: false, error: '删除模板失败' })
+    }
+  }
+
+  /**
+   * 重命名模板
+   */
+  static async renameTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params
+      const { name } = req.body
+      const userId = ReportController.getUserId(req)
+
+      if (!name) {
+        res.status(400).json({ success: false, error: '模板名称不能为空' })
+        return
+      }
+
+      // 检查模板是否存在且属于当前用户
+      const [templates] = await pool.execute(
+        'SELECT * FROM report_templates WHERE id = ?',
+        [id]
+      ) as any[]
+      
+      if (templates.length === 0) {
+        res.status(404).json({ success: false, error: '模板不存在' })
+        return
+      }
+
+      if (templates[0].is_system) {
+        res.status(403).json({ success: false, error: '系统模板不能重命名' })
+        return
+      }
+
+      if (templates[0].user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权操作此模板' })
+        return
+      }
+
+      await pool.execute(
+        'UPDATE report_templates SET name = ?, updated_at = NOW() WHERE id = ?',
+        [name, id]
+      )
+
+      res.json({ success: true, message: '重命名成功' })
+    } catch (error) {
+      console.error('重命名模板失败:', error)
+      res.status(500).json({ success: false, error: '重命名模板失败' })
     }
   }
 

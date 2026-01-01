@@ -164,6 +164,12 @@ export const reportApi = {
     return response
   },
 
+  // 重命名模板
+  async renameTemplate(templateId: string, name: string) {
+    const response = await api.patch<any, ApiResponse>(`/report/templates/${templateId}`, { name })
+    return response
+  },
+
   // 删除模板
   async deleteTemplate(templateId: string) {
     const response = await api.delete<any, ApiResponse>(`/report/templates/${templateId}`)

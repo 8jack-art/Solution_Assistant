@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react'
-import { Text, Box, Button, Group, Divider } from '@mantine/core'
+import React, { useState, useEffect } from 'react'
+import { Text, Box, Button, Group, Divider, Tooltip, ActionIcon } from '@mantine/core'
 import { useReportStore } from '../../stores/reportStore'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -12,8 +12,56 @@ import Strike from '@tiptap/extension-strike'
 import { 
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, 
   Heading1, Heading2, List as ListIcon, ListOrdered, Quote, 
-  Undo, Redo 
+  Undo, Redo, Save
 } from 'lucide-react'
+
+// 工具栏按钮组件
+interface ToolbarButtonProps {
+  icon: React.ReactNode
+  label: string
+  isActive?: boolean
+  disabled?: boolean
+  onClick: () => void
+}
+
+function ToolbarButton({ icon, label, isActive, disabled, onClick }: ToolbarButtonProps) {
+  return (
+    <Tooltip 
+      label={label} 
+      position="bottom" 
+      withArrow 
+      styles={{ 
+        tooltip: { 
+          fontSize: '11px',
+          padding: '4px 8px',
+        } 
+      }}
+    >
+      <Button
+        variant={isActive ? 'light' : 'subtle'}
+        size="xs"
+        style={{ 
+          minWidth: '28px', 
+          height: '28px', 
+          padding: '0 6px',
+          borderRadius: '4px',
+          background: isActive 
+            ? 'var(--mantine-color-blue-0)' 
+            : 'transparent',
+          color: isActive 
+            ? 'var(--mantine-color-blue-7)' 
+            : 'var(--mantine-color-dark-6)',
+          border: '1px solid transparent',
+          transition: 'all 0.15s ease',
+        }}
+        onClick={onClick}
+        disabled={disabled}
+      >
+        {icon}
+      </Button>
+    </Tooltip>
+  )
+}
 
 export function PromptEditor(): React.ReactElement {
   const {
@@ -21,7 +69,10 @@ export function PromptEditor(): React.ReactElement {
     setPromptTemplate,
     variableToInsert,
     setVariableToInsert,
+    saveTemplate,
   } = useReportStore()
+
+  const [isSaving, setIsSaving] = useState(false)
 
   // 创建 Tiptap 编辑器
   const editor = useEditor({
@@ -64,6 +115,29 @@ export function PromptEditor(): React.ReactElement {
     }
   }, [variableToInsert, editor, setVariableToInsert])
 
+  // 保存提示词为模板
+  const handleSavePrompt = async () => {
+    if (!promptTemplate || promptTemplate === '<p></p>') {
+      alert('提示词内容为空')
+      return
+    }
+    
+    setIsSaving(true)
+    try {
+      await saveTemplate({
+        name: `模板-${new Date().toLocaleDateString()}`,
+        description: '',
+        promptTemplate: promptTemplate
+      })
+      // 提示保存成功
+      alert('提示词已保存为新模板')
+    } catch (error) {
+      // 错误已在 store 中处理
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   if (!editor) {
     return (
       <Box 
@@ -80,224 +154,125 @@ export function PromptEditor(): React.ReactElement {
 
   return (
     <div className="prompt-editor">
-      <Text size="sm" fw={500} mb="xs" c="dark.7">提示词编辑</Text>
+      <Group justify="space-between" mb="xs">
+        <Text size="sm" fw={500} c="dark.7">提示词编辑</Text>
+        <Tooltip label="保存为模板">
+          <ActionIcon 
+            variant="subtle" 
+            color="blue" 
+            size="sm"
+            onClick={handleSavePrompt}
+            loading={isSaving}
+          >
+            <Save size={14} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
       
-      {/* 工具栏 */}
+      {/* 工具栏 - 浅色背景，黑色图标 */}
       <Box 
         style={{ 
           border: '1px solid var(--mantine-color-gray-3)',
           borderBottom: 'none',
           borderRadius: '8px 8px 0 0',
-          background: 'linear-gradient(180deg, #fafbfc 0%, #f5f6f8 100%)',
-          padding: '10px 12px 8px',
+          background: 'var(--mantine-color-gray-0)',
+          padding: '8px 10px 6px',
         }}
       >
-        <Group gap={3} mb={6} style={{ flexWrap: 'nowrap' }}>
+        <Group gap={2} style={{ flexWrap: 'nowrap' }}>
           {/* 文字格式组 */}
-          <Box style={{ display: 'flex', gap: '2px' }}>
-            <Button
-              variant={editor.isActive('bold') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('bold') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+          <Group gap={2}>
+            <ToolbarButton
+              icon={<Bold size={14} style={{ fontWeight: 'bold', color: 'var(--mantine-color-dark-7)' }} />}
+              label="粗体 (Ctrl+B)"
+              isActive={editor.isActive('bold')}
               onClick={() => editor.chain().focus().toggleBold().run()}
-              title="粗体"
-            >
-              <Bold size={14} style={{ fontWeight: 'bold' }} />
-            </Button>
-            <Button
-              variant={editor.isActive('italic') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('italic') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+            />
+            <ToolbarButton
+              icon={<Italic size={14} style={{ fontStyle: 'italic', color: 'var(--mantine-color-dark-7)' }} />}
+              label="斜体 (Ctrl+I)"
+              isActive={editor.isActive('italic')}
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              title="斜体"
-            >
-              <Italic size={14} style={{ fontStyle: 'italic' }} />
-            </Button>
-            <Button
-              variant={editor.isActive('underline') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('underline') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+            />
+            <ToolbarButton
+              icon={<UnderlineIcon size={14} style={{ textDecoration: 'underline', color: 'var(--mantine-color-dark-7)' }} />}
+              label="下划线 (Ctrl+U)"
+              isActive={editor.isActive('underline')}
               onClick={() => editor.chain().focus().toggleUnderline().run()}
-              title="下划线"
-            >
-              <UnderlineIcon size={14} style={{ textDecoration: 'underline' }} />
-            </Button>
-            <Button
-              variant={editor.isActive('strike') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('strike') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+            />
+            <ToolbarButton
+              icon={<Strikethrough size={14} style={{ color: 'var(--mantine-color-dark-7)' }} />}
+              label="删除线"
+              isActive={editor.isActive('strike')}
               onClick={() => editor.chain().focus().toggleStrike().run()}
-              title="删除线"
-            >
-              <Strikethrough size={14} />
-            </Button>
-            <Button
-              variant={editor.isActive('code') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('code') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+            />
+            <ToolbarButton
+              icon={<Code size={14} style={{ color: 'var(--mantine-color-dark-7)' }} />}
+              label="行内代码"
+              isActive={editor.isActive('code')}
               onClick={() => editor.chain().focus().toggleCode().run()}
-              title="代码"
-            >
-              <Code size={14} />
-            </Button>
-          </Box>
+            />
+          </Group>
 
           <Divider orientation="vertical" style={{ height: '20px', alignSelf: 'center' }} />
 
           {/* 标题组 */}
-          <Box style={{ display: 'flex', gap: '2px' }}>
-            <Button
-              variant={editor.isActive('heading', { level: 1 }) ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                fontWeight: 'bold',
-                background: editor.isActive('heading', { level: 1 }) ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+          <Group gap={2}>
+            <ToolbarButton
+              icon={<Heading1 size={14} style={{ color: 'var(--mantine-color-dark-7)' }} />}
+              label="标题1"
+              isActive={editor.isActive('heading', { level: 1 })}
               onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-              title="标题1"
-            >
-              H1
-            </Button>
-            <Button
-              variant={editor.isActive('heading', { level: 2 }) ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                fontWeight: 'bold',
-                background: editor.isActive('heading', { level: 2 }) ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+            />
+            <ToolbarButton
+              icon={<Heading2 size={14} style={{ color: 'var(--mantine-color-dark-7)' }} />}
+              label="标题2"
+              isActive={editor.isActive('heading', { level: 2 })}
               onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              title="标题2"
-            >
-              H2
-            </Button>
-          </Box>
+            />
+          </Group>
 
           <Divider orientation="vertical" style={{ height: '20px', alignSelf: 'center' }} />
 
           {/* 列表组 */}
-          <Box style={{ display: 'flex', gap: '2px' }}>
-            <Button
-              variant={editor.isActive('bulletList') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('bulletList') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+          <Group gap={2}>
+            <ToolbarButton
+              icon={<ListIcon size={14} style={{ color: 'var(--mantine-color-dark-7)' }} />}
+              label="无序列表"
+              isActive={editor.isActive('bulletList')}
               onClick={() => editor.chain().focus().toggleBulletList().run()}
-              title="无序列表"
-            >
-              <ListIcon size={14} />
-            </Button>
-            <Button
-              variant={editor.isActive('orderedList') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('orderedList') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+            />
+            <ToolbarButton
+              icon={<ListOrdered size={14} style={{ color: 'var(--mantine-color-dark-7)' }} />}
+              label="有序列表"
+              isActive={editor.isActive('orderedList')}
               onClick={() => editor.chain().focus().toggleOrderedList().run()}
-              title="有序列表"
-            >
-              <ListOrdered size={14} />
-            </Button>
-            <Button
-              variant={editor.isActive('blockquote') ? 'filled' : 'subtle'}
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                background: editor.isActive('blockquote') ? 'var(--mantine-color-blue-6)' : undefined,
-              }}
+            />
+            <ToolbarButton
+              icon={<Quote size={14} style={{ color: 'var(--mantine-color-dark-7)' }} />}
+              label="引用块"
+              isActive={editor.isActive('blockquote')}
               onClick={() => editor.chain().focus().toggleBlockquote().run()}
-              title="引用"
-            >
-              <Quote size={14} />
-            </Button>
-          </Box>
+            />
+          </Group>
 
           <Box style={{ flex: 1 }} />
 
           {/* 撤销/重做组 */}
-          <Box style={{ display: 'flex', gap: '2px' }}>
-            <Button
-              variant="subtle"
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                color: 'var(--mantine-color-gray-6)',
-              }}
-              onClick={() => editor.chain().focus().undo().run()}
+          <Group gap={2}>
+            <ToolbarButton
+              icon={<Undo size={14} style={{ color: 'var(--mantine-color-dark-5)' }} />}
+              label="撤销 (Ctrl+Z)"
               disabled={!editor.can().undo()}
-              title="撤销"
-            >
-              <Undo size={14} />
-            </Button>
-            <Button
-              variant="subtle"
-              size="xs"
-              style={{ 
-                minWidth: '28px', 
-                height: '28px', 
-                padding: '0 6px',
-                borderRadius: '4px',
-                color: 'var(--mantine-color-gray-6)',
-              }}
-              onClick={() => editor.chain().focus().redo().run()}
+              onClick={() => editor.chain().focus().undo().run()}
+            />
+            <ToolbarButton
+              icon={<Redo size={14} style={{ color: 'var(--mantine-color-dark-5)' }} />}
+              label="重做 (Ctrl+Y)"
               disabled={!editor.can().redo()}
-              title="重做"
-            >
-              <Redo size={14} />
-            </Button>
-          </Box>
+              onClick={() => editor.chain().focus().redo().run()}
+            />
+          </Group>
         </Group>
       </Box>
 
@@ -305,6 +280,7 @@ export function PromptEditor(): React.ReactElement {
       <Box
         style={{
           border: '1px solid var(--mantine-color-gray-3)',
+          borderTop: 'none',
           borderRadius: '0 0 8px 8px',
           minHeight: '180px',
           background: 'var(--mantine-color-body)',

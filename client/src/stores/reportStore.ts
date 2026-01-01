@@ -55,6 +55,9 @@ interface ReportState {
   
   loadTemplates: () => Promise<void>
   loadProjectData: () => Promise<void>
+  saveTemplate: (data: { name: string; description?: string; promptTemplate: string; isDefault?: boolean }) => Promise<void>
+  renameTemplate: (templateId: string, name: string) => Promise<void>
+  deleteTemplate: (templateId: string) => Promise<void>
   startGeneration: () => Promise<void>
   pauseGeneration: () => Promise<void>
   resumeGeneration: () => Promise<void>
@@ -108,6 +111,57 @@ export const useReportStore = create<ReportState>((set, get) => ({
     } catch (error: any) {
       console.error('加载模板失败:', error)
       set({ error: error.message || '加载模板失败', isLoading: false })
+    }
+  },
+
+  saveTemplate: async (data: { name: string; description?: string; promptTemplate: string; isDefault?: boolean }) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await reportApi.saveTemplate(data)
+      if (response?.success) {
+        await get().loadTemplates()
+      } else {
+        throw new Error(response?.error || '保存模板失败')
+      }
+    } catch (error: any) {
+      console.error('保存模板失败:', error)
+      set({ error: error.message || '保存模板失败', isLoading: false })
+      throw error
+    }
+  },
+
+  renameTemplate: async (templateId: string, name: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await reportApi.renameTemplate(templateId, name)
+      if (response?.success) {
+        await get().loadTemplates()
+      } else {
+        throw new Error(response?.error || '重命名模板失败')
+      }
+    } catch (error: any) {
+      console.error('重命名模板失败:', error)
+      set({ error: error.message || '重命名模板失败', isLoading: false })
+      throw error
+    }
+  },
+
+  deleteTemplate: async (templateId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await reportApi.deleteTemplate(templateId)
+      if (response?.success) {
+        set((state) => ({
+          selectedTemplateId: state.selectedTemplateId === templateId ? null : state.selectedTemplateId
+        }))
+        await get().loadTemplates()
+      } else {
+        throw new Error(response?.error || '删除模板失败')
+      }
+    } catch (error: any) {
+      console.error('删除模板失败:', error)
+      set({ error: error.message || '删除模板失败', isLoading: false })
+      throw error
     }
   },
 

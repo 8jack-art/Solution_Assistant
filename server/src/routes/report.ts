@@ -10,6 +10,7 @@ router.use(authenticateToken)
 // 模板管理 - 必须放在 /:id 之前
 router.get('/templates', ReportController.getTemplates)
 router.post('/templates', ReportController.saveTemplate)
+router.patch('/templates/:id', ReportController.renameTemplate)
 router.delete('/templates/:id', ReportController.deleteTemplate)
 
 // 报告 CRUD
