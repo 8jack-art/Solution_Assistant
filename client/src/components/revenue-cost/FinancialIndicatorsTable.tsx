@@ -2200,10 +2200,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     const totalInvestment = calculateConstructionInvestment(undefined) + constructionInterest + calculateWorkingCapital(undefined);
     
     // 计算资金筹措
-    const equityRatio = 0.3;
-    const debtRatio = 0.7;
-    const projectEquity = totalInvestment * equityRatio;
-    const projectDebt = totalInvestment * debtRatio;
+    // 项目债务资金直接取自贷款总额 (loan_amount)
+    const projectEquity = totalInvestment - (investmentEstimate?.custom_loan_amount || investmentEstimate?.loan_amount || 0);
+    const projectDebt = investmentEstimate?.custom_loan_amount || investmentEstimate?.loan_amount || 0;
     
     // 计算总投资收益率
     const roi = totalInvestment > 0 ? (avgEBIT / totalInvestment) * 100 : 0;
@@ -4604,12 +4603,10 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                   // 计算项目总投资 = 建设投资 + 建设期利息 + 流动资金
                   const totalInvestment = calculateConstructionInvestment(undefined) + constructionInterest + calculateWorkingCapital(undefined);
                   
-                  // 计算资金筹措 = 项目资本金 + 项目债务资金
-                  // 假设项目资本金为总投资的30%，债务资金为70%（这里需要根据实际数据调整）
-                  const equityRatio = 0.3; // 项目资本金比例
-                  const debtRatio = 0.7;  // 项目债务资金比例
-                  const projectEquity = totalInvestment * equityRatio;
-                  const projectDebt = totalInvestment * debtRatio;
+                  // 计算资金筹措
+                  // 项目债务资金直接取自贷款总额 (loan_amount)
+                  const projectEquity = totalInvestment - (investmentEstimate?.custom_loan_amount || investmentEstimate?.loan_amount || 0);
+                  const projectDebt = investmentEstimate?.custom_loan_amount || investmentEstimate?.loan_amount || 0;
                   
                   // 计算总投资收益率 (ROI) = 年均息税前利润 / 项目总投资 × 100%
                   const roi = totalInvestment > 0 ? (avgEBIT / totalInvestment) * 100 : 0;

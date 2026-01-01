@@ -3,6 +3,150 @@ import { InvestmentEstimate } from '../types/index.js'
 import { randomUUID } from 'crypto'
 
 export class InvestmentEstimateModel {
+  /**
+   * 从简化字段重建完整的estimate_data结构
+   */
+  static rebuildEstimateData(row: any): any {
+    const { construction_cost, equipment_cost, installation_cost, other_cost, land_cost, basic_reserve, price_reserve, construction_period, loan_amount, loan_rate } = row
+    
+    const partAChildren = [
+      {
+        序号: '一',
+        费用名称: '第一部分 工程费用',
+        建设工程费: construction_cost || 0,
+        设备购置费: equipment_cost || 0,
+        安装工程费: installation_cost || 0,
+        其它费用: other_cost || 0,
+        土地费用: land_cost || 0,
+        合计: (construction_cost || 0) + (equipment_cost || 0) + (installation_cost || 0) + (other_cost || 0) + (land_cost || 0)
+      }
+    ]
+    
+    const partBChildren = [
+      {
+        序号: '1',
+        工程或费用名称: '第二部分 工程建设其他费用',
+        金额: 0,
+        占比: '0%',
+        备注: ''
+      },
+      {
+        序号: '2',
+        工程或费用名称: '土地费用',
+        金额: land_cost || 0,
+        占比: land_cost > 0 ? ((land_cost / ((construction_cost || 0) + (equipment_cost || 0) + (installation_cost || 0) + (other_cost || 0) + (land_cost || 0))) * 100).toFixed(2) + '%' : '0%',
+        备注: ''
+      }
+    ]
+    
+    const partDChildren = [
+      {
+        序号: '1',
+        费用名称: '基本预备费',
+        费率: '5%',
+        金额: basic_reserve || 0,
+        备注: '基本预备费=工程费用×5%+其他费用×5%'
+      },
+      {
+        序号: '2',
+        费用名称: '涨价预备费',
+        费率: '3%',
+        金额: price_reserve || 0,
+        备注: '涨价预备费=工程费用×3%'
+      }
+    ]
+    
+    const partETotal = (construction_cost || 0) + (installation_cost || 0) + (other_cost || 0)
+    const partFTotal = loan_amount > 0 ? loan_amount * (loan_rate || 0.049) * ((construction_period || 3) / 2) : 0
+    
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      gapRate: 0,
+      projectType: 'construction',
+      iterationCount: 1,
+      partA: {
+        name: '第一部分 工程费用',
+        total: (construction_cost || 0) + (equipment_cost || 0) + (installation_cost || 0) + (other_cost || 0) + (land_cost || 0),
+        children: partAChildren
+      },
+      partB: {
+        name: '第二部分 工程建设其他费用',
+        total: land_cost || 0,
+        children: partBChildren
+      },
+      partC: {
+        name: '第三部分 预备费',
+        total: 0,
+        children: []
+      },
+      partD: {
+        name: '第四部分 建设期利息',
+        total: partFTotal,
+        children: [
+          {
+            序号: '1',
+            费用名称: '建设期利息',
+            金额: partFTotal,
+            备注: `贷款${loan_amount || 0}万元，年利率${((loan_rate || 0.049) * 100).toFixed(2)}%，建设期${construction_period || 3}年`
+          }
+        ]
+      },
+      partE: {
+        name: '建安工程费',
+        total: partETotal,
+        children: [
+          {
+            序号: '1',
+            费用名称: '建筑工程费',
+            金额: construction_cost || 0
+          },
+          {
+            序号: '2',
+            费用名称: '安装工程费',
+            金额: installation_cost || 0
+          },
+          {
+            序号: '3',
+            费用名称: '工程建设其他费用',
+            金额: other_cost || 0
+          }
+        ]
+      },
+      partF: {
+        name: '建设期利息',
+        total: partFTotal,
+        贷款总额: loan_amount || 0,
+        年利率: loan_rate || 0.049,
+        贷款期限: construction_period || 3,
+        分年利息: construction_period > 0 ? Array.from({ length: construction_period }, (_, i) => ({
+          年份: i + 1,
+          当期借款金额: loan_amount / (construction_period || 1),
+          当期利息: (loan_amount / (construction_period || 1)) * (loan_rate || 0.049) * ((construction_period || 1) - i - 0.5)
+        })) : []
+      },
+      partG: {
+        name: '项目总投资',
+        total: (construction_cost || 0) + (equipment_cost || 0) + (installation_cost || 0) + (other_cost || 0) + (land_cost || 0) + (basic_reserve || 0) + partFTotal,
+        children: [
+          { 序号: '1', 费用名称: '固定资产投资', 金额: (construction_cost || 0) + (equipment_cost || 0) + (installation_cost || 0) + (other_cost || 0) + (basic_reserve || 0) + partFTotal },
+          { 序号: '2', 费用名称: '无形资产投资', 金额: land_cost || 0 },
+          { 序号: '3', 费用名称: '流动资金', 金额: 0 }
+        ]
+      },
+      partH: {
+        name: '资金来源',
+        total: (construction_cost || 0) + (equipment_cost || 0) + (installation_cost || 0) + (other_cost || 0) + (land_cost || 0) + (basic_reserve || 0) + partFTotal,
+        children: [
+          { 序号: '1', 资金来源: '资本金', 金额: (construction_cost || 0) + (equipment_cost || 0) + (installation_cost || 0) + (other_cost || 0) + (land_cost || 0) + (basic_reserve || 0) + partFTotal - (loan_amount || 0) },
+          { 序号: '2', 资金来源: '债务资金', 金额: loan_amount || 0 }
+        ]
+      },
+      reconstructed: true,
+      reconstructedAt: new Date().toISOString()
+    }
+  }
+
   static async findById(id: string): Promise<InvestmentEstimate | null> {
     if (!id) {
       console.warn('[InvestmentEstimate] 无效的ID:', id)
@@ -73,6 +217,16 @@ export class InvestmentEstimateModel {
         }
         
         console.log(`[InvestmentEstimate] 成功加载ID为${id}的投资估算数据`)
+        
+        // 检查estimate_data是否完整，如果不完整则尝试重建
+        const isComplete = row.estimate_data?.partA?.children?.length > 0 && 
+                          row.estimate_data?.partG?.合计 > 0
+        
+        if (!isComplete && row.construction_cost > 0) {
+          console.log(`[InvestmentEstimate] 检测到不完整的estimate_data，尝试从简化字段重建完整结构`)
+          row.estimate_data = InvestmentEstimateModel.rebuildEstimateData(row)
+        }
+        
         return row
         
       } catch (error: any) {
@@ -172,6 +326,16 @@ export class InvestmentEstimateModel {
         }
         
         console.log(`[InvestmentEstimate] 成功加载项目${projectId}的投资估算数据`)
+        
+        // 检查estimate_data是否完整，如果不完整则尝试重建
+        const isComplete = row.estimate_data?.partA?.children?.length > 0 && 
+                          row.estimate_data?.partG?.合计 > 0
+        
+        if (!isComplete && row.construction_cost > 0) {
+          console.log(`[InvestmentEstimate] 检测到不完整的estimate_data，尝试从简化字段重建完整结构`)
+          row.estimate_data = InvestmentEstimateModel.rebuildEstimateData(row)
+        }
+        
         return row
         
       } catch (error: any) {

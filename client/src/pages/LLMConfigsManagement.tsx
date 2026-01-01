@@ -623,7 +623,7 @@ const LLMConfigsManagement: React.FC = () => {
           <Grid.Col span={5}>
             <Card 
               shadow="sm" 
-              padding={isMobile ? 'md' : 'lg'} 
+              padding="lg" 
               radius="sm" 
               withBorder 
               style={{ 
@@ -676,7 +676,7 @@ const LLMConfigsManagement: React.FC = () => {
                       onChange={(val) => handleProviderChange(val || '')}
                       required
                       disabled={loadingProviders}
-                      size={isMobile ? 'sm' : 'md'}
+                      size="md"
                       data={[
                         { value: '', label: '请选择服务商', disabled: true },
                         ...llmProviders.map((provider) => ({
@@ -695,7 +695,7 @@ const LLMConfigsManagement: React.FC = () => {
                       value={formData.name}
                       onChange={(e) => handleFieldChange('name', e.target.value)}
                       required
-                      size={isMobile ? 'sm' : 'md'}
+                      size="md"
                       leftSection={<IconStar size={16} />}
                       error={formErrors.name}
                     />
@@ -707,7 +707,7 @@ const LLMConfigsManagement: React.FC = () => {
                       value={formData.api_key}
                       onChange={(e) => handleFieldChange('api_key', e.target.value)}
                       required
-                      size={isMobile ? 'sm' : 'md'}
+                      size="md"
                       leftSection={<IconKey size={16} />}
                       error={formErrors.api_key}
                       description={editingId ? '留空则保留原密钥' : ''}
@@ -720,7 +720,7 @@ const LLMConfigsManagement: React.FC = () => {
                       value={formData.base_url}
                       onChange={(e) => handleFieldChange('base_url', e.target.value)}
                       required
-                      size={isMobile ? 'sm' : 'md'}
+                      size="md"
                       leftSection={<IconLink size={16} />}
                       error={formErrors.base_url}
                     />
@@ -732,7 +732,7 @@ const LLMConfigsManagement: React.FC = () => {
                       value={formData.model}
                       onChange={(val) => handleFieldChange('model', val)}
                       data={selectedProvider?.models || []}
-                      size={isMobile ? 'sm' : 'md'}
+                      size="md"
                       leftSection={<IconBrandPython size={16} />}
                       error={formErrors.model}
                     />
@@ -776,7 +776,7 @@ const LLMConfigsManagement: React.FC = () => {
                       description="默认配置将自动用于AI功能"
                       checked={formData.is_default}
                       onChange={(e) => setFormData({ ...formData, is_default: e.currentTarget.checked })}
-                      size={isMobile ? 'sm' : 'md'}
+                      size="md"
                     />
 
                     {/* 操作按钮 */}
@@ -784,8 +784,7 @@ const LLMConfigsManagement: React.FC = () => {
                       <Button 
                         type="submit" 
                         loading={loading}
-                        size={isMobile ? 'sm' : 'md'}
-                        fullWidth={isMobile}
+                        size="md"
                         style={{ 
                           height: '40px',
                           backgroundColor: '#1E6FFF',
@@ -801,8 +800,7 @@ const LLMConfigsManagement: React.FC = () => {
                         onClick={() => handleTest()}
                         loading={testLoading}
                         disabled={!formData.provider || !formData.base_url || !formData.model}
-                        size={isMobile ? 'sm' : 'md'}
-                        fullWidth={isMobile}
+                        size="md"
                         style={{ 
                           height: '40px',
                           borderColor: '#E5E6EB',
@@ -822,7 +820,7 @@ const LLMConfigsManagement: React.FC = () => {
           <Grid.Col span={{ base: 12, lg: 7 }}>
             <Card 
               shadow="sm" 
-              padding={isMobile ? 'md' : 'lg'} 
+              padding="lg" 
               radius="sm" 
               withBorder 
               style={{ 

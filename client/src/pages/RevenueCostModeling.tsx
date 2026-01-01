@@ -279,8 +279,9 @@ const RevenueCostModeling: React.FC = () => {
         return
       }
       
-      // 准备保存数据
-      const saveData = {
+      // 🔧 关键修复：如果存在完整的estimate_data结构，必须发送给后端
+      // 否则后端会使用简化字段重新计算，覆盖完整结构
+      const saveData: any = {
         project_id: project.id,
         construction_cost: Number(estimateData.construction_cost) || 0,
         equipment_cost: Number(estimateData.equipment_cost) || 0,
@@ -294,6 +295,15 @@ const RevenueCostModeling: React.FC = () => {
         custom_loan_amount: estimateData.custom_loan_amount ? Number(estimateData.custom_loan_amount) : undefined,
         // 添加建设期利息详情数据
         construction_interest_details: constructionInterestDetails,
+      }
+
+      // 包含完整的estimate_data结构
+      if (estimateData.estimate_data?.partA?.children?.length > 0 && 
+          estimateData.estimate_data?.partG?.合计 > 0) {
+        saveData.estimate_data = estimateData.estimate_data
+        console.log('✅ 发送完整estimate_data结构到后端')
+      } else {
+        console.warn('⚠️ estimate_data结构不完整，后端将使用简化字段计算')
       }
 
       console.log('📊 准备保存的建设期利息详情:', constructionInterestDetails)
@@ -878,8 +888,8 @@ const RevenueCostModeling: React.FC = () => {
       console.log('📊 还本付息表格原始数据:', repaymentTableData);
       
       // 调用投资估算API保存
-      // 验证和清理要发送的数据
-      const requestData = {
+      // 重构：确保包含完整的estimate_data结构，避免覆盖
+      const requestData: any = {
         project_id: project.id,
         // 传入现有数据以保持完整性
         construction_cost: Number(investmentEstimate?.construction_cost) || 0,
@@ -894,7 +904,19 @@ const RevenueCostModeling: React.FC = () => {
         custom_loan_amount: investmentEstimate?.custom_loan_amount ? Number(investmentEstimate.custom_loan_amount) : undefined,
         // 添加还本付息计划简表数据
         loan_repayment_schedule_simple: loanRepaymentScheduleData,
-      };
+      }
+
+      // 🔧 关键修复：如果存在完整的estimate_data结构，必须发送给后端
+      // 否则后端会使用简化字段重新计算，覆盖完整结构
+      if (investmentEstimate && 
+          investmentEstimate.estimate_data?.partA?.children?.length > 0 && 
+          investmentEstimate.estimate_data?.partG?.合计 > 0) {
+        requestData.estimate_data = investmentEstimate.estimate_data
+        console.log('✅ 发送完整estimate_data结构到后端')
+      } else {
+        console.warn('⚠️ estimate_data结构不完整，后端将使用简化字段计算')
+        console.warn('⚠️ investmentEstimate状态:', investmentEstimate ? '存在' : '为空')
+      }
 
       console.log('🔍 发送给后端的完整数据:', JSON.stringify(requestData, null, 2));
       console.log('🔍 数据类型验证:', {
@@ -2061,7 +2083,7 @@ const RevenueCostModeling: React.FC = () => {
                 <div>
                   <Text size="xs" c="#86909C" mb={4}>项目总资金</Text>
                   <Text size="md" fw={600} c="#165DFF">
-                    {(investmentEstimate?.estimate_data?.partG?.合计 ?? investmentEstimate?.final_total ?? project?.total_investment ?? 0).toFixed(2)} 万元
+                    {(Number(investmentEstimate?.estimate_data?.partG?.合计) || Number(investmentEstimate?.final_total) || Number(project?.total_investment) || 0).toFixed(2)} 万元
                   </Text>
                 </div>
                 <div>

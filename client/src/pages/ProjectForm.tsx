@@ -20,7 +20,6 @@ import {
   Alert,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { useMediaQuery } from '@mantine/hooks'
 import LoadingOverlay from '@/components/LoadingOverlay'
 
 const ProjectForm: React.FC = () => {
@@ -48,13 +47,11 @@ const ProjectForm: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [landModeAnalyzing, setLandModeAnalyzing] = useState(false)
-  const [error, setError] = useState('')
   const [isEdit, setIsEdit] = useState(false)
   const [project, setProject] = useState<InvestmentProject | null>(null)
    
   const { id } = useParams()
   const navigate = useNavigate()
-  const isMobile = useMediaQuery('(max-width: 768px)')
 
 
   // 自动计算土地费用和生成备注
@@ -173,7 +170,6 @@ const ProjectForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError('')
 
     try {
       let response
@@ -385,27 +381,27 @@ const ProjectForm: React.FC = () => {
       
       {/* Header - 符合UI规范：高度50px，白色背景，底部边框#E5E6EB */}
       <Paper shadow="none" p="0" style={{ height: '50px', borderBottom: '1px solid #E5E6EB', backgroundColor: '#FFFFFF' }}>
-        <Container size="xl" px={isMobile ? 'sm' : 'lg'} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Title order={isMobile ? 6 : 3} c="#1D2129" style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 600 }}>
+        <Container size="xl" px="lg" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Title order={3} c="#1D2129" style={{ fontSize: '20px', fontWeight: 600 }}>
             {isEdit ? '编辑项目' : '新建项目'}
           </Title>
           <Button 
             variant="subtle" 
-            size={isMobile ? 'xs' : 'sm'}
+            size="sm"
             onClick={() => navigate('/dashboard')}
-            style={{ height: isMobile ? '28px' : '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
+            style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
           >
             返回
           </Button>
         </Container>
       </Paper>
 
-      <Container size="xl" py={isMobile ? 'md' : 'lg'} px={isMobile ? 'sm' : 'lg'} style={{ maxWidth: '1400px', margin: '0 auto' }}>
-        <Grid gutter={isMobile ? 'md' : 'lg'}>
+      <Container size="xl" py="lg" px="lg" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        <Grid gutter="lg">
           {/* 项目基本信息 */}
           <Grid.Col span={{ base: 12, lg: 6 }}>
-            <Card shadow="sm" padding={isMobile ? 'lg' : 'xl'} radius="sm" withBorder style={{ borderColor: '#E5E6EB', borderRadius: '4px', height: '710px' }}>
-              <Stack gap={isMobile ? 'md' : 'lg'}>
+            <Card shadow="sm" padding="xl" radius="sm" withBorder style={{ borderColor: '#E5E6EB', borderRadius: '4px', height: '710px' }}>
+              <Stack gap="lg">
                 <div>
                   <Title order={4} c="#1D2129" style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>项目基本信息</Title>
                   <Text size="xs" c="#86909C" style={{ fontSize: '12px' }}>请填写项目的基本信息和投资参数</Text>
@@ -540,8 +536,8 @@ const ProjectForm: React.FC = () => {
 
           {/* 用地信息模块 */}
           <Grid.Col span={{ base: 12, lg: 6 }}>
-            <Card shadow="sm" padding={isMobile ? 'md' : 'lg'} radius="sm" withBorder style={{ borderColor: '#E5E6EB', borderRadius: '4px', height: '710px' }}>
-              <Stack gap={isMobile ? 'md' : 'lg'}>
+            <Card shadow="sm" padding="lg" radius="sm" withBorder style={{ borderColor: '#E5E6EB', borderRadius: '4px', height: '710px' }}>
+              <Stack gap="lg">
                 <div>
                   <Title order={4} c="#1D2129" style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>用地信息</Title>
                   <Text size="xs" c="#86909C" style={{ fontSize: '12px' }}>选择用地模式AI将自动分析并填充</Text>
@@ -677,13 +673,12 @@ const ProjectForm: React.FC = () => {
         </Grid>
 
         {/* 提交按钮区域 */}
-        <Group justify="flex-end" mt={isMobile ? 'md' : 'lg'} gap={isMobile ? 'xs' : 'md'}>
+        <Group justify="flex-end" mt="lg" gap="md">
           <Button 
             variant="outline" 
             onClick={() => navigate('/dashboard')}
-            size={isMobile ? 'sm' : 'md'}
+            size="md"
             style={{ 
-              flex: isMobile ? 1 : 'none',
               height: '36px',
               borderRadius: '4px',
               borderColor: '#E5E6EB',
@@ -696,9 +691,8 @@ const ProjectForm: React.FC = () => {
           <Button 
             onClick={handleSubmit} 
             disabled={loading}
-            size={isMobile ? 'sm' : 'md'}
+            size="md"
             style={{ 
-              flex: isMobile ? 1 : 'none',
               height: '36px',
               backgroundColor: '#1E6FFF',
               color: '#FFFFFF',
@@ -713,15 +707,14 @@ const ProjectForm: React.FC = () => {
         </Group>
 
         {isEdit && project && (
-          <Card shadow="sm" padding={isMobile ? 'md' : 'lg'} radius="sm" withBorder mt="lg" style={{ borderColor: '#E5E6EB', borderRadius: '4px' }}>
+          <Card shadow="sm" padding="lg" radius="sm" withBorder mt="lg" style={{ borderColor: '#E5E6EB', borderRadius: '4px' }}>
             <Stack gap="md">
               <Title order={4} style={{ fontSize: '16px', fontWeight: 600, color: '#1D2129' }}>项目操作</Title>
-              <Group gap={isMobile ? 'xs' : 'sm'} wrap={isMobile ? 'wrap' : 'nowrap'}>
+              <Group gap="sm" wrap="nowrap">
                <Button 
                   variant="filled"
                   onClick={() => navigate(`/investment/${project.id}`, { state: { autoGenerate: true } })}
                   style={{ 
-                    flex: isMobile ? 1 : 'none',
                     height: '36px',
                     backgroundColor: '#1E6FFF',
                     color: '#FFFFFF',
@@ -751,7 +744,6 @@ const ProjectForm: React.FC = () => {
                       }
                     }}
                     style={{ 
-                      flex: isMobile ? 1 : 'none',
                       height: '36px',
                       borderRadius: '4px',
                       borderColor: '#E5E6EB',
@@ -780,7 +772,6 @@ const ProjectForm: React.FC = () => {
                       }
                     }}
                     style={{ 
-                      flex: isMobile ? 1 : 'none',
                       height: '36px',
                       borderRadius: '4px',
                       borderColor: '#E5E6EB',
@@ -810,7 +801,6 @@ const ProjectForm: React.FC = () => {
                   }}
                   disabled={project.is_locked}
                   style={{ 
-                    flex: isMobile ? 1 : 'none',
                     height: '36px',
                     borderRadius: '4px',
                     fontSize: '14px'

@@ -17,7 +17,6 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { useMediaQuery } from '@mantine/hooks'
 import { CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table'
@@ -42,7 +41,6 @@ const InvestmentCalculator: React.FC = () => {
   
   const { id } = useParams()
   const navigate = useNavigate()
-  const isMobile = useMediaQuery('(max-width: 768px)')
 
   useEffect(() => {
     if (id) {
@@ -228,9 +226,9 @@ const InvestmentCalculator: React.FC = () => {
     <div style={{ minHeight: '100vh', backgroundColor: '#F5F7FA' }}>
       {/* Header - 符合UI规范：高度50px，白色背景，底部边框#E5E6EB */}
       <Paper shadow="none" p="0" style={{ height: '50px', borderBottom: '1px solid #E5E6EB', backgroundColor: '#FFFFFF' }}>
-        <Container size="xl" px={isMobile ? 'sm' : 'lg'} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Container size="xl" px="lg" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <Title order={isMobile ? 6 : 3} c="#1D2129" style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 600 }}>
+            <Title order={3} c="#1D2129" style={{ fontSize: '20px', fontWeight: 600 }}>
               投资估算
             </Title>
             <Text size="sm" c="#86909C" style={{ fontSize: '12px' }}>项目：{project.project_name}</Text>
@@ -238,17 +236,17 @@ const InvestmentCalculator: React.FC = () => {
           <Group gap="xs">
             <Button 
               variant="subtle"
-              size={isMobile ? 'xs' : 'sm'}
+              size="sm"
               onClick={() => navigate(`/project/${id}`)}
-              style={{ height: isMobile ? '28px' : '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
+              style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
             >
               返回项目
             </Button>
             <Button 
               variant="subtle"
-              size={isMobile ? 'xs' : 'sm'}
+              size="sm"
               onClick={() => navigate('/dashboard')}
-              style={{ height: isMobile ? '28px' : '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
+              style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
             >
               返回首页
             </Button>
@@ -256,8 +254,8 @@ const InvestmentCalculator: React.FC = () => {
         </Container>
       </Paper>
 
-      <Container size="xl" py={isMobile ? 'md' : 'lg'} px={isMobile ? 'sm' : 'lg'}>
-        <Grid gutter={isMobile ? 'md' : 'lg'}>
+      <Container size="xl" py="lg" px="lg">
+        <Grid gutter="lg">
           <Card>
             <CardHeader>
               <CardTitle>基础数据输入</CardTitle>

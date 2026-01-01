@@ -1134,7 +1134,13 @@ const InvestmentSummary: React.FC = () => {
     }
   }
 
+  // 加载计数器，用于调试重复加载问题
+  const loadCounterRef = useRef(0)
+  
   useEffect(() => {
+    loadCounterRef.current += 1
+    console.log(`[数据加载] useEffect执行 #${loadCounterRef.current}, id=${id}`)
+    
     if (id) {
       // 清除该项目的缓存，确保获取最新数据
       dataCache.invalidate(`investment:${id}`)
@@ -1144,6 +1150,7 @@ const InvestmentSummary: React.FC = () => {
     
     // 组件卸载时取消所有请求
     return () => {
+      console.log(`[数据加载] useEffect清理 #${loadCounterRef.current}`)
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
@@ -1202,6 +1209,15 @@ const InvestmentSummary: React.FC = () => {
           console.log(`[数据加载] estimateData:`, estimateData ? '存在' : '不存在')
           console.log(`[数据加载] estimateData.partA:`, estimateData?.partA ? '存在' : '不存在')
           console.log(`[数据加载] estimateData.partG:`, estimateData?.partG ? '存在' : '不存在')
+          
+          // 调试：打印estimateData的所有key
+          if (estimateData) {
+            console.log(`[数据加载] estimateData的顶层keys:`, Object.keys(estimateData))
+            // 如果estimateData是嵌套结构，也检查constructionCost等简化字段
+            console.log(`[数据加载] estimateData.constructionCost:`, estimateData.constructionCost)
+            console.log(`[数据加载] estimateData.partA?.children?.length:`, estimateData?.partA?.children?.length)
+            console.log(`[数据加载] estimateData.partG?.合计:`, estimateData?.partG?.合计)
+          }
           
           // 如果estimate_data不存在，尝试直接使用estimate
           if (!estimateData) {

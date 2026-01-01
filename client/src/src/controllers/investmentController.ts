@@ -124,32 +124,93 @@ export class InvestmentController {
 
       if (estimate_data) {
         // 如果提供了完整的estimate_data，直接使用它
-        estimateData = {
-          project_id,
-          estimate_data,
-          // 从estimate_data中提取关键字段用于兼容性
-          total_investment: estimate_data.partG?.合计 || 0,
-          building_investment: estimate_data.partE?.合计 || 0,
-          construction_interest: estimate_data.partF?.合计 || 0,
-          gap_rate: (estimate_data.gapRate || 0) / 100, // 转换为小数形式
-          construction_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.建设工程费 || 0,
-          equipment_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.设备购置费 || 0,
-          installation_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.安装工程费 || 0,
-          other_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.其它费用 || 0,
-          land_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.土地费用 || 0,
-          basic_reserve: estimate_data.partD?.合计 || 0,
-          price_reserve: 0,
-          construction_period: construction_period,
-          iteration_count: estimate_data.iterationCount || 1,
-          final_total: estimate_data.partG?.合计 || 0,
-          loan_amount: estimate_data.partF?.贷款总额 || 0,
-          loan_rate: loan_rate,
-          custom_loan_amount: custom_loan_amount || undefined,
-          custom_land_cost: undefined,
-          // 新增贷款相关数据字段
-          construction_interest_details,
-          loan_repayment_schedule_simple,
-          loan_repayment_schedule_detailed
+        // 检查estimate_data是否包含完整结构
+        const isCompleteStructure = estimate_data?.partA?.children?.length > 0 && 
+                                     estimate_data?.partG?.合计 > 0
+        
+        if (isCompleteStructure) {
+          // 完整结构，直接使用
+          estimateData = {
+            project_id,
+            estimate_data,
+            // 从estimate_data中提取关键字段用于兼容性
+            total_investment: estimate_data.partG?.合计 || 0,
+            building_investment: estimate_data.partE?.合计 || 0,
+            construction_interest: estimate_data.partF?.合计 || 0,
+            gap_rate: (estimate_data.gapRate || 0) / 100, // 转换为小数形式
+            construction_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.建设工程费 || 0,
+            equipment_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.设备购置费 || 0,
+            installation_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.安装工程费 || 0,
+            other_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.其它费用 || 0,
+            land_cost: estimate_data.partA?.children?.find((i: any) => i.序号 === '一')?.土地费用 || 0,
+            basic_reserve: estimate_data.partD?.合计 || 0,
+            price_reserve: 0,
+            construction_period: construction_period,
+            iteration_count: estimate_data.iterationCount || 1,
+            final_total: estimate_data.partG?.合计 || 0,
+            loan_amount: estimate_data.partF?.贷款总额 || 0,
+            loan_rate: loan_rate,
+            custom_loan_amount: custom_loan_amount || undefined,
+            custom_land_cost: undefined,
+            // 新增贷款相关数据字段
+            construction_interest_details,
+            loan_repayment_schedule_simple,
+            loan_repayment_schedule_detailed
+          }
+        } else {
+          // 不完整结构，尝试从数据库读取现有完整结构并合并
+          const existingEstimate = await InvestmentEstimateModel.findByProjectId(project_id)
+          
+          if (existingEstimate && existingEstimate.estimate_data && 
+              existingEstimate.estimate_data.partA?.children?.length > 0 && 
+              existingEstimate.estimate_data.partG?.合计 > 0) {
+            // 使用数据库中的完整结构，只更新部分字段
+            console.log('[save] 检测到不完整的estimate_data，使用数据库中的完整结构')
+            estimateData = {
+              ...existingEstimate,
+              project_id,
+              // 更新以下字段
+              construction_cost: construction_cost ?? existingEstimate.construction_cost,
+              equipment_cost: equipment_cost ?? existingEstimate.equipment_cost,
+              installation_cost: installation_cost ?? existingEstimate.installation_cost,
+              other_cost: other_cost ?? existingEstimate.other_cost,
+              land_cost: land_cost ?? existingEstimate.land_cost,
+              custom_loan_amount: custom_loan_amount ?? existingEstimate.custom_loan_amount,
+              construction_interest_details: construction_interest_details ?? existingEstimate.construction_interest_details,
+              loan_repayment_schedule_simple: loan_repayment_schedule_simple ?? existingEstimate.loan_repayment_schedule_simple,
+              loan_repayment_schedule_detailed: loan_repayment_schedule_detailed ?? existingEstimate.loan_repayment_schedule_detailed,
+              // 保留estimate_data中的项目类型和三级子项
+              estimate_data: {
+                ...existingEstimate.estimate_data,
+                projectType: estimate_data?.projectType ?? existingEstimate.estimate_data?.projectType,
+                thirdLevelItems: estimate_data?.thirdLevelItems ?? existingEstimate.estimate_data?.thirdLevelItems
+              }
+            }
+          } else {
+            // 数据库中也没有完整结构，使用简化数据
+            console.log('[save] 数据库中没有完整结构，使用简化数据')
+            estimateData = {
+              project_id,
+              estimate_data: estimate_data || {}, // 保存传入的不完整结构
+              construction_cost: construction_cost || 0,
+              equipment_cost: equipment_cost || 0,
+              installation_cost: installation_cost || 0,
+              other_cost: other_cost || 0,
+              land_cost: land_cost || 0,
+              basic_reserve: 0,
+              price_reserve: 0,
+              construction_period: construction_period,
+              iteration_count: 1,
+              final_total: 0,
+              loan_amount: 0,
+              loan_rate: loan_rate,
+              custom_loan_amount: custom_loan_amount || undefined,
+              custom_land_cost: undefined,
+              construction_interest_details,
+              loan_repayment_schedule_simple,
+              loan_repayment_schedule_detailed
+            }
+          }
         }
       } else {
         // 传统模式：使用分离的字段计算
