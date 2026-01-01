@@ -70,14 +70,27 @@ export class ZhipuAIService {
       })
 
       console.log('智谱AI SDK响应:', response)
+      console.log('响应结构:', JSON.stringify(response, null, 2))
       
       if (response && response.choices && response.choices.length > 0) {
-        const content = response.choices[0].message?.content || ''
-        return {
-          success: true,
-          content
+        const choice = response.choices[0]
+        const content = choice.message?.content || choice.delta?.content || ''
+        console.log('提取的内容:', content)
+        
+        if (content.trim()) {
+          return {
+            success: true,
+            content
+          }
+        } else {
+          return {
+            success: false,
+            error: '响应内容为空'
+          }
         }
       } else {
+        console.log('响应格式问题 - choices不存在或为空')
+        console.log('完整响应对象:', response)
         return {
           success: false,
           error: '响应格式无效'
