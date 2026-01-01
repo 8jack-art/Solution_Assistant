@@ -64,7 +64,14 @@ interface FormErrors {
 
 const LLMConfigsManagement: React.FC = () => {
   const [configs, setConfigs] = useState<LLMConfig[]>([])
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string
+    provider: string
+    api_key: string
+    base_url: string
+    model: string
+    is_default: boolean
+  }>({
     name: '',
     provider: '',
     api_key: '',
@@ -284,10 +291,16 @@ const LLMConfigsManagement: React.FC = () => {
 
     try {
       let response
+      // 转换 is_default 为 boolean 类型
+      const submitData = {
+        ...formData,
+        is_default: Boolean(formData.is_default),
+      }
+      
       if (editingId) {
-        response = await llmConfigApi.update(editingId, formData)
+        response = await llmConfigApi.update(editingId, submitData)
       } else {
-        response = await llmConfigApi.create(formData)
+        response = await llmConfigApi.create(submitData)
       }
 
       if (response.success) {
@@ -327,7 +340,18 @@ const LLMConfigsManagement: React.FC = () => {
 
     try {
       const testData = config || formData
-      const response = await llmConfigApi.testConnection(testData)
+      // 只传递测试连接所需的字段，避免验证失败
+      const testParams = {
+        provider: testData.provider,
+        api_key: testData.api_key,
+        base_url: testData.base_url,
+        model: testData.model
+      }
+      
+      // 调试日志
+      console.log('测试连接参数:', JSON.stringify(testParams, null, 2))
+      
+      const response = await llmConfigApi.testConnection(testParams)
       
       if (response.success) {
         setTestResult({
@@ -413,7 +437,7 @@ const LLMConfigsManagement: React.FC = () => {
       api_key: config.api_key,
       base_url: config.base_url,
       model: config.model,
-      is_default: config.is_default,
+      is_default: Boolean(config.is_default),
     })
     
     // 查找匹配的服务商
@@ -549,7 +573,7 @@ const LLMConfigsManagement: React.FC = () => {
       api_key: '',
       base_url: '',
       model: '',
-      is_default: false,
+      is_default: false as boolean,
     })
     setFormErrors({})
     setSelectedProvider(null)
@@ -565,7 +589,7 @@ const LLMConfigsManagement: React.FC = () => {
       api_key: '',
       base_url: config.base_url,
       model: config.model,
-      is_default: false,
+      is_default: false as boolean,
     })
     setSelectedProvider(llmProviders.find(p => p.name === config.provider) || null)
     setFormErrors({})
@@ -684,7 +708,6 @@ const LLMConfigsManagement: React.FC = () => {
                           label: provider.name,
                         }))
                       ]}
-                      leftSection={<IconSettings size={16} />}
                       error={formErrors.provider}
                     />
 
@@ -696,7 +719,6 @@ const LLMConfigsManagement: React.FC = () => {
                       onChange={(e) => handleFieldChange('name', e.target.value)}
                       required
                       size="md"
-                      leftSection={<IconStar size={16} />}
                       error={formErrors.name}
                     />
 
@@ -708,7 +730,6 @@ const LLMConfigsManagement: React.FC = () => {
                       onChange={(e) => handleFieldChange('api_key', e.target.value)}
                       required
                       size="md"
-                      leftSection={<IconKey size={16} />}
                       error={formErrors.api_key}
                       description={editingId ? '留空则保留原密钥' : ''}
                     />
@@ -721,7 +742,6 @@ const LLMConfigsManagement: React.FC = () => {
                       onChange={(e) => handleFieldChange('base_url', e.target.value)}
                       required
                       size="md"
-                      leftSection={<IconLink size={16} />}
                       error={formErrors.base_url}
                     />
 
@@ -733,7 +753,6 @@ const LLMConfigsManagement: React.FC = () => {
                       onChange={(val) => handleFieldChange('model', val)}
                       data={selectedProvider?.models || []}
                       size="md"
-                      leftSection={<IconBrandPython size={16} />}
                       error={formErrors.model}
                     />
 
@@ -783,11 +802,11 @@ const LLMConfigsManagement: React.FC = () => {
                       <Button
                         type="submit"
                         loading={loading}
-                        size="md"
+                        size="sm"
                         style={{
                           backgroundColor: '#1E6FFF',
                         }}
-                        leftSection={editingId ? <IconCheck size={16} /> : <IconPlus size={16} />}
+                        leftSection={editingId ? <IconCheck size={14} /> : <IconPlus size={14} />}
                       >
                         {loading ? '保存中...' : (editingId ? '更新配置' : '创建配置')}
                       </Button>
@@ -798,12 +817,12 @@ const LLMConfigsManagement: React.FC = () => {
                         onClick={() => handleTest()}
                         loading={testLoading}
                         disabled={!formData.provider || !formData.base_url || !formData.model}
-                        size="md"
+                        size="sm"
                         style={{
                           borderColor: '#1E6FFF',
                           color: '#1E6FFF',
                         }}
-                        leftSection={<IconFlame size={16} />}
+                        leftSection={<IconFlame size={14} />}
                       >
                         测试连接
                       </Button>

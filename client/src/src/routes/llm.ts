@@ -7,6 +7,7 @@ const router = express.Router()
 // 不需要认证的路由
 router.get('/providers', LLMController.getProviders)
 router.post('/test-connection', LLMController.testConnection)
+router.post('/test-connection-python', LLMController.testConnectionPython)
 
 // 需要认证的路由
 router.use(authenticateToken)

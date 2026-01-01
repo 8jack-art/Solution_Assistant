@@ -1,9 +1,14 @@
 import { z } from 'zod'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import path from 'path'
 import { LLMConfigModel } from '../models/LLMConfig.js'
 import { LLMService, generateInvestmentPrompt, analyzeProjectInfoPrompt, analyzeEngineeringItemsPrompt, subdivideEngineeringItemPrompt } from '../lib/llm.js'
 import { llmProviders } from '../lib/llmProviders.js'
 import { ApiResponse, AuthRequest } from '../types/index.js'
 import { pool } from '../db/config.js'
+
+const execAsync = promisify(exec)
 
 const createConfigSchema = z.object({
   name: z.string().min(1, '配置名称不能为空'),
@@ -369,9 +374,72 @@ export class LLMController {
           message: error.errors[0].message
         })
       }
-      res.status(500).json({ 
-        success: false, 
-        error: '服务器内部错误' 
+      res.status(500).json({
+        success: false,
+        error: '服务器内部错误'
+      })
+    }
+  }
+
+  static async testConnectionPython(req: any, res: any) {
+    try {
+      const { api_key, model } = req.body
+      
+      if (!api_key || !model) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数'
+        })
+      }
+
+      console.log('使用Python SDK测试智谱AI连接...')
+      console.log('Model:', model)
+
+      // 获取Python脚本路径
+      const scriptPath = path.resolve(process.cwd(), 'client/src/scripts/test_zhipu_connection.py')
+      
+      // 调用Python脚本
+      const { stdout, stderr } = await execAsync(`python3 "${scriptPath}" "${api_key}" "${model}"`)
+      
+      if (stderr) {
+        console.error('Python脚本错误:', stderr)
+      }
+
+      console.log('Python脚本输出:', stdout)
+
+      // 解析Python脚本返回的JSON
+      try {
+        const result = JSON.parse(stdout.trim())
+        
+        if (result.success) {
+          res.json({
+            success: true,
+            data: {
+              message: '连接测试成功（Python SDK）',
+              content: result.content
+            }
+          })
+        } else {
+          res.status(400).json({
+            success: false,
+            error: '连接测试失败',
+            message: result.error
+          })
+        }
+      } catch (parseError) {
+        console.error('解析Python输出失败:', parseError)
+        res.status(500).json({
+          success: false,
+          error: '解析测试结果失败',
+          message: stdout
+        })
+      }
+    } catch (error) {
+      console.error('Python SDK测试失败:', error)
+      res.status(500).json({
+        success: false,
+        error: '服务器内部错误',
+        message: error instanceof Error ? error.message : '未知错误'
       })
     }
   }

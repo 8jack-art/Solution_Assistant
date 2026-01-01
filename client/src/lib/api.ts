@@ -475,6 +475,12 @@ export const llmConfigApi = {
   testConnection: (config: any) =>
     api.post<any, ApiResponse<{ message: string; content?: string }>>('/llm/test-connection', config),
 
+  testConnectionPython: (apiKey: string, model: string) =>
+    api.post<any, ApiResponse<{ message: string; content?: string }>>('/llm/test-connection-python', { 
+      api_key: apiKey, 
+      model 
+    }),
+
   generateInvestmentContent: (params: any) =>
     api.post<any, ApiResponse<{ content: string; config_name: string }>>('/llm/generate-investment-content', params),
 

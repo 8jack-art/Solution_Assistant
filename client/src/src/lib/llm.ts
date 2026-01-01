@@ -1,4 +1,5 @@
 import { LLMConfig as DBLLMConfig } from '../types/index.js'
+import { ZhipuService } from '../../lib/zhipuService.js'
 
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant'
@@ -141,12 +142,23 @@ export class LLMService {
           temperature: 0.1
         }, provider)
 
+        // 智谱AI特殊处理：需要添加特定请求头
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        }
+        
+        // 智谱AI可能需要特定的请求头
+        if (provider.toLowerCase().includes('zhipu') ||
+            provider.toLowerCase().includes('智谱') ||
+            provider.toLowerCase().includes('glm')) {
+          // 智谱AI可能需要额外的请求头
+          console.log('检测到智谱AI配置，使用标准OpenAI兼容格式')
+        }
+
         const response = await fetch(apiUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
+          headers: headers,
           body: JSON.stringify(requestBody),
           signal: controller.signal
         })
@@ -163,6 +175,7 @@ export class LLMService {
 
         if (!response.ok) {
           const errorData = await response.text()
+          console.error('HTTP错误响应:', errorData)
           return {
             success: false,
             error: `HTTP ${response.status}: ${errorData}`
@@ -170,10 +183,18 @@ export class LLMService {
         }
 
         const data = await response.json() as any
-        const content = data.choices?.[0]?.message?.content
+        console.log('API响应数据:', JSON.stringify(data, null, 2))
+        
+        // 智谱AI特殊处理：内容可能在reasoning_content中
+        let content = data.choices?.[0]?.message?.content
+        if (!content && data.choices?.[0]?.message?.reasoning_content) {
+          content = data.choices[0].message.reasoning_content
+          console.log('使用reasoning_content作为响应内容')
+        }
         
         // 修改验证逻辑，不仅检查content是否存在，还要检查是否有其他有效信息
         if (!data.choices || data.choices.length === 0) {
+          console.error('响应格式无效：没有choices字段')
           return {
             success: false,
             error: '响应格式无效'
@@ -181,6 +202,7 @@ export class LLMService {
         }
         
         // 即使content为空，只要有choices就认为是成功的
+        console.log('测试连接成功，内容长度:', content?.length || 0)
         return {
           success: true,
           content: content || ''
