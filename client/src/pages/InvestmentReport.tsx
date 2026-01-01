@@ -36,7 +36,7 @@ import {
 import { notifications } from '@mantine/notifications'
 import { projectApi, reportApi, investmentApi } from '@/lib/api'
 import TiptapInput from '@/components/report/TiptapInput'
-import CKEditor5Output from '@/components/report/CKEditor5Output'
+import RichTextOutput from '@/components/report/RichTextOutput'
 import WordPreview from '@/components/report/WordPreview'
 
 interface ReportTemplate {
@@ -139,8 +139,7 @@ const InvestmentReport: React.FC = () => {
   const [reportContent, setReportContent] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [templateModalOpened, setTemplateModalOpened] = useState(false)
-  // 强制使用CKEditor 5，不再支持切换到旧版
-  const useCKEditor = true
+
 
   // 引用
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -921,7 +920,7 @@ const InvestmentReport: React.FC = () => {
                   )}
                 </Group>
                 
-                <CKEditor5Output
+                <RichTextOutput
                   content={reportContent}
                   isGenerating={isGenerating}
                   enableReplay={true}

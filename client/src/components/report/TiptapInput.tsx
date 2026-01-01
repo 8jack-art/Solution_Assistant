@@ -114,7 +114,26 @@ const TiptapInput: React.FC<TiptapInputProps> = ({
         class: 'prose prose-sm sm:prose-base lg:prose-lg xl:prose-2xl focus:outline-none',
       },
     },
+    onCreate: () => {
+      console.log('[TiptapInput] Editor created successfully')
+    },
+    onFocus: () => {
+      console.log('[TiptapInput] Editor focused')
+    },
+    onBlur: () => {
+      console.log('[TiptapInput] Editor blurred')
+    },
   })
+
+  // 调试信息
+  useEffect(() => {
+    if (editor) {
+      console.log('[TiptapInput] Editor initialized:', editor)
+      console.log('[TiptapInput] Editor content:', editor.getHTML())
+    } else {
+      console.log('[TiptapInput] Editor failed to initialize')
+    }
+  }, [editor])
 
   // 更新统计信息
   const updateStatistics = useCallback((text: string) => {
@@ -132,17 +151,16 @@ const TiptapInput: React.FC<TiptapInputProps> = ({
 
   // 插入模板
   const insertTemplate = useCallback((template: string) => {
-    const currentContent = editor?.getHTML() || ''
-    const newContent = currentContent + template
-    
-    onChange(newContent)
-    
-    notifications.show({
-      title: '模板已插入',
-      message: `${template.substring(0, 50)}...`,
-      color: 'green',
-    })
-  }, [editor, onChange])
+    if (editor) {
+      editor.chain().focus().insertContent(template).run()
+      
+      notifications.show({
+        title: '模板已插入',
+        message: `${template.substring(0, 50)}...`,
+        color: 'green',
+      })
+    }
+  }, [editor])
 
   // 复制到剪贴板
   const copyToClipboard = useCallback(() => {
@@ -189,58 +207,14 @@ const TiptapInput: React.FC<TiptapInputProps> = ({
     }
   }, [value, editor, onChange, updateStatistics])
 
-  // Word导出
-  const exportToWord = useCallback(async () => {
-    if (!value.trim()) {
-      notifications.show({
-        title: '导出失败',
-        message: '没有可导出的内容',
-        color: 'red',
-      })
-      return
-    }
-
-    try {
-      notifications.show({
-        title: '正在导出...',
-        message: '正在生成Word文档',
-        color: 'blue',
-      })
-
-      // 使用html-to-docx导出
-      const docx = await htmlToDocx(value, {
-        table: { row: { cantSplit: true } },
-        footer: true,
-        pageNumber: true,
-      })
-
-      // 创建下载链接
-      const blob = new Blob([docx], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = '投资方案报告.docx'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
-      notifications.show({
-        title: '导出成功',
-        message: 'Word文档已导出',
-        color: 'green',
-      })
-    } catch (error) {
-      console.error('Word导出失败:', error)
-      notifications.show({
-        title: '导出失败',
-        message: 'Word文档导出失败',
-        color: 'red',
-      })
-    }
-  }, [value])
+  // Word导出功能暂时禁用，以解决html-to-docx依赖问题
+  const exportToWord = useCallback(() => {
+    notifications.show({
+      title: '功能禁用',
+      message: 'Word导出功能暂时禁用，请使用复制功能替代',
+      color: 'yellow',
+    })
+  }, [])
 
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
@@ -297,7 +271,11 @@ const TiptapInput: React.FC<TiptapInputProps> = ({
           overflow: 'hidden',
           transition: 'border-color 0.2s, box-shadow 0.2s',
           borderColor: isFocused ? '#165DFF' : '#E5E6EB',
-          boxShadow: isFocused ? '0 0 0 3px rgba(22, 93, 255, 0.1)' : 'none'
+          boxShadow: isFocused ? '0 0 0 3px rgba(22, 93, 255, 0.1)' : 'none',
+          backgroundColor: '#FFFFFF',
+          position: 'relative',
+          display: 'block',
+          width: '100%'
         }}>
           <EditorContent 
             editor={editor}
@@ -306,7 +284,15 @@ const TiptapInput: React.FC<TiptapInputProps> = ({
               padding: '16px',
               fontSize: '14px',
               lineHeight: '1.6',
+              backgroundColor: '#FFFFFF',
+              color: '#000000',
+              width: '100%',
+              height: '100%',
+              display: 'block',
+              zIndex: 1
             }}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
           />
           
           {/* 编辑器图标 */}
@@ -319,7 +305,8 @@ const TiptapInput: React.FC<TiptapInputProps> = ({
               bottom: '12px',
               right: '12px',
               pointerEvents: 'none',
-              opacity: isFocused ? 1 : 0.5
+              opacity: isFocused ? 1 : 0.5,
+              zIndex: 2
             }}
           >
             <IconEdit size={18} />
