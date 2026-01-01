@@ -41,12 +41,17 @@ interface ReportState {
   isLoading: boolean
   error: string | null
   
+  // 变量插入
+  variableToInsert: string | null
+  
   // Actions
   setProjectId: (id: string) => void
   setReportTitle: (title: string) => void
   setPromptTemplate: (template: string) => void
   setPromptHtml: (html: string) => void
   selectTemplate: (templateId: string) => void
+  setVariableToInsert: (variable: string | null) => void
+  insertVariable: (variable: string) => void
   
   loadTemplates: () => Promise<void>
   loadProjectData: () => Promise<void>
@@ -72,6 +77,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
   projectData: null,
   isLoading: false,
   error: null,
+  variableToInsert: null,
 
   setProjectId: (id) => set({ projectId: id }),
   
@@ -168,14 +174,25 @@ export const useReportStore = create<ReportState>((set, get) => ({
     set({ isLoading: true, error: null, reportContent: '' })
     try {
       // 创建报告记录
-      const { reportId } = await reportApi.createReport({
+      console.log('[ReportStore] Creating report...')
+      const createResponse = await reportApi.createReport({
         projectId,
         title: reportTitle
       })
       
+      console.log('[ReportStore] Create response:', createResponse)
+      
+      if (!createResponse || !createResponse.reportId) {
+        throw new Error(createResponse?.error || '创建报告失败')
+      }
+      
+      const reportId = createResponse.reportId
+      console.log('[ReportStore] Report created, id:', reportId)
+      
       set({ reportId, generationStatus: 'generating' })
       
       // 启动 SSE 流式生成
+      console.log('[ReportStore] Starting SSE generation...')
       await reportApi.generateReport(reportId, promptTemplate, {
         onChunk: (content) => {
           set((state) => ({
@@ -191,7 +208,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
         }
       })
     } catch (error: any) {
-      console.error('生成报告失败:', error)
+      console.error('[ReportStore] 生成报告失败:', error)
       set({ error: error.message || '生成报告失败', generationStatus: 'failed', isLoading: false })
     }
   },
@@ -255,7 +272,12 @@ export const useReportStore = create<ReportState>((set, get) => ({
       reportId: null,
       reportContent: '',
       generationStatus: 'idle',
-      error: null
+      error: null,
+      variableToInsert: null
     })
-  }
+  },
+
+  setVariableToInsert: (variable) => set({ variableToInsert: variable }),
+  
+  insertVariable: (variable) => set({ variableToInsert: variable })
 }))

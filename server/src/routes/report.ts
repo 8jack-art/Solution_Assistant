@@ -7,6 +7,11 @@ const router = express.Router()
 // 所有路由都需要认证
 router.use(authenticateToken)
 
+// 模板管理 - 必须放在 /:id 之前
+router.get('/templates', ReportController.getTemplates)
+router.post('/templates', ReportController.saveTemplate)
+router.delete('/templates/:id', ReportController.deleteTemplate)
+
 // 报告 CRUD
 router.post('/create', ReportController.create)
 router.get('/:id', ReportController.getById)

@@ -175,7 +175,7 @@ export const reportApi = {
     console.log('[reportApi] Calling getProjectSummary for projectId:', projectId)
     try {
       const response = await api.get<any, ApiResponse<any>>(`/report/project/summary/${projectId}`)
-      console.log('[reportApi] API response:', response)
+      console.log('[reportApi] Full API response:', JSON.stringify(response, null, 2))
       
       // 处理错误响应
       if (!response || !response.success) {

@@ -10,12 +10,20 @@ import { v4 as uuidv4 } from 'uuid'
  */
 export class ReportController {
   /**
+   * 获取当前用户ID
+   */
+  private static getUserId(req: Request): string | null {
+    const user = (req as any).user
+    return user?.userId || null
+  }
+
+  /**
    * 创建新的报告记录
    */
   static async create(req: Request, res: Response): Promise<void> {
     try {
       const { projectId, templateId, title } = req.body
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       if (!projectId) {
         res.status(400).json({ success: false, error: '缺少项目ID' })
@@ -32,7 +40,7 @@ export class ReportController {
       await pool.execute(
         `INSERT INTO generated_reports 
          (id, project_id, template_id, user_id, report_title, generation_status) 
-         VALUES (?, ?, ?, ?, ?, 'pending')`,
+         VALUES (?, ?, ?, ?, ?, 'generating')`,
         [reportId, projectId, templateId || null, userId, title || '投资项目方案报告']
       )
 
@@ -50,11 +58,17 @@ export class ReportController {
     try {
       const { id } = req.params
       const { promptTemplate } = req.body
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       console.log('='.repeat(60))
       console.log('启动报告生成:', id)
       console.log('提示词长度:', promptTemplate?.length || 0)
+      console.log('用户ID:', userId)
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: '未授权' })
+        return
+      }
 
       // 获取报告信息
       const [reports] = await pool.execute(
@@ -165,7 +179,7 @@ export class ReportController {
   static async stream(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       console.log('SSE 连接请求，报告ID:', id)
 
@@ -229,7 +243,7 @@ export class ReportController {
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       const [reports] = await pool.execute(
         `SELECT r.*, t.name as template_name, t.prompt_template 
@@ -265,7 +279,7 @@ export class ReportController {
   static async getByProjectId(req: Request, res: Response): Promise<void> {
     try {
       const { projectId } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       const [reports] = await pool.execute(
         `SELECT r.*, t.name as template_name 
@@ -289,7 +303,7 @@ export class ReportController {
   static async pause(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       // 验证权限
       const [reports] = await pool.execute(
@@ -322,7 +336,7 @@ export class ReportController {
   static async resume(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       // 验证权限
       const [reports] = await pool.execute(
@@ -355,7 +369,7 @@ export class ReportController {
   static async stop(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       // 验证权限
       const [reports] = await pool.execute(
@@ -391,7 +405,7 @@ export class ReportController {
   static async export(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       // 获取报告内容
       const [reports] = await pool.execute(
@@ -439,7 +453,8 @@ export class ReportController {
    */
   static async getTemplates(req: Request, res: Response): Promise<void> {
     try {
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
+      console.log('getTemplates called, userId:', userId)
 
       const [templates] = await pool.execute(
         `SELECT * FROM report_templates 
@@ -447,6 +462,8 @@ export class ReportController {
          ORDER BY is_system DESC, created_at DESC`,
         [userId]
       ) as any[]
+
+      console.log('getTemplates found:', templates.length, 'templates')
 
       res.json({ success: true, templates })
     } catch (error) {
@@ -461,7 +478,7 @@ export class ReportController {
   static async saveTemplate(req: Request, res: Response): Promise<void> {
     try {
       const { name, description, promptTemplate, isDefault } = req.body
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       if (!name || !promptTemplate) {
         res.status(400).json({ success: false, error: '模板名称和提示词不能为空' })
@@ -490,7 +507,7 @@ export class ReportController {
   static async deleteTemplate(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
       // 检查是否为系统模板
       const [templates] = await pool.execute(
@@ -531,12 +548,20 @@ export class ReportController {
   static async getProjectSummary(req: Request, res: Response): Promise<void> {
     try {
       const { projectId } = req.params
-      const userId = (req as any).user?.id || (req as any).userId
+      const userId = ReportController.getUserId(req)
 
-      // 获取项目基本信息
+      console.log('getProjectSummary called, projectId:', projectId, 'userId:', userId)
+
+      // 验证用户ID
+      if (!userId) {
+        res.status(401).json({ success: false, error: '未授权' })
+        return
+      }
+
+      // 获取项目基本信息 - 使用 null 代替 undefined
       const [projects] = await pool.execute(
         'SELECT * FROM investment_projects WHERE id = ? AND user_id = ?',
-        [projectId, userId]
+        [projectId, userId || null]
       ) as any[]
       
       if (projects.length === 0) {
