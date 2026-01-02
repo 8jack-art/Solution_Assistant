@@ -419,9 +419,13 @@ export class ReportController {
         return
       }
 
-      // 断开 SSE 连接并设置停止标志
-      sseManager.unregister(id)
+      // 先设置停止标志，再断开 SSE 连接
+      // 注意：顺序很重要，必须先设置标志，这样流式生成循环才能检测到停止
+      console.log('【停止】设置停止标志...')
       sseManager.setStopFlag(id)
+      
+      console.log('【停止】取消 SSE 连接...')
+      sseManager.unregister(id)
 
       await ReportService.stopReportGeneration(id)
       

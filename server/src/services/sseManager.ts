@@ -10,6 +10,19 @@ class SSEManager {
   private flushIntervals: Map<string, NodeJS.Timeout> = new Map()
   private lastSentLength: Map<string, number> = new Map()
   private stopFlags: Map<string, boolean> = new Map() // 停止标志
+  private abortControllers: Map<string, AbortController> = new Map() // 用于取消请求的 AbortController
+
+  /**
+   * 获取或创建 AbortController
+   */
+  getAbortController(reportId: string): AbortController {
+    let controller = this.abortControllers.get(reportId)
+    if (!controller) {
+      controller = new AbortController()
+      this.abortControllers.set(reportId, controller)
+    }
+    return controller
+  }
 
   /**
    * 注册一个新的SSE连接
@@ -22,6 +35,10 @@ class SSEManager {
     this.connections.set(reportId, res)
     this.contentBuffer.set(reportId, '')
     this.lastSentLength.set(reportId, 0)
+
+    // 创建新的 AbortController
+    const controller = new AbortController()
+    this.abortControllers.set(reportId, controller)
 
     // 发送初始状态
     this.send(reportId, {
@@ -71,6 +88,17 @@ class SSEManager {
       this.connections.delete(reportId)
     }
 
+    // 取消正在进行的请求
+    const controller = this.abortControllers.get(reportId)
+    if (controller) {
+      try {
+        controller.abort()
+      } catch (e) {
+        // 忽略取消错误
+      }
+      this.abortControllers.delete(reportId)
+    }
+
     // 清除缓冲区
     this.contentBuffer.delete(reportId)
     this.lastSentLength.delete(reportId)
@@ -83,6 +111,17 @@ class SSEManager {
   setStopFlag(reportId: string): void {
     this.stopFlags.set(reportId, true)
     console.log(`[SSE Manager] 设置停止标志，报告ID: ${reportId}`)
+    
+    // 同时触发取消请求
+    const controller = this.abortControllers.get(reportId)
+    if (controller) {
+      try {
+        controller.abort()
+        console.log(`[SSE Manager] 已触发请求取消，报告ID: ${reportId}`)
+      } catch (e) {
+        console.warn(`[SSE Manager] 取消请求失败: ${e}`)
+      }
+    }
   }
 
   /**

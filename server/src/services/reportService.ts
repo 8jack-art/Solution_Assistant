@@ -482,19 +482,19 @@ ${JSON.stringify(financialIndicators, null, 2)}
         return false
       }
       
-      // 创建轮询停止标志的异步函数
-      const waitForStop = (timeout: number): Promise<void> => {
+      // 创建轮询停止标志的Promise，返回特殊对象表示停止
+      const waitForStop = (timeout: number): Promise<{ stopped: boolean }> => {
         return new Promise((resolve) => {
           const checkInterval = setInterval(() => {
             if (checkStop()) {
               clearInterval(checkInterval)
-              resolve()
+              resolve({ stopped: true })
             }
-          }, 50) // 每50ms检查一次
+          }, 30) // 每30ms检查一次
           
           setTimeout(() => {
             clearInterval(checkInterval)
-            resolve()
+            resolve({ stopped: false }) // 超时，返回false
           }, timeout)
         })
       }
@@ -503,7 +503,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
         while (true) {
           // 先检查停止标志
           if (checkStop()) {
-            console.log(`流式生成被用户停止: ${reportId}`)
+            console.log(`【流式生成】检测到停止标志，立即停止: ${reportId}`)
             
             // 保存当前已生成的内容
             await pool.execute(
@@ -521,17 +521,32 @@ ${JSON.stringify(financialIndicators, null, 2)}
           
           // 创建读取Promise和停止检查Promise的竞态
           const readPromise = reader.read()
-          const stopCheckPromise = waitForStop(300) // 每300ms检查一次停止
+          const stopCheckPromise = waitForStop(150) // 每150ms检查一次停止
           
-          const result = await Promise.race([readPromise, stopCheckPromise])
+          const raceResult = await Promise.race([readPromise, stopCheckPromise])
           
-          // 如果是停止检查超时，继续循环读取
-          if (result === undefined) {
+          // 检查是否是停止检查返回的结果
+          if (raceResult && typeof raceResult === 'object' && 'stopped' in raceResult) {
+            if (raceResult.stopped) {
+              console.log(`【流式生成】收到停止信号，终止生成: ${reportId}`)
+              
+              // 保存当前已生成的内容
+              await pool.execute(
+                'UPDATE generated_reports SET generation_status = ?, report_content = ?, updated_at = NOW() WHERE id = ?',
+                ['failed', fullContent, reportId]
+              )
+              
+              // 通知前端停止
+              sseManager.fail(reportId, '用户手动停止')
+              return
+            }
+            // 如果 stopped === false，只是超时，继续循环
             console.log('停止检查超时，继续读取...')
             continue
           }
           
-          const { done, value } = result as { done: boolean; value: Uint8Array }
+          // 是 reader.read() 的结果
+          const { done, value } = raceResult as { done: boolean; value: Uint8Array }
           
           if (done) {
             console.log('流式响应读取完成')
