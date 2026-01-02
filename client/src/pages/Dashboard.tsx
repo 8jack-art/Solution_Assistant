@@ -24,6 +24,7 @@ import { notifications } from '@mantine/notifications'
 import { projectApi, InvestmentProject } from '@/lib/api'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import UserProfile from '@/components/UserProfile'
+import { Header } from '@/components/common/Header'
 
 const Dashboard: React.FC = () => {
   const [projects, setProjects] = useState<InvestmentProject[]>([])
@@ -99,66 +100,39 @@ const Dashboard: React.FC = () => {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#F5F7FA' }}>
-      <Paper shadow="sm" p="0" style={{ height: '64px', borderBottom: '1px solid #E5E6EB', backgroundColor: '#FFFFFF', position: 'sticky', top: 0, zIndex: 100 }}>
-        <Container size="xl" px="lg" style={{ height: '100%', maxWidth: '1400px', margin: '0 auto' }}>
-          <Group justify="space-between" style={{ height: '100%' }}>
-            <Group gap="lg">
-              <Box style={{ 
-                width: '48px', 
-                height: '48px', 
-                borderRadius: '8px', 
-                background: 'linear-gradient(135deg, #1E6FFF 0%, #00C48C 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-                fontSize: '24px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'transform 0.2s ease'
+      {/* Header */}
+      <Header
+        title="投资项目管理系统"
+        subtitle="Investment Project Management System"
+        icon="🏠"
+        showBackButton={false}
+        rightContent={
+          <Group gap="md">
+            <Button
+              variant="light"
+              onClick={() => navigate('/llm-configs')}
+              style={{
+                height: '36px',
+                borderRadius: '6px',
+                color: '#1D2129',
+                fontSize: '14px',
+                transition: 'all 0.2s ease'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              onClick={() => navigate('/dashboard')}
-              >
-                投
-              </Box>
-              <div>
-                <Title order={4} c="#1D2129" style={{ fontSize: '18px', fontWeight: 600, marginBottom: '2px', cursor: 'pointer' }} onClick={() => navigate('/dashboard')}>
-                  投资项目管理系统
-                </Title>
-                <Text size="xs" c="#86909C" style={{ fontSize: '12px' }}>
-                  Investment Project Management System
-                </Text>
-              </div>
-            </Group>
-            <Group gap="md">
-              <Button 
-                variant="light"
-                onClick={() => navigate('/llm-configs')}
-                style={{ 
-                  height: '36px',
-                  borderRadius: '6px',
-                  color: '#1D2129',
-                  fontSize: '14px',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#E7F5FF'
-                  e.currentTarget.style.color = '#1E6FFF'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.color = '#1D2129'
-                }}
-              >
-                🤖 LLM配置
-              </Button>
-              {user && <UserProfile user={user} />}
-            </Group>
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#E7F5FF'
+                e.currentTarget.style.color = '#1E6FFF'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent'
+                e.currentTarget.style.color = '#1D2129'
+              }}
+            >
+              🤖 LLM配置
+            </Button>
+            {user && <UserProfile user={user} />}
           </Group>
-        </Container>
-      </Paper>
+        }
+      />
 
       <Container size="xl" py="xl" px="lg" style={{ maxWidth: '1400px', margin: '0 auto' }}>
         <Stack gap="xl">

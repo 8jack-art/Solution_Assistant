@@ -41,6 +41,7 @@ export async function testConnection() {
 // 确保土地信息字段存在
 async function ensureLandFields() {
   const alterQueries = [
+    "ALTER TABLE investment_projects ADD COLUMN construction_unit VARCHAR(255) DEFAULT '' COMMENT '建设单位'",
     "ALTER TABLE investment_projects ADD COLUMN land_mode VARCHAR(10) DEFAULT 'A'",
     "ALTER TABLE investment_projects ADD COLUMN land_area DECIMAL(15,4) DEFAULT 0",
     "ALTER TABLE investment_projects ADD COLUMN land_unit_price DECIMAL(15,4) DEFAULT 0",

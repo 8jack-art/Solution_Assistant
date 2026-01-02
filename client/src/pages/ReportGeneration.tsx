@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Grid, Paper, Group, Button, Title, Text, Stack, Alert } from '@mantine/core'
+import { Grid, Paper, Group, Button, Title, Text, Stack, Alert, Container } from '@mantine/core'
 import { useReportStore } from '../stores/reportStore'
 import { PromptEditor } from '../components/report/PromptEditor'
 import { ReportPreview } from '../components/report/ReportPreview'
 import { VariablePicker } from '../components/report/VariablePicker'
 import { TemplateSelector } from '../components/report/TemplateSelector'
+import { Header } from '../components/common/Header'
 
 export function ReportGeneration() {
   const { projectId } = useParams()
@@ -45,23 +46,22 @@ export function ReportGeneration() {
   }
 
   return (
-    <div className="report-generation-page" style={{ padding: '20px' }}>
-      <Group justify="space-between" mb="lg">
-        <Group gap="md">
-          <Button 
-            variant="subtle" 
-            onClick={() => navigate(`/revenue-cost/${projectId}`)}
-          >
-            ← 返回
-          </Button>
-          <Title order={2}>投资项目方案报告生成</Title>
-        </Group>
-        <Group>
+    <div className="report-generation-page">
+      {/* Header */}
+      <Header
+        title="投资项目方案报告生成"
+        subtitle="Report Generation"
+        icon="📄"
+        showBackButton={true}
+        backTo={`/revenue-cost/${projectId}`}
+        rightContent={
           <Text size="sm" c="dimmed">
             项目ID: {projectId}
           </Text>
-        </Group>
-      </Group>
+        }
+      />
+
+      <Container size="xl" py="lg" px="lg" style={{ maxWidth: '1400px', margin: '0 auto' }}>
 
       {store.error && (
         <Alert 
@@ -148,8 +148,9 @@ export function ReportGeneration() {
           </div>
         </Grid.Col>
       </Grid>
-    </div>
-  )
+     </Container>
+   </div>
+ )
 }
 
 export default ReportGeneration

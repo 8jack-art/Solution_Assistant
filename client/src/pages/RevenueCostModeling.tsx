@@ -18,13 +18,13 @@ import {
   Tooltip,
   Modal,
 } from '@mantine/core'
-import { 
-  IconChartBar, 
-  IconArrowLeft, 
-  IconEdit, 
-  IconCalendar, 
-  IconBuildingFactory, 
-  IconTool, 
+import {
+  IconChartBar,
+  IconArrowLeft,
+  IconEdit,
+  IconCalendar,
+  IconBuildingFactory,
+  IconTool,
   IconFileText,
   IconCoin,
   IconCurrencyDollar,
@@ -38,6 +38,7 @@ import DynamicRevenueTable from '@/components/revenue-cost/DynamicRevenueTable'
 import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
 import ProductionRateModal from '@/components/revenue-cost/ProductionRateModal'
 import FinancialIndicatorsTable from '@/components/revenue-cost/FinancialIndicatorsTable'
+import { Header } from '@/components/common/Header'
 
 // 步骤定义
 const STEPS = [
@@ -2032,45 +2033,18 @@ const RevenueCostModeling: React.FC = () => {
   }
 
   return (
-    <Container size="xl" style={{ minHeight: '100vh', padding: 0 }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#F5F7FA' }}>
       {/* Header */}
-      <Paper shadow="none" p="0" style={{ 
-        height: '50px', 
-        borderBottom: '1px solid #E5E6EB', 
-        backgroundColor: '#FFFFFF',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100
-      }}>
-        <div style={{ 
-          maxWidth: '1200px', 
-          margin: '0 auto', 
-          height: '100%', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
-          padding: '0 16px' 
-        }}>
-          <Group gap="md">
-            <IconChartBar size={24} color="#F7BA1E" />
-            <Title order={3} c="#1D2129" style={{ fontSize: '20px', fontWeight: 600 }}>
-              收入及成本预测
-            </Title>
-          </Group>
-          <Button
-            leftSection={<IconArrowLeft size={16} />}
-            variant="subtle"
-            size="sm"
-            onClick={() => navigate(`/investment/${id}`)}
-            style={{ height: '32px', padding: '4px 12px', color: '#1D2129' }}
-          >
-            返回投资估算
-          </Button>
-        </div>
-      </Paper>
+      <Header
+        title="收入及成本预测"
+        subtitle="Revenue & Cost Modeling"
+        icon="📊"
+        showBackButton={true}
+        backTo={`/investment/${id}`}
+      />
 
       {/* Main Content */}
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 16px' }}>
+      <Container size="xl" py="lg" px="lg" style={{ maxWidth: '1400px', margin: '0 auto' }}>
         <Stack gap="xl">
           {/* 项目信息卡片 */}
           <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
@@ -2161,8 +2135,8 @@ const RevenueCostModeling: React.FC = () => {
             </Group>
           </Group>
         </Stack>
-      </div>
-    </Container>
+      </Container>
+    </div>
   )
 }
 

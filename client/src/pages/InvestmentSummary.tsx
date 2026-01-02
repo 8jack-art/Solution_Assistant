@@ -27,6 +27,7 @@ import { notifications } from '@mantine/notifications'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import ConstructionInterestModal from '@/components/revenue-cost/ConstructionInterestModal'
 import LoanRepaymentScheduleTable from '@/components/revenue-cost/LoanRepaymentScheduleTable'
+import { Header } from '@/components/common/Header'
 
 // 投资估算数据结构
 interface InvestmentItem {
@@ -3075,21 +3076,15 @@ const InvestmentSummary: React.FC = () => {
       )}
       
       {/* Header */}
-      <Paper shadow="none" p="0" style={{ height: '50px', borderBottom: '1px solid #E5E6EB', backgroundColor: '#FFFFFF', width: '100%' }}>
-        <div style={{ width: '1200px', margin: '0 auto', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px' }}>
-          <Title order={3} c="#1D2129" style={{ fontSize: '20px', fontWeight: 600 }}>
-            投资估算简表
-          </Title>
-          <Button 
-            variant="subtle" 
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-            style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
-          >
-            返回
-          </Button>
-        </div>
-      </Paper>
+      <Header
+        title="投资估算简表"
+        subtitle="Investment Summary"
+        icon="💰"
+        height={50}
+        containerWidth="1200px"
+        showBackButton={true}
+        backTo={`/project/${id}`}
+      />
 
       {/* Main Content */}
       <div style={{ width: '1200px', padding: '16px' }}>

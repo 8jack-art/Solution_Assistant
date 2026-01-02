@@ -11,6 +11,7 @@ const createProjectSchema = z.object({
   operation_years: z.coerce.number().int().min(1).max(50).default(20),
   loan_ratio: z.coerce.number().min(0).max(1).default(0.7),
   loan_interest_rate: z.coerce.number().min(0).max(1).default(0.049),
+  construction_unit: z.string().optional(),
   // 用地信息字段 - 与前端字段名匹配
   land_mode: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
   land_area: z.coerce.number().optional(),
@@ -53,6 +54,7 @@ export class ProjectController {
         operation_years: projectData.operation_years,
         loan_ratio: projectData.loan_ratio,
         loan_interest_rate: projectData.loan_interest_rate,
+        construction_unit: projectData.construction_unit || '',
         user_id: userId,
         status: 'draft',
         is_locked: false,

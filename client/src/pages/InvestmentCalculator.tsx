@@ -3,13 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { projectApi, investmentApi, InvestmentProject, InvestmentEstimate } from '@/lib/api'
 import {
   Container,
-  Paper,
-  Title,
   Text,
   Button,
-  NumberInput,
   Card,
-  Group,
   Stack,
   Grid,
   Loader,
@@ -20,6 +16,7 @@ import { formatCurrency, formatNumber } from '@/lib/utils'
 import { CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table'
+import { Header } from '@/components/common/Header'
 
 const InvestmentCalculator: React.FC = () => {
   const [project, setProject] = useState<InvestmentProject | null>(null)
@@ -224,35 +221,24 @@ const InvestmentCalculator: React.FC = () => {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#F5F7FA' }}>
-      {/* Header - 符合UI规范：高度50px，白色背景，底部边框#E5E6EB */}
-      <Paper shadow="none" p="0" style={{ height: '50px', borderBottom: '1px solid #E5E6EB', backgroundColor: '#FFFFFF' }}>
-        <Container size="xl" px="lg" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <Title order={3} c="#1D2129" style={{ fontSize: '20px', fontWeight: 600 }}>
-              投资估算
-            </Title>
-            <Text size="sm" c="#86909C" style={{ fontSize: '12px' }}>项目：{project.project_name}</Text>
-          </div>
-          <Group gap="xs">
-            <Button 
-              variant="subtle"
-              size="sm"
-              onClick={() => navigate(`/project/${id}`)}
-              style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
-            >
-              返回项目
-            </Button>
-            <Button 
-              variant="subtle"
-              size="sm"
-              onClick={() => navigate('/dashboard')}
-              style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
-            >
-              返回首页
-            </Button>
-          </Group>
-        </Container>
-      </Paper>
+      {/* Header */}
+      <Header
+        title="投资估算"
+        subtitle="Investment Estimation"
+        icon="💰"
+        showBackButton={true}
+        backTo={`/project/${id}`}
+        rightContent={
+          <Button
+            variant="subtle"
+            size="sm"
+            onClick={() => navigate('/dashboard')}
+            style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
+          >
+            返回首页
+          </Button>
+        }
+      />
 
       <Container size="xl" py="lg" px="lg">
         <Grid gutter="lg">

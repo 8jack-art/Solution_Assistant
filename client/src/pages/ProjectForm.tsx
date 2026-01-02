@@ -4,7 +4,6 @@ import { projectApi, llmConfigApi } from '@/lib/api'
 import { InvestmentProject } from '@/types'
 import {
   Container,
-  Paper,
   Title,
   Text,
   Button,
@@ -19,6 +18,7 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import LoadingOverlay from '@/components/LoadingOverlay'
+import { Header } from '@/components/common/Header'
 
 const ProjectForm: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -48,9 +48,25 @@ const ProjectForm: React.FC = () => {
   const [landModeAnalyzing, setLandModeAnalyzing] = useState(false)
   const [isEdit, setIsEdit] = useState(false)
   const [project, setProject] = useState<InvestmentProject | null>(null)
+  const [currentLLMConfig, setCurrentLLMConfig] = useState<any>(null)
     
   const { id } = useParams()
   const navigate = useNavigate()
+
+  // 加载当前LLM配置
+  useEffect(() => {
+    const loadLLMConfig = async () => {
+      try {
+        const response = await llmConfigApi.getDefault()
+        if (response.success && response.data?.config) {
+          setCurrentLLMConfig(response.data.config)
+        }
+      } catch (error) {
+        console.error('加载LLM配置失败:', error)
+      }
+    }
+    loadLLMConfig()
+  }, [])
 
 
   // 自动计算土地费用和生成备注
@@ -193,9 +209,8 @@ const ProjectForm: React.FC = () => {
         })
 
         if (isEdit && id) {
-          navigate(`/investment/${id}`, {
-            state: { autoGenerate: true }
-          })
+          // 更新成功后重新加载项目数据，保持在当前页面
+          loadProject()
         } else {
           const createdProjectId = response.data?.project?.id
           if (createdProjectId) {
@@ -379,22 +394,16 @@ const ProjectForm: React.FC = () => {
         message={analyzing ? '智能分析项目信息' : '分析用地模式'}
       />
       
-      {/* Header - 符合UI规范：高度50px，白色背景，底部边框#E5E6EB */}
-      <Paper shadow="none" p="0" style={{ height: '50px', borderBottom: '1px solid #E5E6EB', backgroundColor: '#FFFFFF' }}>
-        <Container size="xl" px="lg" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Title order={3} c="#1D2129" style={{ fontSize: '20px', fontWeight: 600 }}>
-            {isEdit ? '编辑项目' : '新建项目'}
-          </Title>
-          <Button 
-            variant="subtle" 
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-            style={{ height: '32px', padding: '4px 8px', color: '#1D2129', backgroundColor: 'transparent' }}
-          >
-            返回
-          </Button>
-        </Container>
-      </Paper>
+      {/* Header */}
+      <Header
+        title={isEdit ? '编辑项目' : '新建项目'}
+        subtitle="Project Form"
+        icon="📋"
+        showLLMInfo={true}
+        llmConfig={currentLLMConfig}
+        showBackButton={true}
+        backTo="/dashboard"
+      />
 
       <Container size="xl" py="lg" px="lg" style={{ maxWidth: '1400px', margin: '0 auto' }}>
         <Grid gutter="lg">
