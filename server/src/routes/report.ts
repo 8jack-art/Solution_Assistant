@@ -30,6 +30,7 @@ router.post('/stop/:id', ReportController.stop)
 
 // 导出
 router.post('/export/:id', ReportController.export)
+router.post('/export-with-config', ReportController.exportWithConfig)
 
 // 模板管理
 router.get('/templates', ReportController.getTemplates)

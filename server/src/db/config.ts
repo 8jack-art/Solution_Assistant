@@ -28,8 +28,8 @@ export async function testConnection() {
     console.log('✅ MariaDB 连接成功')
     connection.release()
     
-    // 自动迁移：检查并添加缺失的土地字段
-    await ensureLandFields()
+    // 自动迁移：检查并添加缺失的字段
+    await ensureFields()
     
     return true
   } catch (error) {
@@ -38,9 +38,10 @@ export async function testConnection() {
   }
 }
 
-// 确保土地信息字段存在
-async function ensureLandFields() {
+// 确保数据库字段存在
+async function ensureFields() {
   const alterQueries = [
+    // 投资项目的土地相关字段
     "ALTER TABLE investment_projects ADD COLUMN construction_unit VARCHAR(255) DEFAULT '' COMMENT '建设单位'",
     "ALTER TABLE investment_projects ADD COLUMN land_mode VARCHAR(10) DEFAULT 'A'",
     "ALTER TABLE investment_projects ADD COLUMN land_area DECIMAL(15,4) DEFAULT 0",
@@ -53,7 +54,12 @@ async function ensureLandFields() {
     "ALTER TABLE investment_projects ADD COLUMN land_remark TEXT",
     "ALTER TABLE investment_projects ADD COLUMN seedling_compensation DECIMAL(15,4) DEFAULT 0",
     "ALTER TABLE investment_projects ADD COLUMN lease_seedling_compensation DECIMAL(15,4) DEFAULT 0",
-    "ALTER TABLE investment_estimates ADD COLUMN custom_land_cost DECIMAL(15,2) DEFAULT NULL COMMENT '自定义土地费用（万元）'"
+    "ALTER TABLE investment_estimates ADD COLUMN custom_land_cost DECIMAL(15,2) DEFAULT NULL COMMENT '自定义土地费用（万元）'",
+    // 报告表字段
+    "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS error_message TEXT COMMENT '错误信息'",
+    "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS style_config JSON COMMENT '样式配置'",
+    "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS sections_config JSON COMMENT '章节配置'",
+    "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS resources_config JSON COMMENT '资源映射'",
   ]
 
   for (const query of alterQueries) {

@@ -366,20 +366,37 @@ ${JSON.stringify(financialIndicators, null, 2)}
   /**
    * 生成Word文档
    */
-  static async generateWordDocument(content: string, title: string): Promise<Buffer> {
+  static async generateWordDocument(
+    content: string,
+    title: string,
+    options?: {
+      sections?: ReportSections
+      resources?: ResourceMap
+      styleConfig?: ReportStyleConfig
+    }
+  ): Promise<Buffer> {
     try {
-      // 解析内容为段落
+      const { sections, resources, styleConfig } = options || {}
+
+      // 如果有完整的章节配置，使用新方法
+      if (sections && styleConfig) {
+        const doc = await this.createCompleteDocument(
+          sections,
+          resources || { tables: {}, charts: {} },
+          styleConfig
+        )
+        const buffer = await Packer.toBuffer(doc)
+        return buffer
+      }
+
+      // 否则使用原有的简单方法
       const paragraphs = this.parseContentToWord(content, title)
-      
-      // 创建Word文档
       const doc = new Document({
         sections: [{
           properties: {},
           children: paragraphs
         }]
       })
-      
-      // 生成Buffer
       const buffer = await Packer.toBuffer(doc)
       return buffer
     } catch (error) {
@@ -670,7 +687,6 @@ ${JSON.stringify(financialIndicators, null, 2)}
             sseManager.fail(reportId, '用户手动停止')
             return
           }
-          
           // 是 reader.read() 的结果
           const { done, value } = raceResult as { done: boolean; value: Uint8Array }
           
@@ -679,8 +695,13 @@ ${JSON.stringify(financialIndicators, null, 2)}
             break
           }
           
+          // 安全检查：value 可能是 undefined
+          if (!value || value.length === 0) {
+            console.warn('收到空的数据块，跳过')
+            continue
+          }
+          
           console.log(`收到数据块，大小: ${value.length} bytes`)
-          chunkCount++
           
           // 解码当前数据块
           buffer += decoder.decode(value, { stream: true })
@@ -814,6 +835,707 @@ ${JSON.stringify(financialIndicators, null, 2)}
     } catch (error) {
       console.error('停止报告生成失败:', error)
       throw error
+    }
+  }
+
+  // ==================== 样式应用函数 ====================
+
+  /**
+   * 创建带样式的段落
+   */
+  static createStyledParagraph(
+    text: string,
+    styleConfig: ReportStyleConfig,
+    options?: {
+      isHeading?: boolean
+      headingLevel?: 'Heading1' | 'Heading2' | 'Heading3' | 'Title'
+      alignment?: 'left' | 'center' | 'right' | 'start' | 'end' | 'both'
+      bold?: boolean
+      spacingBefore?: number
+      spacingAfter?: number
+    }
+  ): Paragraph {
+    const {
+      isHeading = false,
+      headingLevel = HeadingLevel.HEADING_1,
+      alignment = AlignmentType.LEFT,
+      bold = false,
+      spacingBefore = 0,
+      spacingAfter = 0
+    } = options || {}
+
+    // 计算字号（docx使用双倍值）
+    const fontSize = isHeading
+      ? (styleConfig.fontSizes.title || 32) * 2
+      : (styleConfig.fontSizes.body || 22) * 2
+
+    // 计算行间距
+    const lineSpacing = styleConfig.paragraph.lineSpacing
+    let lineSpacingAttr: any = { line: 360 } // 默认1.5倍行间距
+    if (lineSpacing === 'fixed' && styleConfig.paragraph.lineSpacingValue) {
+      lineSpacingAttr = { line: styleConfig.paragraph.lineSpacingValue * 20 }
+    } else if (typeof lineSpacing === 'number') {
+      lineSpacingAttr = { line: lineSpacing * 240 }
+    }
+
+    return new Paragraph({
+      children: [
+        new TextRun({
+          text: text,
+          bold: bold || isHeading,
+          size: fontSize,
+          font: isHeading ? styleConfig.fonts.heading : styleConfig.fonts.body
+        })
+      ],
+      heading: isHeading ? headingLevel : undefined,
+      alignment: alignment,
+      spacing: {
+        before: spacingBefore * 100 || (isHeading ? 400 : 100),
+        after: spacingAfter * 100 || (isHeading ? 200 : 200),
+        ...lineSpacingAttr
+      }
+    })
+  }
+
+  /**
+   * 创建带样式的Word表格
+   */
+  static createStyledTable(
+    tableData: Record<string, any>[],
+    columns: string[],
+    styleConfig: ReportStyleConfig
+  ): Table {
+    if (!tableData || tableData.length === 0) {
+      return new Table({
+        rows: [],
+        width: { size: 100, type: WidthType.PERCENTAGE }
+      })
+    }
+
+    // 表格宽度配置
+    const columnWidth = Math.floor(100 / columns.length)
+
+    // 创建表头行
+    const headerRow = new TableRow({
+      children: columns.map(col =>
+        new TableCell({
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: col,
+                  bold: true,
+                  size: (styleConfig.fontSizes.tableHeader || 20) * 2,
+                  font: styleConfig.fonts.heading
+                })
+              ],
+              alignment: AlignmentType.CENTER
+            })
+          ],
+          shading: {
+            fill: styleConfig.table.headerBg || 'EEEEEE'
+          },
+          width: { size: columnWidth, type: WidthType.PERCENTAGE }
+        })
+      ),
+      tableHeader: true
+    })
+
+    // 创建数据行
+    const dataRows = tableData.map((row, rowIndex) =>
+      new TableRow({
+        children: columns.map(col =>
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: String(row[col] ?? ''),
+                    size: (styleConfig.fontSizes.tableBody || 20) * 2,
+                    font: styleConfig.fonts.body
+                  })
+                ],
+                alignment: AlignmentType.LEFT
+              })
+            ],
+            // 斑马纹背景
+            shading: styleConfig.table.zebraStripe && rowIndex % 2 === 1
+              ? { fill: 'F5F5F5' }
+              : undefined,
+            width: { size: columnWidth, type: WidthType.PERCENTAGE }
+          })
+        )
+      })
+    )
+
+    // 表格边框样式
+    const borderStyle = styleConfig.table.border || 'single'
+    const tableWidth = columns.length * columnWidth
+
+    return new Table({
+      rows: [headerRow, ...dataRows],
+      width: {
+        size: Math.min(tableWidth, 100),
+        type: WidthType.PERCENTAGE
+      },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+        bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+        left: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+        right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1, color: '000000' }
+      }
+    })
+  }
+
+  /**
+   * 创建图表图片段落
+   */
+  static createChartImage(
+    base64Image: string,
+    title: string,
+    styleConfig: ReportStyleConfig
+  ): Paragraph[] {
+    const paragraphs: Paragraph[] = []
+
+    // 添加标题
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: title,
+            bold: true,
+            size: (styleConfig.fontSizes.tableTitle || 22) * 2,
+            font: styleConfig.fonts.heading
+          })
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 400, after: 200 }
+      })
+    )
+
+    // 添加图片
+    try {
+      // 移除base64前缀
+      const base64Data = base64Image.replace(/^data:image\/[a-z]+;base64,/, '')
+      const imageBuffer = Buffer.from(base64Data, 'base64')
+
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: imageBuffer,
+              type: 'png',
+              transformation: {
+                width: 500,
+                height: 300
+              }
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 }
+        })
+      )
+    } catch (error) {
+      console.error('创建图表图片失败:', error)
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '[图表加载失败]',
+              size: (styleConfig.fontSizes.body || 22) * 2
+            })
+          ],
+          alignment: AlignmentType.CENTER
+        })
+      )
+    }
+
+    return paragraphs
+  }
+
+  // ==================== 章节生成函数 ====================
+
+  /**
+   * 创建封面页
+   */
+  static createCoverPage(
+    cover: CoverSection,
+    styleConfig: ReportStyleConfig
+  ): Paragraph[] {
+    const paragraphs: Paragraph[] = []
+
+    // 如果有Logo，添加到顶部
+    if (cover.logo) {
+      try {
+        const base64Data = cover.logo.replace(/^data:image\/[a-z]+;base64,/, '')
+        const imageBuffer = Buffer.from(base64Data, 'base64')
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: imageBuffer,
+                type: 'png',
+                transformation: {
+                  width: 120,
+                  height: 60
+                }
+              })
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 }
+          })
+        )
+      } catch (error) {
+        console.error('添加Logo失败:', error)
+      }
+    }
+
+    // 报告标题
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: cover.title,
+            bold: true,
+            size: (styleConfig.fontSizes.title || 36) * 2,
+            font: styleConfig.fonts.heading
+          })
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 400, after: 200 }
+      })
+    )
+
+    // 副标题
+    if (cover.subtitle) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: cover.subtitle,
+              size: (styleConfig.fontSizes.body || 24) * 2,
+              font: styleConfig.fonts.body
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 }
+        })
+      )
+    }
+
+    // 空行
+    paragraphs.push(new Paragraph({ text: '', spacing: { after: 400 } }))
+    paragraphs.push(new Paragraph({ text: '', spacing: { after: 400 } }))
+
+    // 项目名称
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `项目名称：${cover.projectName}`,
+            size: (styleConfig.fontSizes.body || 24) * 2,
+            font: styleConfig.fonts.body
+          })
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 }
+      })
+    )
+
+    // 编制单位
+    if (cover.companyName) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `编制单位：${cover.companyName}`,
+              size: (styleConfig.fontSizes.body || 24) * 2,
+              font: styleConfig.fonts.body
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 }
+        })
+      )
+    }
+
+    // 编制人
+    if (cover.author) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `编制人：${cover.author}`,
+              size: (styleConfig.fontSizes.body || 24) * 2,
+              font: styleConfig.fonts.body
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 }
+        })
+      )
+    }
+
+    // 编制日期
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `编制日期：${cover.date}`,
+            size: (styleConfig.fontSizes.body || 24) * 2,
+            font: styleConfig.fonts.body
+          })
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 }
+      })
+    )
+
+    return paragraphs
+  }
+
+  /**
+   * 创建目录页
+   */
+  static createTableOfContents(
+    toc: TableOfContentsSection,
+    bodySections: BodySection[],
+    styleConfig: ReportStyleConfig
+  ): Paragraph[] {
+    const paragraphs: Paragraph[] = []
+
+    // 目录标题
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: toc.title,
+            bold: true,
+            size: (styleConfig.fontSizes.title || 32) * 2,
+            font: styleConfig.fonts.heading
+          })
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 400, after: 400 }
+      })
+    )
+
+    // 提取标题生成目录
+    for (const section of bodySections) {
+      if (section.level <= toc.depth) {
+        const indent = (section.level - 1) * 400
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: section.title,
+                size: (styleConfig.fontSizes.body || 22) * 2,
+                font: styleConfig.fonts.body
+              })
+            ],
+            indent: { left: indent },
+            spacing: { after: 100 }
+          })
+        )
+      }
+    }
+
+    return paragraphs
+  }
+
+  /**
+   * 创建章节内容（支持资源标记）
+   */
+  static createSectionContent(
+    section: BodySection | AppendixSection,
+    resources: ResourceMap,
+    styleConfig: ReportStyleConfig
+  ): any[] {
+    const elements: any[] = []
+
+    // 章节标题
+    const headingLevel =
+      'level' in section
+        ? section.level === 1
+          ? HeadingLevel.HEADING_1
+          : section.level === 2
+          ? HeadingLevel.HEADING_2
+          : HeadingLevel.HEADING_3
+        : HeadingLevel.APPENDIX
+
+    elements.push(
+      this.createStyledParagraph(
+        section.title,
+        styleConfig,
+        { isHeading: true, headingLevel, spacingAfter: 200 }
+      )
+    )
+
+    // 解析内容并处理资源标记
+    const contentElements = this.parseContentToWordWithResources(
+      section.content,
+      resources,
+      styleConfig
+    )
+    elements.push(...contentElements)
+
+    return elements
+  }
+
+  /**
+   * 解析内容为Word元素（支持资源标记）
+   */
+  static parseContentToWordWithResources(
+    content: string,
+    resources: ResourceMap,
+    styleConfig: ReportStyleConfig
+  ): any[] {
+    const elements: any[] = []
+    const lines = content.split('\n')
+
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+
+      if (!trimmedLine) {
+        elements.push(new Paragraph({ text: '' }))
+        continue
+      }
+
+      // 检查是否是资源标记
+      const tableMatch = trimmedLine.match(/^\{\{TABLE:(\w+)\}\}$/)
+      const chartMatch = trimmedLine.match(/^\{\{CHART:(\w+)\}\}$/)
+
+      if (tableMatch) {
+        const tableId = tableMatch[1]
+        const tableResource = resources.tables?.[tableId]
+        if (tableResource) {
+          // 添加表格标题
+          elements.push(
+            this.createStyledParagraph(
+              tableResource.title,
+              styleConfig,
+              { bold: true, spacingAfter: 100 }
+            )
+          )
+          // 添加表格
+          const table = this.createStyledTable(
+            tableResource.data,
+            tableResource.columns,
+            styleConfig
+          )
+          elements.push(table)
+        } else {
+          elements.push(
+            this.createStyledParagraph(
+              `[表格 ${tableId} 未找到]`,
+              styleConfig
+            )
+          )
+        }
+        continue
+      }
+
+      if (chartMatch) {
+        const chartId = chartMatch[1]
+        const chartResource = resources.charts?.[chartId]
+        if (chartResource) {
+          const chartElements = this.createChartImage(
+            chartResource.base64Image,
+            chartResource.title,
+            styleConfig
+          )
+          elements.push(...chartElements)
+        } else {
+          elements.push(
+            this.createStyledParagraph(
+              `[图表 ${chartId} 未找到]`,
+              styleConfig
+            )
+          )
+        }
+        continue
+      }
+
+      // 普通段落（与原parseContentToWord相同的逻辑）
+      if (trimmedLine.startsWith('# ')) {
+        elements.push(
+          this.createStyledParagraph(trimmedLine.substring(2), styleConfig, {
+            isHeading: true,
+            headingLevel: HeadingLevel.HEADING_1
+          })
+        )
+      } else if (trimmedLine.startsWith('## ')) {
+        elements.push(
+          this.createStyledParagraph(trimmedLine.substring(3), styleConfig, {
+            isHeading: true,
+            headingLevel: HeadingLevel.HEADING_2
+          })
+        )
+      } else if (trimmedLine.startsWith('### ')) {
+        elements.push(
+          this.createStyledParagraph(trimmedLine.substring(4), styleConfig, {
+            isHeading: true,
+            headingLevel: HeadingLevel.HEADING_3
+          })
+        )
+      } else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+        elements.push(
+          this.createStyledParagraph('• ' + trimmedLine.substring(2), styleConfig)
+        )
+      } else if (trimmedLine.match(/^\d+\. /)) {
+        elements.push(this.createStyledParagraph(trimmedLine, styleConfig))
+      } else {
+        elements.push(this.createStyledParagraph(trimmedLine, styleConfig))
+      }
+    }
+
+    return elements
+  }
+
+  // ==================== Word文档组装函数 ====================
+
+  /**
+   * 创建完整的Word文档（包含所有章节）
+   */
+  static async createCompleteDocument(
+    sections: ReportSections,
+    resources: ResourceMap,
+    styleConfig: ReportStyleConfig
+  ): Promise<Document> {
+    const allChildren: any[] = []
+
+    // 1. 添加封面
+    if (sections.cover?.enabled) {
+      const coverElements = this.createCoverPage(sections.cover, styleConfig)
+      allChildren.push(...coverElements)
+      // 分页符
+      allChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '',
+              break: 1
+            })
+          ]
+        })
+      )
+    }
+
+    // 2. 添加目录
+    if (sections.toc?.enabled) {
+      const tocElements = this.createTableOfContents(
+        sections.toc,
+        sections.body || [],
+        styleConfig
+      )
+      allChildren.push(...tocElements)
+      // 分页符
+      allChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '',
+              break: 1
+            })
+          ]
+        })
+      )
+    }
+
+    // 3. 添加正文
+    if (sections.body && sections.body.length > 0) {
+      for (const section of sections.body) {
+        const sectionElements = this.createSectionContent(section, resources, styleConfig)
+        allChildren.push(...sectionElements)
+      }
+    }
+
+    // 4. 添加附录
+    if (sections.appendix && sections.appendix.length > 0) {
+      // 附录分页
+      allChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '',
+              break: 1
+            })
+          ]
+        })
+      )
+
+      for (const appendix of sections.appendix) {
+        const appendixElements = this.createSectionContent(appendix, resources, styleConfig)
+        allChildren.push(...appendixElements)
+      }
+    }
+
+    // 页面设置（边距）
+    const pageMargin = styleConfig.page?.margin || {
+      top: 2.54,
+      bottom: 2.54,
+      left: 3.17,
+      right: 3.17
+    }
+
+    return new Document({
+      sections: [{
+        properties: {
+          page: {
+            margin: {
+              top: Math.round(pageMargin.top * 567),
+              bottom: Math.round(pageMargin.bottom * 567),
+              left: Math.round(pageMargin.left * 567),
+              right: Math.round(pageMargin.right * 567)
+            }
+          }
+        },
+        children: allChildren
+      }]
+    })
+  }
+
+  /**
+   * 生成Word文档（扩展版本，支持章节和资源配置）
+   */
+  static async generateWordDocument(
+    content: string,
+    title: string,
+    options?: {
+      sections?: ReportSections
+      resources?: ResourceMap
+      styleConfig?: ReportStyleConfig
+    }
+  ): Promise<Buffer> {
+    try {
+      const { sections, resources, styleConfig } = options || {}
+
+      // 如果有完整的章节配置，使用新方法
+      if (sections && styleConfig) {
+        const doc = await this.createCompleteDocument(
+          sections,
+          resources || { tables: {}, charts: {}},
+          styleConfig
+        )
+        const buffer = await Packer.toBuffer(doc)
+        return buffer
+      }
+
+      // 否则使用原有的简单方法
+      const paragraphs = this.parseContentToWord(content, title)
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: paragraphs
+        }]
+      })
+      const buffer = await Packer.toBuffer(doc)
+      return buffer
+    } catch (error) {
+      console.error('生成Word文档失败:', error)
+      throw new Error(`生成Word文档失败: ${error.message}`)
     }
   }
 }

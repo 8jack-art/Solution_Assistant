@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { Grid, Paper, Group, Button, Title, Text, Stack, Alert, Container } from '@mantine/core'
+import { useParams } from 'react-router-dom'
+import { Grid, Paper, Group, Button, Title, Text, Stack, Alert, Container, Modal } from '@mantine/core'
 import { useReportStore } from '../stores/reportStore'
 import { PromptEditor } from '../components/report/PromptEditor'
 import { ReportPreview } from '../components/report/ReportPreview'
 import { VariablePicker } from '../components/report/VariablePicker'
 import { TemplateSelector } from '../components/report/TemplateSelector'
 import { Header } from '../components/common/Header'
+import { StyleSettingsPanel } from '../components/report/StyleSettingsPanel'
+import { SectionConfigPanel } from '../components/report/SectionConfigPanel'
 import { llmConfigApi } from '@/lib/api'
 
 export function ReportGeneration() {
   const { projectId } = useParams()
-  const navigate = useNavigate()
   const store = useReportStore()
   const [currentLLMConfig, setCurrentLLMConfig] = useState<any>(null)
+  const [showStylePanel, setShowStylePanel] = useState(false)
+  const [showSectionPanel, setShowSectionPanel] = useState(false)
 
   // 加载当前LLM配置
   useEffect(() => {
@@ -112,6 +115,31 @@ export function ReportGeneration() {
               <PromptEditor />
             </Paper>
 
+            {/* 配置按钮区域 */}
+            <Paper p="md" withBorder radius="md">
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Text fw={500}>报告配置</Text>
+                </Group>
+                <Group>
+                  <Button 
+                    variant="light"
+                    onClick={() => setShowStylePanel(true)}
+                    size="sm"
+                  >
+                    样式设置
+                  </Button>
+                  <Button 
+                    variant="light"
+                    onClick={() => setShowSectionPanel(true)}
+                    size="sm"
+                  >
+                    章节配置
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
+
             {/* 控制按钮 */}
             <Paper p="md" withBorder radius="md">
               <Group>
@@ -168,8 +196,28 @@ export function ReportGeneration() {
         </Grid.Col>
       </Grid>
      </Container>
-   </div>
- )
+
+     {/* 样式设置弹窗 */}
+     <Modal
+       opened={showStylePanel}
+       onClose={() => setShowStylePanel(false)}
+       title="样式设置"
+       size="lg"
+     >
+       <StyleSettingsPanel onClose={() => setShowStylePanel(false)} />
+     </Modal>
+
+     {/* 章节配置弹窗 */}
+     <Modal
+       opened={showSectionPanel}
+       onClose={() => setShowSectionPanel(false)}
+       title="章节配置"
+       size="lg"
+     >
+       <SectionConfigPanel onClose={() => setShowSectionPanel(false)} />
+     </Modal>
+    </div>
+  )
 }
 
 export default ReportGeneration

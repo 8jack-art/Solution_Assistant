@@ -437,7 +437,43 @@ export class ReportController {
   }
 
   /**
-   * 导出 Word 文档
+   * 导出 Word 文档（扩展版本，支持章节和资源配置）
+   */
+  static async exportWithConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const { 
+        title, 
+        sections, 
+        styleConfig, 
+        resources 
+      } = req.body
+      const userId = ReportController.getUserId(req)
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: '未授权' })
+        return
+      }
+
+      // 生成 Word 文档
+      const buffer = await ReportService.generateWordDocument(
+        '', // content - 留空，使用sections
+        title || '投资方案报告',
+        { sections, resources, styleConfig }
+      )
+
+      // 设置响应头
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(title || '投资方案报告')}.docx"`)
+
+      res.send(buffer)
+    } catch (error) {
+      console.error('导出失败:', error)
+      res.status(500).json({ success: false, error: '导出失败' })
+    }
+  }
+
+  /**
+   * 导出 Word 文档（从数据库读取报告内容）
    */
   static async export(req: Request, res: Response): Promise<void> {
     try {

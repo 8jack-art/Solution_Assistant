@@ -348,7 +348,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
         },
         onError: (error) => {
           console.error('[ReportStore] onError called, error:', error)
-          set({ error, generationStatus: 'failed', isLoading: false })
+          const errorMessage = typeof error === 'string' ? error : error?.message || '生成过程中发生错误'
+          set({ error: errorMessage, generationStatus: 'failed', isLoading: false })
         }
       })
     } catch (error: any) {
