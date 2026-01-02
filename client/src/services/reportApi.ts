@@ -1,10 +1,17 @@
 import api from '../lib/api'
 import { ApiResponse } from '../types'
+import { 
+  ExportRequest,
+  ReportSections,
+  ReportStyleConfig,
+  ResourceMap
+} from '../types/report'
 
 export interface ReportVariable {
   key: string
   label: string
-  value: any
+  value?: string
+  category?: 'basic' | 'table' | 'chart'
 }
 
 export const reportApi = {
@@ -16,7 +23,7 @@ export const reportApi = {
 
   // 启动流式生成
   async generateReport(
-    reportId: string, 
+    reportId: string,
     promptTemplate: string,
     handlers: {
       onChunk: (content: string) => void
@@ -64,12 +71,12 @@ export const reportApi = {
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6)
-            
+
             if (data === '[DONE]') continue
-            
+
             try {
               const parsed = JSON.parse(data)
-              
+
               if (parsed.type === 'content') {
                 handlers.onChunk(parsed.content || '')
               } else if (parsed.type === 'error') {
@@ -122,14 +129,20 @@ export const reportApi = {
     return response
   },
 
-  // 导出 Word
-  async exportWord(reportId: string) {
+  // 导出 Word（支持章节、样式和资源）
+  async exportWord(reportId: string, options: {
+    sections?: ReportSections
+    styleConfig?: ReportStyleConfig
+    resources?: ResourceMap
+  }) {
     const token = localStorage.getItem('token')
     const response = await fetch(`/api/report/export/${reportId}`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
-      }
+      },
+      body: JSON.stringify(options)
     })
 
     if (!response.ok) {
@@ -188,7 +201,7 @@ export const reportApi = {
     try {
       const response = await api.get<any, ApiResponse<any>>(`/report/project/summary/${projectId}`)
       console.log('[reportApi] Full API response:', JSON.stringify(response, null, 2))
-      
+
       // 处理错误响应
       if (!response || !response.success) {
         console.warn('[reportApi] API returned error:', response?.error)

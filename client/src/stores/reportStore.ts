@@ -1,21 +1,21 @@
 import { create } from 'zustand'
-import { reportApi, ReportVariable } from '../services/reportApi'
-
-interface ReportTemplate {
-  id: string
-  name: string
-  description?: string
-  prompt_template: string
-  is_default: boolean
-  is_system: boolean
-}
-
-interface ReportHistoryItem {
-  id: string
-  title: string
-  createdAt: string
-  status: string
-}
+import { reportApi } from '../services/reportApi'
+import { 
+  ReportVariable, 
+  ReportTemplate, 
+  ReportHistoryItem,
+  ReportStyleConfig,
+  defaultStyleConfig,
+  ReportSections,
+  defaultSections,
+  CoverSection,
+  TableOfContentsSection,
+  BodySection,
+  AppendixSection,
+  ResourceMap,
+  TableResource,
+  ChartResource
+} from '../types/report'
 
 interface ReportState {
   // 报告信息
@@ -44,6 +44,15 @@ interface ReportState {
   // 变量插入
   variableToInsert: string | null
   
+  // 样式配置
+  styleConfig: ReportStyleConfig
+  
+  // 章节配置
+  sections: ReportSections
+  
+  // 资源（表格和图表）
+  resources: ResourceMap
+  
   // Actions
   setProjectId: (id: string) => void
   setReportTitle: (title: string) => void
@@ -52,6 +61,17 @@ interface ReportState {
   selectTemplate: (templateId: string) => void
   setVariableToInsert: (variable: string | null) => void
   insertVariable: (variable: string) => void
+  
+  // 样式配置操作
+  updateStyleConfig: (config: Partial<ReportStyleConfig>) => void
+  resetStyleConfig: () => void
+  
+  // 章节配置操作
+  updateSections: (sections: Partial<ReportSections>) => void
+  resetSections: () => void
+  
+  // 资源操作
+  updateResources: (resources: Partial<ResourceMap>) => void
   
   loadTemplates: () => Promise<void>
   loadProjectData: () => Promise<void>
@@ -82,6 +102,12 @@ export const useReportStore = create<ReportState>((set, get) => ({
   isLoading: false,
   error: null,
   variableToInsert: null,
+  styleConfig: defaultStyleConfig,
+  sections: defaultSections,
+  resources: {
+    tables: {},
+    charts: {}
+  },
 
   setProjectId: (id) => set({ projectId: id }),
   
@@ -103,7 +129,26 @@ export const useReportStore = create<ReportState>((set, get) => ({
       })
     }
   },
-
+  
+  // 样式配置操作
+  updateStyleConfig: (config) => set((state) => ({
+    styleConfig: { ...state.styleConfig, ...config }
+  })),
+  
+  resetStyleConfig: () => set({ styleConfig: defaultStyleConfig }),
+  
+  // 章节配置操作
+  updateSections: (sections) => set((state) => ({
+    sections: { ...state.sections, ...sections }
+  })),
+  
+  resetSections: () => set({ sections: defaultSections }),
+  
+  // 资源操作
+  updateResources: (resources) => set((state) => ({
+    resources: { ...state.resources, ...resources }
+  })),
+  
   loadTemplates: async () => {
     set({ isLoading: true, error: null })
     try {
@@ -114,7 +159,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       set({ error: error.message || '加载模板失败', isLoading: false })
     }
   },
-
+  
   saveTemplate: async (data: { name: string; description?: string; promptTemplate: string; isDefault?: boolean }) => {
     set({ isLoading: true, error: null })
     try {
@@ -130,7 +175,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       throw error
     }
   },
-
+  
   renameTemplate: async (templateId: string, name: string) => {
     set({ isLoading: true, error: null })
     try {
@@ -146,7 +191,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       throw error
     }
   },
-
+  
   updateTemplate: async (templateId: string, data: { name?: string; description?: string; promptTemplate: string }) => {
     set({ isLoading: true, error: null })
     try {
@@ -162,7 +207,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       throw error
     }
   },
-
+  
   deleteTemplate: async (templateId: string) => {
     set({ isLoading: true, error: null })
     try {
@@ -181,7 +226,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       throw error
     }
   },
-
+  
   loadProjectData: async () => {
     const { projectId } = get()
     console.log('[ReportStore] loadProjectData called, projectId:', projectId)
@@ -219,6 +264,17 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{roi}}', label: '投资回报率', value: data.financialIndicators?.roi || 0 },
         { key: '{{irr}}', label: '内部收益率', value: data.financialIndicators?.irr || 0 },
         { key: '{{npv}}', label: '净现值', value: data.financialIndicators?.npv || 0 },
+        // 表格变量
+        { key: '{{TABLE:investment_estimate}}', label: '投资估算简表', category: 'table' },
+        { key: '{{TABLE:revenue_cost_detail}}', label: '收入成本明细表', category: 'table' },
+        { key: '{{TABLE:financial_indicators}}', label: '财务指标汇总表', category: 'table' },
+        { key: '{{TABLE:loan_repayment}}', label: '还款计划表', category: 'table' },
+        // 图表变量
+        { key: '{{CHART:investment_composition}}', label: '投资构成图', category: 'chart' },
+        { key: '{{CHART:revenue_trend}}', label: '收入趋势图', category: 'chart' },
+        { key: '{{CHART:cost_trend}}', label: '成本趋势图', category: 'chart' },
+        { key: '{{CHART:cash_flow_trend}}', label: '现金流趋势图', category: 'chart' },
+        { key: '{{CHART:profit_analysis}}', label: '利润分析图', category: 'chart' },
       ]
       
       set({ 
@@ -231,7 +287,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       set({ error: error.message || '加载项目数据失败', isLoading: false })
     }
   },
-
+  
   startGeneration: async () => {
     const { projectId, promptTemplate, reportTitle } = get()
     console.log('[ReportStore] startGeneration called')
@@ -265,7 +321,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       // 兼容两种响应格式：
       // 1. {success: true, reportId: 'xxx'}
       // 2. {success: true, data: {reportId: 'xxx'}}
-      const reportId = createResponse.data?.reportId || createResponse.reportId
+      const reportId = (createResponse.data?.reportId || createResponse.reportId) as string
       
       if (!createResponse || !reportId) {
         console.error('[ReportStore] ERROR: createResponse invalid', createResponse)
@@ -300,7 +356,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       set({ error: error.message || '生成报告失败', generationStatus: 'failed', isLoading: false })
     }
   },
-
+  
   pauseGeneration: async () => {
     const { reportId } = get()
     if (!reportId) return
@@ -313,7 +369,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       set({ error: error.message })
     }
   },
-
+  
   resumeGeneration: async () => {
     const { reportId } = get()
     if (!reportId) return
@@ -326,7 +382,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       set({ error: error.message })
     }
   },
-
+  
   stopGeneration: async () => {
     const { reportId } = get()
     if (!reportId) return
@@ -339,32 +395,42 @@ export const useReportStore = create<ReportState>((set, get) => ({
       set({ error: error.message })
     }
   },
-
+  
   exportToWord: async () => {
-    const { reportId } = get()
+    const { reportId, sections, styleConfig, resources } = get()
     if (!reportId) {
       set({ error: '请先生成报告' })
       return
     }
     
     try {
-      await reportApi.exportWord(reportId)
+      await reportApi.exportWord(reportId, {
+        sections,
+        styleConfig,
+        resources
+      })
     } catch (error: any) {
       console.error('导出失败:', error)
       set({ error: error.message || '导出失败' })
     }
   },
-
+  
   resetReport: () => {
     set({
       reportId: null,
       reportContent: '',
       generationStatus: 'idle',
       error: null,
-      variableToInsert: null
+      variableToInsert: null,
+      styleConfig: defaultStyleConfig,
+      sections: defaultSections,
+      resources: {
+        tables: {},
+        charts: {}
+      }
     })
   },
-
+  
   setVariableToInsert: (variable) => set({ variableToInsert: variable }),
   
   insertVariable: (variable) => set({ variableToInsert: variable })

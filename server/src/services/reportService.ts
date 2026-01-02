@@ -2,9 +2,132 @@ import { pool } from '../db/config.js'
 import { LLMService, LLMMessage } from '../lib/llm.js'
 import { sseManager } from './sseManager.js'
 // @ts-ignore
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx'
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  AlignmentType,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle,
+  ShadingType,
+  ImageRun
+} from 'docx'
 // @ts-ignore
 import * as marked from 'marked'
+
+/**
+ * Word报告样式配置接口
+ */
+interface ReportStyleConfig {
+  fonts: {
+    body: string        // 正文字体
+    heading: string     // 标题字体
+    number: string      // 数字字体
+  }
+  fontSizes: {
+    title: number       // 标题字号（pt）
+    body: number        // 正文字号（pt）
+    tableTitle: number  // 表名字号（pt）
+    tableHeader: number // 表头字号（pt）
+    tableBody: number   // 表体字号（pt）
+  }
+  paragraph: {
+    lineSpacing: number | 'fixed'  // 行间距倍数或固定值
+    lineSpacingValue?: number       // 固定行间距值（磅）
+    spaceBefore: number             // 段前间距（行）
+    spaceAfter: number              // 段后间距（行）
+  }
+  page: {
+    margin: {
+      top: number     // 上边距（cm）
+      bottom: number  // 下边距（cm）
+      left: number    // 左边距（cm）
+      right: number   // 右边距（cm）
+    }
+    orientation: 'portrait' | 'landscape'  // 纸张方向
+  }
+  table: {
+    headerBg: string      // 表头背景色
+    border: string        // 边框样式
+    zebraStripe: boolean  // 斑马纹
+    alignment: 'left' | 'center' | 'right'  // 单元格对齐
+  }
+}
+
+/**
+ * 章节配置接口
+ */
+interface CoverSection {
+  enabled: boolean
+  title: string            // 报告标题
+  subtitle?: string        // 副标题
+  projectName: string      // 项目名称
+  companyName?: string     // 编制单位
+  author?: string          // 编制人
+  date: string             // 编制日期
+  logo?: string            // Logo图片base64
+}
+
+interface TableOfContentsSection {
+  enabled: boolean
+  title: string            // 目录标题
+  includePageNumbers: boolean  // 包含页码
+  depth: number            // 目录深度（1-3级标题）
+}
+
+interface BodySection {
+  id: string
+  title: string            // 章节标题
+  content: string          // Markdown内容（含变量标记）
+  level: number            // 标题级别
+}
+
+interface AppendixSection {
+  id: string
+  title: string            // 附录标题
+  content: string          // Markdown内容（含变量标记）
+}
+
+interface ReportSections {
+  cover: CoverSection
+  toc: TableOfContentsSection
+  body: BodySection[]
+  appendix: AppendixSection[]
+}
+
+/**
+ * 资源Map
+ */
+interface ResourceMap {
+  tables: Record<string, TableResource>
+  charts: Record<string, ChartResource>
+}
+
+interface TableResource {
+  id: string
+  title: string
+  columns: string[]
+  data: Record<string, any>[]
+  style?: {
+    headerBg?: string
+    stripe?: boolean
+    align?: 'left' | 'center' | 'right'
+  }
+}
+
+interface ChartResource {
+  id: string
+  type: 'pie' | 'line' | 'bar'
+  title: string
+  base64Image: string  // 图片数据
+  width?: number
+  height?: number
+}
 
 /**
  * 报告服务类
@@ -470,31 +593,39 @@ ${JSON.stringify(financialIndicators, null, 2)}
       let buffer = ''
       let fullContent = ''
       let chunkCount = 0
-      let stopRequested = false
+      
+      // 创建唯一的停止信号标识
+      const STOP_SIGNAL = Symbol('STOP_SIGNAL')
       
       // 检查停止标志的辅助函数
       const checkStop = (): boolean => {
-        if (sseManager.shouldStop(reportId)) {
+        const shouldStopFlag = sseManager.shouldStop(reportId)
+        console.log(`【停止检查】shouldStop(${reportId}) = ${shouldStopFlag}`)
+        if (shouldStopFlag) {
           console.log(`【停止检查】检测到停止标志: ${reportId}`)
-          stopRequested = true
           return true
         }
         return false
       }
       
-      // 创建轮询停止标志的Promise，返回特殊对象表示停止
-      const waitForStop = (timeout: number): Promise<{ stopped: boolean }> => {
+      // 创建轮询停止标志的Promise，返回Symbol表示停止
+      const waitForStop = (timeout: number): Promise<symbol> => {
         return new Promise((resolve) => {
+          console.log(`[waitForStop] 启动停止检查，超时: ${timeout}ms`)
           const checkInterval = setInterval(() => {
-            if (checkStop()) {
+            const shouldStopFlag = checkStop()
+            console.log(`[waitForStop] 检查停止标志: ${shouldStopFlag}`)
+            if (shouldStopFlag) {
               clearInterval(checkInterval)
-              resolve({ stopped: true })
+              console.log(`[waitForStop] 检测到停止，返回 STOP_SIGNAL`)
+              resolve(STOP_SIGNAL)
             }
           }, 30) // 每30ms检查一次
           
           setTimeout(() => {
             clearInterval(checkInterval)
-            resolve({ stopped: false }) // 超时，返回false
+            console.log(`[waitForStop] 超时，返回 TIMEOUT`)
+            resolve(Symbol('TIMEOUT')) // 超时，返回不同的Symbol
           }, timeout)
         })
       }
@@ -525,24 +656,19 @@ ${JSON.stringify(financialIndicators, null, 2)}
           
           const raceResult = await Promise.race([readPromise, stopCheckPromise])
           
-          // 检查是否是停止检查返回的结果
-          if (raceResult && typeof raceResult === 'object' && 'stopped' in raceResult) {
-            if (raceResult.stopped) {
-              console.log(`【流式生成】收到停止信号，终止生成: ${reportId}`)
-              
-              // 保存当前已生成的内容
-              await pool.execute(
-                'UPDATE generated_reports SET generation_status = ?, report_content = ?, updated_at = NOW() WHERE id = ?',
-                ['failed', fullContent, reportId]
-              )
-              
-              // 通知前端停止
-              sseManager.fail(reportId, '用户手动停止')
-              return
-            }
-            // 如果 stopped === false，只是超时，继续循环
-            console.log('停止检查超时，继续读取...')
-            continue
+          // 检查是否是停止信号
+          if (raceResult === STOP_SIGNAL) {
+            console.log(`【流式生成】收到停止信号，终止生成: ${reportId}`)
+            
+            // 保存当前已生成的内容
+            await pool.execute(
+              'UPDATE generated_reports SET generation_status = ?, report_content = ?, updated_at = NOW() WHERE id = ?',
+              ['failed', fullContent, reportId]
+            )
+            
+            // 通知前端停止
+            sseManager.fail(reportId, '用户手动停止')
+            return
           }
           
           // 是 reader.read() 的结果

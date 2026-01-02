@@ -112,16 +112,9 @@ class SSEManager {
     this.stopFlags.set(reportId, true)
     console.log(`[SSE Manager] 设置停止标志，报告ID: ${reportId}`)
     
-    // 同时触发取消请求
-    const controller = this.abortControllers.get(reportId)
-    if (controller) {
-      try {
-        controller.abort()
-        console.log(`[SSE Manager] 已触发请求取消，报告ID: ${reportId}`)
-      } catch (e) {
-        console.warn(`[SSE Manager] 取消请求失败: ${e}`)
-      }
-    }
+    // 不在这里触发取消，让流式读取循环自己检测停止标志
+    // controller.abort() 可能触发 unregister，导致 stopFlags 被删除
+    console.log(`[SSE Manager] 停止标志已设置，等待流式循环检测`)
   }
 
   /**
