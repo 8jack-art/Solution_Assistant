@@ -791,4 +791,154 @@ export class ReportController {
       res.status(500).json({ success: false, error: '获取项目汇总数据失败' })
     }
   }
+
+  // ==================== 样式配置相关 API ====================
+
+  /**
+   * 获取样式配置列表
+   */
+  static async getStyleConfigs(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = ReportController.getUserId(req)
+      console.log('getStyleConfigs called, userId:', userId)
+
+      const [configs] = await pool.execute(
+        `SELECT * FROM report_style_configs 
+         WHERE user_id = ? OR user_id IS NULL 
+         ORDER BY is_default DESC, created_at DESC`,
+        [userId]
+      ) as any[]
+
+      console.log('getStyleConfigs found:', configs.length, 'configs')
+
+      res.json({ success: true, configs })
+    } catch (error) {
+      console.error('获取样式配置列表失败:', error)
+      res.status(500).json({ success: false, error: '获取样式配置列表失败' })
+    }
+  }
+
+  /**
+   * 获取默认样式配置
+   */
+  static async getDefaultStyleConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = ReportController.getUserId(req)
+
+      // 先尝试获取用户自己的默认样式
+      const [userDefaults] = await pool.execute(
+        'SELECT * FROM report_style_configs WHERE user_id = ? AND is_default = TRUE LIMIT 1',
+        [userId]
+      ) as any[]
+
+      if (userDefaults.length > 0) {
+        res.json({ success: true, config: userDefaults[0] })
+        return
+      }
+
+      // 如果没有用户默认样式，获取系统默认样式
+      const [systemDefaults] = await pool.execute(
+        'SELECT * FROM report_style_configs WHERE user_id IS NULL AND is_default = TRUE LIMIT 1'
+      ) as any[]
+
+      if (systemDefaults.length > 0) {
+        res.json({ success: true, config: systemDefaults[0] })
+        return
+      }
+
+      // 如果没有任何默认样式，返回空
+      res.json({ success: true, config: null })
+    } catch (error) {
+      console.error('获取默认样式配置失败:', error)
+      res.status(500).json({ success: false, error: '获取默认样式配置失败' })
+    }
+  }
+
+  /**
+   * 保存样式配置
+   */
+  static async saveStyleConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const { name, config, isDefault } = req.body
+      const userId = ReportController.getUserId(req)
+
+      if (!name) {
+        res.status(400).json({ success: false, error: '样式名称不能为空' })
+        return
+      }
+
+      if (!config) {
+        res.status(400).json({ success: false, error: '样式配置不能为空' })
+        return
+      }
+
+      const configId = uuidv4()
+      const configJson = JSON.stringify(config)
+
+      // 如果设为默认样式，先取消该用户其他默认样式
+      if (isDefault) {
+        await pool.execute(
+          'UPDATE report_style_configs SET is_default = FALSE WHERE user_id = ?',
+          [userId]
+        )
+      }
+
+      await pool.execute(
+        `INSERT INTO report_style_configs 
+         (id, user_id, name, config, is_default) 
+         VALUES (?, ?, ?, ?, ?)`,
+        [configId, userId, name, configJson, isDefault || false]
+      )
+
+      res.json({ success: true, configId })
+    } catch (error) {
+      console.error('保存样式配置失败:', error)
+      res.status(500).json({ success: false, error: '保存样式配置失败' })
+    }
+  }
+
+  /**
+   * 删除样式配置
+   */
+  static async deleteStyleConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params
+      const userId = ReportController.getUserId(req)
+
+      // 检查样式配置是否存在
+      const [configs] = await pool.execute(
+        'SELECT * FROM report_style_configs WHERE id = ?',
+        [id]
+      ) as any[]
+      
+      if (configs.length === 0) {
+        res.status(404).json({ success: false, error: '样式配置不存在' })
+        return
+      }
+
+      const styleConfig = configs[0]
+
+      // 系统样式不能删除
+      if (styleConfig.user_id === null) {
+        res.status(403).json({ success: false, error: '系统样式不能删除' })
+        return
+      }
+
+      // 只能删除自己的样式配置
+      if (styleConfig.user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权删除此样式配置' })
+        return
+      }
+
+      await pool.execute(
+        'DELETE FROM report_style_configs WHERE id = ?',
+        [id]
+      )
+
+      res.json({ success: true })
+    } catch (error) {
+      console.error('删除样式配置失败:', error)
+      res.status(500).json({ success: false, error: '删除样式配置失败' })
+    }
+  }
 }

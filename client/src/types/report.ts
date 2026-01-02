@@ -47,6 +47,7 @@ export interface ReportStyleConfig {
     lineSpacingValue?: number       // 固定行间距值（磅）
     spaceBefore: number             // 段前间距（行）
     spaceAfter: number              // 段后间距（行）
+    firstLineIndent: number         // 首行缩进（字符数，0表示无缩进，2表示2字符）
   }
   
   // 页面设置
@@ -86,7 +87,8 @@ export const defaultStyleConfig: ReportStyleConfig = {
   paragraph: {
     lineSpacing: 1.5,
     spaceBefore: 0,
-    spaceAfter: 0
+    spaceAfter: 0,
+    firstLineIndent: 2  // 默认首行缩进2字符
   },
   page: {
     margin: {

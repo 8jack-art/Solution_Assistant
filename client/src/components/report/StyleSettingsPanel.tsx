@@ -19,7 +19,8 @@ const defaultStyleConfig: ReportStyleConfig = {
   paragraph: {
     lineSpacing: 1.5,
     spaceBefore: 0,
-    spaceAfter: 0
+    spaceAfter: 0,
+    firstLineIndent: 2
   },
   page: {
     margin: {
@@ -70,6 +71,14 @@ const lineSpacingOptions = [
   { value: 1.5, label: '1.5倍行距' },
   { value: 2, label: '双倍行距' },
   { value: 'fixed', label: '固定值' }
+]
+
+// 首行缩进选项
+const firstLineIndentOptions = [
+  { value: 0, label: '无缩进' },
+  { value: 2, label: '2字符（标准）' },
+  { value: 4, label: '4字符' },
+  { value: 6, label: '6字符' }
 ]
 
 // 边距选项（cm）
@@ -132,6 +141,16 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
       paragraph: {
         ...styleConfig?.paragraph,
         lineSpacing: value
+      }
+    })
+  }, [styleConfig, updateStyleConfig])
+
+  // 处理首行缩进变更
+  const handleFirstLineIndentChange = useCallback((value: number) => {
+    updateStyleConfig({
+      paragraph: {
+        ...styleConfig?.paragraph,
+        firstLineIndent: value
       }
     })
   }, [styleConfig, updateStyleConfig])
@@ -276,6 +295,17 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
                 onChange={(e) => handleLineSpacingChange(e.target.value === 'fixed' ? 'fixed' : Number(e.target.value))}
               >
                 {lineSpacingOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="setting-item">
+              <label>首行缩进</label>
+              <select
+                value={styleConfig?.paragraph?.firstLineIndent ?? 2}
+                onChange={(e) => handleFirstLineIndentChange(Number(e.target.value))}
+              >
+                {firstLineIndentOptions.map(option => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>

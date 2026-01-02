@@ -41,6 +41,7 @@ interface ReportStyleConfig {
     lineSpacingValue?: number       // 固定行间距值（磅）
     spaceBefore: number             // 段前间距（行）
     spaceAfter: number              // 段后间距（行）
+    firstLineIndent: number         // 首行缩进（字符数）
   }
   page: {
     margin: {
@@ -853,6 +854,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
       bold?: boolean
       spacingBefore?: number
       spacingAfter?: number
+      indent?: boolean  // 是否应用首行缩进
     }
   ): Paragraph {
     const {
@@ -861,7 +863,8 @@ ${JSON.stringify(financialIndicators, null, 2)}
       alignment = AlignmentType.LEFT,
       bold = false,
       spacingBefore = 0,
-      spacingAfter = 0
+      spacingAfter = 0,
+      indent = !isHeading  // 默认标题不缩进，正文缩进
     } = options || {}
 
     // 计算字号（docx使用双倍值）
@@ -878,6 +881,9 @@ ${JSON.stringify(financialIndicators, null, 2)}
       lineSpacingAttr = { line: lineSpacing * 240 }
     }
 
+    // 计算首行缩进
+    const firstLineIndent = indent ? (styleConfig.paragraph.firstLineIndent || 2) * 240 : 0
+
     return new Paragraph({
       children: [
         new TextRun({
@@ -889,6 +895,9 @@ ${JSON.stringify(financialIndicators, null, 2)}
       ],
       heading: isHeading ? headingLevel : undefined,
       alignment: alignment,
+      indent: {
+        firstLine: firstLineIndent
+      },
       spacing: {
         before: spacingBefore * 100 || (isHeading ? 400 : 100),
         after: spacingAfter * 100 || (isHeading ? 200 : 200),
@@ -1263,7 +1272,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
           : section.level === 2
           ? HeadingLevel.HEADING_2
           : HeadingLevel.HEADING_3
-        : HeadingLevel.APPENDIX
+        : HeadingLevel.HEADING_3  // 附录使用三级标题
 
     elements.push(
       this.createStyledParagraph(
@@ -1495,47 +1504,5 @@ ${JSON.stringify(financialIndicators, null, 2)}
         children: allChildren
       }]
     })
-  }
-
-  /**
-   * 生成Word文档（扩展版本，支持章节和资源配置）
-   */
-  static async generateWordDocument(
-    content: string,
-    title: string,
-    options?: {
-      sections?: ReportSections
-      resources?: ResourceMap
-      styleConfig?: ReportStyleConfig
-    }
-  ): Promise<Buffer> {
-    try {
-      const { sections, resources, styleConfig } = options || {}
-
-      // 如果有完整的章节配置，使用新方法
-      if (sections && styleConfig) {
-        const doc = await this.createCompleteDocument(
-          sections,
-          resources || { tables: {}, charts: {}},
-          styleConfig
-        )
-        const buffer = await Packer.toBuffer(doc)
-        return buffer
-      }
-
-      // 否则使用原有的简单方法
-      const paragraphs = this.parseContentToWord(content, title)
-      const doc = new Document({
-        sections: [{
-          properties: {},
-          children: paragraphs
-        }]
-      })
-      const buffer = await Packer.toBuffer(doc)
-      return buffer
-    } catch (error) {
-      console.error('生成Word文档失败:', error)
-      throw new Error(`生成Word文档失败: ${error.message}`)
-    }
   }
 }

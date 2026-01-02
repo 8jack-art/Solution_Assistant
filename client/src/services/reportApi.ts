@@ -130,19 +130,25 @@ export const reportApi = {
   },
 
   // 导出 Word（支持章节、样式和资源）
-  async exportWord(reportId: string, options: {
+  async exportWord(options: {
+    title?: string
     sections?: ReportSections
     styleConfig?: ReportStyleConfig
     resources?: ResourceMap
   }) {
     const token = localStorage.getItem('token')
-    const response = await fetch(`/api/report/export/${reportId}`, {
+    const response = await fetch(`/api/report/export-with-config`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify(options)
+      body: JSON.stringify({
+        title: options.title || '投资方案报告',
+        sections: options.sections,
+        styleConfig: options.styleConfig,
+        resources: options.resources
+      })
     })
 
     if (!response.ok) {
@@ -153,11 +159,41 @@ export const reportApi = {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `投资方案报告.docx`
+    link.download = `${options.title || '投资方案报告'}.docx`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
+  },
+
+  // 保存样式配置
+  async saveStyleConfig(data: { name: string; config: ReportStyleConfig; isDefault?: boolean }) {
+    const response = await api.post<any, ApiResponse<{ configId: string }>>('/report/style-configs', data)
+    return response
+  },
+
+  // 获取样式配置列表
+  async getStyleConfigs() {
+    const response = await api.get<any, ApiResponse<{ configs: any[] }>>('/report/style-configs')
+    if (!response || !response.success) {
+      return []
+    }
+    return (response as any).configs || []
+  },
+
+  // 获取默认样式配置
+  async getDefaultStyleConfig() {
+    const response = await api.get<any, ApiResponse<{ config: ReportStyleConfig }>>('/report/style-configs/default')
+    if (!response || !response.success) {
+      return null
+    }
+    return (response as any).config
+  },
+
+  // 删除样式配置
+  async deleteStyleConfig(configId: string) {
+    const response = await api.delete<any, ApiResponse>(`/report/style-configs/${configId}`)
+    return response
   },
 
   // 获取模板列表

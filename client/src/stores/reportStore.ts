@@ -65,6 +65,9 @@ interface ReportState {
   // 样式配置操作
   updateStyleConfig: (config: Partial<ReportStyleConfig>) => void
   resetStyleConfig: () => void
+  saveStyleConfig: (name: string) => Promise<void>
+  loadStyleConfigs: () => Promise<any[]>
+  applyStyleConfig: (config: ReportStyleConfig) => void
   
   // 章节配置操作
   updateSections: (sections: Partial<ReportSections>) => void
@@ -136,6 +139,45 @@ export const useReportStore = create<ReportState>((set, get) => ({
   })),
   
   resetStyleConfig: () => set({ styleConfig: defaultStyleConfig }),
+  
+  // 保存样式配置
+  saveStyleConfig: async (name: string) => {
+    const { styleConfig } = get()
+    set({ isLoading: true, error: null })
+    try {
+      const response = await reportApi.saveStyleConfig({
+        name,
+        config: styleConfig
+      })
+      if (!response?.success) {
+        throw new Error(response?.error || '保存样式失败')
+      }
+      set({ isLoading: false })
+    } catch (error: any) {
+      console.error('保存样式失败:', error)
+      set({ error: error.message || '保存样式失败', isLoading: false })
+      throw error
+    }
+  },
+  
+  // 加载样式配置列表
+  loadStyleConfigs: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const configs = await reportApi.getStyleConfigs()
+      set({ isLoading: false })
+      return configs
+    } catch (error: any) {
+      console.error('加载样式列表失败:', error)
+      set({ error: error.message || '加载样式列表失败', isLoading: false })
+      return []
+    }
+  },
+  
+  // 应用样式配置
+  applyStyleConfig: (config: ReportStyleConfig) => {
+    set({ styleConfig: config })
+  },
   
   // 章节配置操作
   updateSections: (sections) => set((state) => ({
@@ -398,14 +440,15 @@ export const useReportStore = create<ReportState>((set, get) => ({
   },
   
   exportToWord: async () => {
-    const { reportId, sections, styleConfig, resources } = get()
+    const { reportId, reportTitle, sections, styleConfig, resources } = get()
     if (!reportId) {
       set({ error: '请先生成报告' })
       return
     }
     
     try {
-      await reportApi.exportWord(reportId, {
+      await reportApi.exportWord({
+        title: reportTitle,
         sections,
         styleConfig,
         resources
