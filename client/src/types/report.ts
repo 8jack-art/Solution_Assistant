@@ -48,6 +48,7 @@ export interface ReportStyleConfig {
     spaceBefore: number             // 段前间距（行）
     spaceAfter: number              // 段后间距（行）
     firstLineIndent: number         // 首行缩进（字符数，0表示无缩进，2表示2字符）
+    headingIndent: number           // 标题缩进（字符数）
   }
   
   // 页面设置
@@ -88,7 +89,8 @@ export const defaultStyleConfig: ReportStyleConfig = {
     lineSpacing: 1.5,
     spaceBefore: 0,
     spaceAfter: 0,
-    firstLineIndent: 2  // 默认首行缩进2字符
+    firstLineIndent: 2,  // 默认首行缩进2字符
+    headingIndent: 0     // 默认标题无缩进
   },
   page: {
     margin: {

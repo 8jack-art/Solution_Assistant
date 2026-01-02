@@ -20,7 +20,8 @@ const defaultStyleConfig: ReportStyleConfig = {
     lineSpacing: 1.5,
     spaceBefore: 0,
     spaceAfter: 0,
-    firstLineIndent: 2
+    firstLineIndent: 2,
+    headingIndent: 0
   },
   page: {
     margin: {
@@ -105,7 +106,7 @@ interface StyleSettingsPanelProps {
 }
 
 export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose }) => {
-  const { styleConfig, updateStyleConfig, resetStyleConfig, saveStyleConfig } = useReportStore()
+  const { styleConfig, updateStyleConfig, saveStyleConfig } = useReportStore()
   const [isSaving, setIsSaving] = useState(false)
 
   // 计算样式预览
@@ -180,22 +181,17 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
     })
   }, [styleConfig, updateStyleConfig])
 
-  // 处理保存为默认
-  const handleSaveAsDefault = useCallback(async () => {
+  // 处理保存样式
+  const handleSave = useCallback(async () => {
     setIsSaving(true)
     try {
-      await saveStyleConfig('默认样式', true)
+      await saveStyleConfig()
     } catch (error: any) {
       console.error('保存样式失败:', error)
     } finally {
       setIsSaving(false)
     }
   }, [saveStyleConfig])
-
-  // 处理重置
-  const handleReset = useCallback(() => {
-    resetStyleConfig()
-  }, [resetStyleConfig])
 
   return (
     <div className="style-settings-panel">
@@ -314,10 +310,28 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
               </select>
             </div>
             <div className="setting-item">
-              <label>首行缩进</label>
+              <label>正文首行缩进</label>
               <select
                 value={styleConfig?.paragraph?.firstLineIndent ?? 2}
                 onChange={(e) => handleFirstLineIndentChange(Number(e.target.value))}
+              >
+                {firstLineIndentOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="setting-item">
+              <label>标题字体缩进</label>
+              <select
+                value={styleConfig?.paragraph?.headingIndent ?? 0}
+                onChange={(e) => {
+                  updateStyleConfig({
+                    paragraph: {
+                      ...styleConfig?.paragraph,
+                      headingIndent: Number(e.target.value)
+                    }
+                  })
+                }}
               >
                 {firstLineIndentOptions.map(option => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -446,15 +460,12 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
       </div>
 
       <div className="panel-footer">
-        <button className="btn btn-secondary" onClick={handleReset}>
-          重置为默认
-        </button>
         <button
           className="btn btn-primary"
-          onClick={handleSaveAsDefault}
+          onClick={handleSave}
           disabled={isSaving}
         >
-          {isSaving ? '保存中...' : '保存为默认'}
+          {isSaving ? '保存中...' : '保存'}
         </button>
         <button className="btn btn-primary" onClick={onClose}>
           完成

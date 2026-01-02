@@ -20,6 +20,7 @@ export function TemplateSelector() {
   const [opened, { open, close }] = useDisclosure(false)
   const [editMode, setEditMode] = useState<'create' | 'edit'>('create')
   const [templateName, setTemplateName] = useState('')
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
 
   useEffect(() => {
     loadTemplates()
@@ -34,6 +35,7 @@ export function TemplateSelector() {
   const handleEdit = (template: any) => {
     setEditMode('edit')
     setTemplateName(template.name)
+    setEditingTemplateId(template.id)
     open()
   }
 
@@ -60,13 +62,13 @@ export function TemplateSelector() {
           promptTemplate: ''
         })
       } else {
-        // 重命名使用单独的 API
-        const currentTemplate = templates?.find(t => t.name === templateName && t.is_system === false)
-        if (currentTemplate) {
-          await renameTemplate(currentTemplate.id, templateName)
+        // 重命名使用模板ID查找
+        if (editingTemplateId) {
+          await renameTemplate(editingTemplateId, templateName)
         }
       }
       close()
+      setEditingTemplateId(null)
     } catch (error) {
       // 错误已在 store 中处理
     }

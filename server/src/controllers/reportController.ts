@@ -855,42 +855,53 @@ export class ReportController {
   }
 
   /**
-   * 保存样式配置
+   * 保存样式配置 - 使用 UPSERT 逻辑（已存在则更新，不存在则插入）
+   * 始终保存为当前用户的默认样式
    */
   static async saveStyleConfig(req: Request, res: Response): Promise<void> {
     try {
-      const { name, config, isDefault } = req.body
+      const { config } = req.body
       const userId = ReportController.getUserId(req)
-
-      if (!name) {
-        res.status(400).json({ success: false, error: '样式名称不能为空' })
-        return
-      }
 
       if (!config) {
         res.status(400).json({ success: false, error: '样式配置不能为空' })
         return
       }
 
-      const configId = uuidv4()
-      const configJson = JSON.stringify(config)
-
-      // 如果设为默认样式，先取消该用户其他默认样式
-      if (isDefault) {
-        await pool.execute(
-          'UPDATE report_style_configs SET is_default = FALSE WHERE user_id = ?',
-          [userId]
-        )
+      if (!userId) {
+        res.status(401).json({ success: false, error: '未授权' })
+        return
       }
 
-      await pool.execute(
-        `INSERT INTO report_style_configs 
-         (id, user_id, name, config, is_default) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [configId, userId, name, configJson, isDefault || false]
-      )
+      const configJson = JSON.stringify(config)
 
-      res.json({ success: true, configId })
+      // 先查询该用户是否已有默认样式配置
+      const [existingConfigs] = await pool.execute(
+        'SELECT id FROM report_style_configs WHERE user_id = ? AND is_default = TRUE LIMIT 1',
+        [userId]
+      ) as any[]
+
+      if (existingConfigs.length > 0) {
+        // 已存在，更新现有记录
+        const existingId = existingConfigs[0].id
+        await pool.execute(
+          `UPDATE report_style_configs 
+           SET config = ?, name = '默认样式', updated_at = NOW() 
+           WHERE id = ?`,
+          [configJson, existingId]
+        )
+        res.json({ success: true, configId: existingId, updated: true })
+      } else {
+        // 不存在，新建记录
+        const configId = uuidv4()
+        await pool.execute(
+          `INSERT INTO report_style_configs 
+           (id, user_id, name, config, is_default) 
+           VALUES (?, ?, '默认样式', ?, TRUE)`,
+          [configId, userId, configJson]
+        )
+        res.json({ success: true, configId, updated: false })
+      }
     } catch (error) {
       console.error('保存样式配置失败:', error)
       res.status(500).json({ success: false, error: '保存样式配置失败' })

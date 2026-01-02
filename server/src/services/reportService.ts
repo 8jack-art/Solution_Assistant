@@ -42,6 +42,7 @@ interface ReportStyleConfig {
     spaceBefore: number             // 段前间距（行）
     spaceAfter: number              // 段后间距（行）
     firstLineIndent: number         // 首行缩进（字符数）
+    headingIndent: number           // 标题缩进（字符数）
   }
   page: {
     margin: {
@@ -428,8 +429,10 @@ ${JSON.stringify(financialIndicators, null, 2)}
       })
     )
     
+    // 合并多个连续换行符为一个，避免段落间距过大
+    const normalizedContent = content.replace(/\n\n+/g, '\n')
     // 按行分割内容
-    const lines = content.split('\n')
+    const lines = normalizedContent.split('\n')
     
     for (const line of lines) {
       const trimmedLine = line.trim()
@@ -883,6 +886,9 @@ ${JSON.stringify(financialIndicators, null, 2)}
 
     // 计算首行缩进
     const firstLineIndent = indent ? (styleConfig.paragraph.firstLineIndent || 2) * 240 : 0
+    
+    // 计算标题缩进
+    const headingIndent = isHeading ? (styleConfig.paragraph.headingIndent || 0) * 240 : 0
 
     return new Paragraph({
       children: [
@@ -896,11 +902,13 @@ ${JSON.stringify(financialIndicators, null, 2)}
       heading: isHeading ? headingLevel : undefined,
       alignment: alignment,
       indent: {
-        firstLine: firstLineIndent
+        firstLine: isHeading ? headingIndent : firstLineIndent,
+        left: isHeading ? 0 : 0
       },
       spacing: {
-        before: spacingBefore * 100 || (isHeading ? 400 : 100),
-        after: spacingAfter * 100 || (isHeading ? 200 : 200),
+        // 使用 null 判断而不是 ||，避免 0 值被覆盖
+        before: spacingBefore !== undefined ? spacingBefore * 100 : (isHeading ? 400 : 100),
+        after: spacingAfter !== undefined ? spacingAfter * 100 : (isHeading ? 200 : 200),
         ...lineSpacingAttr
       }
     })
@@ -1302,7 +1310,9 @@ ${JSON.stringify(financialIndicators, null, 2)}
     styleConfig: ReportStyleConfig
   ): any[] {
     const elements: any[] = []
-    const lines = content.split('\n')
+    // 合并多个连续换行符为一个，避免段落间距过大
+    const normalizedContent = content.replace(/\n\n+/g, '\n')
+    const lines = normalizedContent.split('\n')
 
     for (const line of lines) {
       const trimmedLine = line.trim()

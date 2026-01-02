@@ -116,6 +116,11 @@ export const useReportStore = create<ReportState>((set, get) => ({
     charts: {}
   },
 
+  // 初始化时加载默认样式配置
+  _init: async () => {
+    await get().loadDefaultStyleConfig()
+  },
+
   setProjectId: (id) => set({ projectId: id }),
   
   setReportTitle: (title) => set({ reportTitle: title }),

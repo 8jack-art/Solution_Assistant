@@ -39,6 +39,8 @@ export function ReportGeneration() {
       store.loadTemplates()
       store.loadProjectData()
     }
+    // 初始化时加载用户保存的样式配置
+    store._init()
     
     return () => {
       store.resetReport()
