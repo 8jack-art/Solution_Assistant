@@ -155,38 +155,43 @@ export function PromptEditor(): React.ReactElement {
       return
     }
     
+    // 检查是否已选定模板
+    if (!selectedTemplateId) {
+      notifications.show({
+        title: '提示',
+        message: '请先选择一个模板，然后再保存提示词',
+        color: 'orange',
+        icon: <X size={16} />,
+      })
+      return
+    }
+    
+    // 获取当前选定的模板信息
+    const selectedTemplate = templates?.find(t => t.id === selectedTemplateId)
+    if (!selectedTemplate) {
+      notifications.show({
+        title: '错误',
+        message: '选定的模板不存在，请重新选择',
+        color: 'red',
+        icon: <X size={16} />,
+      })
+      return
+    }
+    
     setIsSaving(true)
     try {
-      // 获取当前选定的模板信息
-      const selectedTemplate = templates?.find(t => t.id === selectedTemplateId)
-      
-      if (selectedTemplateId && selectedTemplate) {
-        // 更新现有模板
-        await updateTemplate(selectedTemplateId, {
-          name: selectedTemplate.name,
-          description: selectedTemplate.description || '',
-          promptTemplate: promptTemplate
-        })
-        notifications.show({
-          title: '成功',
-          message: `模板 "${selectedTemplate.name}" 已更新`,
-          color: 'green',
-          icon: <Check size={16} />,
-        })
-      } else {
-        // 创建新模板
-        await saveTemplate({
-          name: `模板-${new Date().toLocaleDateString()}`,
-          description: '',
-          promptTemplate: promptTemplate
-        })
-        notifications.show({
-          title: '成功',
-          message: '提示词已保存为新模板',
-          color: 'green',
-          icon: <Check size={16} />,
-        })
-      }
+      // 更新当前选定的模板
+      await updateTemplate(selectedTemplateId, {
+        name: selectedTemplate.name,
+        description: selectedTemplate.description || '',
+        promptTemplate: promptTemplate
+      })
+      notifications.show({
+        title: '成功',
+        message: `模板 "${selectedTemplate.name}" 已更新`,
+        color: 'green',
+        icon: <Check size={16} />,
+      })
     } catch (error: any) {
       notifications.show({
         title: '错误',

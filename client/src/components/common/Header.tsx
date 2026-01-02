@@ -21,8 +21,6 @@ interface HeaderProps {
   iconBg?: string
   /** Header高度（默认64px） */
   height?: string | number
-  /** 容器宽度（默认1400px） */
-  containerWidth?: string
   showLLMInfo?: boolean
   llmConfig?: {
     provider: string
@@ -39,7 +37,6 @@ export const Header: React.FC<HeaderProps> = ({
   icon,
   iconBg = 'linear-gradient(135deg, #1E6FFF 0%, #00C48C 100%)',
   height = 64,
-  containerWidth = '1400px',
   showLLMInfo = false,
   llmConfig,
   showBackButton = true,
@@ -68,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
         zIndex: 100
       }}
     >
-      <Container size="xl" px="lg" style={{ height: '100%', maxWidth: containerWidth, margin: '0 auto' }}>
+      <Container size="xl" px="lg" style={{ height: '100%', maxWidth: '1400px', margin: '0 auto' }}>
         <Group justify="space-between" style={{ height: '100%' }}>
           {/* 左侧：图标 + 标题（分行显示） */}
           <Group gap="sm" align="center" style={{ height: '100%' }}>

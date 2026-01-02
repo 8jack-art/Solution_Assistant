@@ -21,7 +21,8 @@ import {
   Select,
   Switch,
 } from '@mantine/core'
-import { IconEdit, IconTrash, IconCheck, IconX, IconWand, IconRefresh, IconRobot, IconClipboard, IconPencil, IconMapPin, IconCash, IconZoomScan, IconReload, IconFileSpreadsheet, IconChartBar, IconInfoCircle, IconCurrencyDollar } from '@tabler/icons-react'
+import { IconEdit, IconChartBar, IconCurrencyDollar } from '@tabler/icons-react'
+import { Trash, Check, X, Wand2, RotateCcw, Bot, Clipboard, Pencil, MapPin, DollarSign, ZoomIn, RotateCw, FileSpreadsheet, Info } from 'lucide-react'
 import { notifications } from '@mantine/notifications'
 
 import LoadingOverlay from '@/components/LoadingOverlay'
@@ -2826,21 +2827,34 @@ const InvestmentSummary: React.FC = () => {
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#F5F7FA', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#F5F7FA', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <LoadingOverlay visible={analyzingAI} message="🤖 AI正在分析工程子项..." />
       
-      {/* 固定在投资表左侧的操作按钮组 */}
-      {estimate && (
-        <div style={{
-          position: 'fixed',
-          left: 'calc(50% - 640px)',  // 根据表格宽度(1200px)计算位置，稍微向右靠近表格
-          top: '280px',
-          zIndex: 100,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          alignItems: 'center'
-        }}>
+      {/* Header */}
+      <Header
+        title="投资估算简表"
+        subtitle="Investment Summary"
+        icon="💰"
+        height={70}
+        showBackButton={true}
+        backTo={`/project/${id}`}
+      />
+
+      {/* Main Content */}
+      <div style={{ width: '100%', maxWidth: '1400px', margin: '0 auto', padding: '16px', flex: 1 }}>
+        
+        {/* 固定在投资表左侧的操作按钮组 */}
+        {estimate && (
+          <div style={{
+            position: 'fixed',
+            left: 'calc(50% - 640px)',  // 根据表格宽度(1200px)计算位置，稍微向右靠近表格
+            top: '280px',
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            alignItems: 'center'
+          }}>
           {/* AI分析子项 */}
           <Tooltip label="AI分析子项" position="right" withArrow>
             <ActionIcon
@@ -2859,7 +2873,7 @@ const InvestmentSummary: React.FC = () => {
                 borderRadius: '50%'
               }}
             >
-              <IconRobot size={30} stroke={1.5} />
+              <Bot size={30} />
             </ActionIcon>
           </Tooltip>
           
@@ -2881,7 +2895,7 @@ const InvestmentSummary: React.FC = () => {
                   borderRadius: '50%'
                 }}
               >
-                <IconClipboard size={30} stroke={1.5} />
+                <Clipboard size={30} />
               </ActionIcon>
             </Tooltip>
           )}
@@ -2905,7 +2919,7 @@ const InvestmentSummary: React.FC = () => {
                     borderRadius: '50%'
                   }}
                 >
-                  <IconPencil size={30} stroke={1.5} />
+                  <Pencil size={30} />
                 </ActionIcon>
               </Tooltip>
               
@@ -2926,7 +2940,7 @@ const InvestmentSummary: React.FC = () => {
                     borderRadius: '50%'
                   }}
                 >
-                  <IconCash size={30} stroke={1.5} />
+                  <DollarSign size={30} />
                 </ActionIcon>
               </Tooltip>
               
@@ -2947,7 +2961,7 @@ const InvestmentSummary: React.FC = () => {
                     borderRadius: '50%'
                   }}
                 >
-                  <IconCash size={30} stroke={1.5} />
+                  <DollarSign size={30} />
                 </ActionIcon>
               </Tooltip>
             </>
@@ -2972,7 +2986,7 @@ const InvestmentSummary: React.FC = () => {
                   borderRadius: '50%'
                 }}
               >
-                <IconZoomScan size={30} stroke={1.5} />
+                <ZoomIn size={30} />
               </ActionIcon>
             </Tooltip>
           )}
@@ -3003,7 +3017,7 @@ const InvestmentSummary: React.FC = () => {
                 borderRadius: '50%'
               }}
             >
-              <IconReload size={30} stroke={1.5} />
+              <RotateCw size={30} />
             </ActionIcon>
           </Tooltip>
           
@@ -3025,7 +3039,7 @@ const InvestmentSummary: React.FC = () => {
                 borderRadius: '50%'
               }}
             >
-              <IconFileSpreadsheet size={30} stroke={1.5} />
+              <FileSpreadsheet size={30} />
             </ActionIcon>
           </Tooltip>
           
@@ -3074,20 +3088,7 @@ const InvestmentSummary: React.FC = () => {
           </Tooltip>
         </div>
       )}
-      
-      {/* Header */}
-      <Header
-        title="投资估算简表"
-        subtitle="Investment Summary"
-        icon="💰"
-        height={50}
-        containerWidth="1200px"
-        showBackButton={true}
-        backTo={`/project/${id}`}
-      />
-
-      {/* Main Content */}
-      <div style={{ width: '1200px', padding: '16px' }}>
+        
         <Stack gap="lg">
           {/* 项目信息卡片 */}
           <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB', width: '100%' }}>
@@ -3173,7 +3174,7 @@ const InvestmentSummary: React.FC = () => {
             borderRadius: '50%'
           }}
         >
-          <IconInfoCircle size={18} stroke={1.5} />
+          <Info size={18} />
         </ActionIcon>
       </Tooltip>
 
@@ -3532,7 +3533,7 @@ const InvestmentSummary: React.FC = () => {
                             onClick={() => saveEditItem(index)}
                             variant="light"
                           >
-                            <IconCheck size={14} />
+                            <Check size={14} />
                           </ActionIcon>
                           <ActionIcon
                             size="sm"
@@ -3540,7 +3541,7 @@ const InvestmentSummary: React.FC = () => {
                             onClick={cancelEdit}
                             variant="light"
                           >
-                            <IconX size={14} />
+                            <X size={14} />
                           </ActionIcon>
                         </Group>
                       ) : (
@@ -3562,7 +3563,7 @@ const InvestmentSummary: React.FC = () => {
                               onClick={() => deleteItem(index)}
                               variant="light"
                             >
-                              <IconTrash size={14} />
+                              <Trash size={14} />
                             </ActionIcon>
                           </Tooltip>
                         </Group>
@@ -3764,7 +3765,7 @@ const InvestmentSummary: React.FC = () => {
                             onClick={() => deleteSubItem(index)}
                             variant="light"
                           >
-                            <IconTrash size={16} />
+                            <Trash size={16} />
                           </ActionIcon>
                         </Tooltip>
                       </Group>
@@ -4258,7 +4259,7 @@ const InvestmentSummary: React.FC = () => {
                           loading={analyzingSubItem && subdividingItemIndex === index}
                           variant="light"
                         >
-                          <IconWand size={16} />
+                          <Wand2 size={16} />
                         </ActionIcon>
                       </Tooltip>
                     </Table.Td>
@@ -4305,7 +4306,7 @@ const InvestmentSummary: React.FC = () => {
                                 variant="light"
                                 disabled={analyzingSubItem}
                               >
-                                <IconTrash size={14} />
+                                <Trash size={14} />
                               </ActionIcon>
                             </Tooltip>
                           </Group>
@@ -4597,7 +4598,7 @@ const InvestmentSummary: React.FC = () => {
                     onClick={normalizeThirdLevelRatios}
                     variant="light"
                   >
-                    <IconRefresh size={16} />
+                    <RotateCcw size={16} />
                   </ActionIcon>
                 </Tooltip>
               </Group>

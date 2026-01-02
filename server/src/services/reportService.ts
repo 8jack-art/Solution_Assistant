@@ -470,12 +470,40 @@ ${JSON.stringify(financialIndicators, null, 2)}
       let buffer = ''
       let fullContent = ''
       let chunkCount = 0
+      let stopRequested = false
+      
+      // 检查停止标志的辅助函数
+      const checkStop = (): boolean => {
+        if (sseManager.shouldStop(reportId)) {
+          console.log(`【停止检查】检测到停止标志: ${reportId}`)
+          stopRequested = true
+          return true
+        }
+        return false
+      }
+      
+      // 创建轮询停止标志的异步函数
+      const waitForStop = (timeout: number): Promise<void> => {
+        return new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (checkStop()) {
+              clearInterval(checkInterval)
+              resolve()
+            }
+          }, 50) // 每50ms检查一次
+          
+          setTimeout(() => {
+            clearInterval(checkInterval)
+            resolve()
+          }, timeout)
+        })
+      }
       
       try {
         while (true) {
-          // 检查是否需要停止
-          if (sseManager.shouldStop(reportId)) {
-            console.log(`检测到停止标志，终止流式生成: ${reportId}`)
+          // 先检查停止标志
+          if (checkStop()) {
+            console.log(`流式生成被用户停止: ${reportId}`)
             
             // 保存当前已生成的内容
             await pool.execute(
@@ -488,8 +516,22 @@ ${JSON.stringify(financialIndicators, null, 2)}
             return
           }
           
+          // 使用Promise.race实现可中断的读取
           console.log(`等待读取数据块... (当前chunk: ${chunkCount})`)
-          const { done, value } = await reader.read()
+          
+          // 创建读取Promise和停止检查Promise的竞态
+          const readPromise = reader.read()
+          const stopCheckPromise = waitForStop(300) // 每300ms检查一次停止
+          
+          const result = await Promise.race([readPromise, stopCheckPromise])
+          
+          // 如果是停止检查超时，继续循环读取
+          if (result === undefined) {
+            console.log('停止检查超时，继续读取...')
+            continue
+          }
+          
+          const { done, value } = result as { done: boolean; value: Uint8Array }
           
           if (done) {
             console.log('流式响应读取完成')

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Grid, Paper, Group, Button, Title, Text, Stack, Alert, Container } from '@mantine/core'
 import { useReportStore } from '../stores/reportStore'
@@ -7,11 +7,28 @@ import { ReportPreview } from '../components/report/ReportPreview'
 import { VariablePicker } from '../components/report/VariablePicker'
 import { TemplateSelector } from '../components/report/TemplateSelector'
 import { Header } from '../components/common/Header'
+import { llmConfigApi } from '@/lib/api'
 
 export function ReportGeneration() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const store = useReportStore()
+  const [currentLLMConfig, setCurrentLLMConfig] = useState<any>(null)
+
+  // 加载当前LLM配置
+  useEffect(() => {
+    const loadLLMConfig = async () => {
+      try {
+        const response = await llmConfigApi.getDefault()
+        if (response.success && response.data?.config) {
+          setCurrentLLMConfig(response.data.config)
+        }
+      } catch (error) {
+        console.error('加载LLM配置失败:', error)
+      }
+    }
+    loadLLMConfig()
+  }, [])
 
   useEffect(() => {
     if (projectId) {
@@ -52,6 +69,8 @@ export function ReportGeneration() {
         title="投资项目方案报告生成"
         subtitle="Report Generation"
         icon="📄"
+        showLLMInfo={true}
+        llmConfig={currentLLMConfig}
         showBackButton={true}
         backTo={`/revenue-cost/${projectId}`}
         rightContent={

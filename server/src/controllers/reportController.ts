@@ -61,11 +61,14 @@ export class ReportController {
       const userId = ReportController.getUserId(req)
 
       console.log('='.repeat(60))
-      console.log('启动报告生成:', id)
-      console.log('提示词长度:', promptTemplate?.length || 0)
-      console.log('用户ID:', userId)
+      console.log('【诊断】启动报告生成')
+      console.log('【诊断】报告ID:', id)
+      console.log('【诊断】提示词长度:', promptTemplate?.length || 0)
+      console.log('【诊断】用户ID:', userId)
+      console.log('【诊断】请求头:', JSON.stringify(req.headers, null, 2))
 
       if (!userId) {
+        console.error('【诊断】ERROR: 用户未授权')
         res.status(401).json({ success: false, error: '未授权' })
         return
       }
@@ -76,33 +79,45 @@ export class ReportController {
         [id]
       ) as any[]
       
+      console.log('【诊断】查询报告结果:', reports.length, '条')
+      
       if (reports.length === 0) {
+        console.error('【诊断】ERROR: 报告不存在')
         res.status(404).json({ success: false, error: '报告不存在' })
         return
       }
 
       const report = reports[0]
+      console.log('【诊断】报告信息:', JSON.stringify(report, null, 2))
 
       // 检查报告是否属于当前用户
       if (report.user_id !== userId) {
+        console.error('【诊断】ERROR: 无权操作此报告, 报告用户:', report.user_id, '当前用户:', userId)
         res.status(403).json({ success: false, error: '无权操作此报告' })
         return
       }
 
       // 获取 LLM 配置
+      console.log('【诊断】开始查询LLM配置...')
       const [configs] = await pool.execute(
         'SELECT * FROM llm_configs WHERE user_id = ? AND is_default = TRUE',
         [userId]
       ) as any[]
       
+      console.log('【诊断】默认LLM配置查询结果:', configs.length, '条')
+      
       if (configs.length === 0) {
         // 如果没有默认配置，尝试获取第一个配置
+        console.log('【诊断】无默认配置，尝试获取第一个配置...')
         const [allConfigs] = await pool.execute(
           'SELECT * FROM llm_configs WHERE user_id = ? LIMIT 1',
           [userId]
         ) as any[]
         
+        console.log('【诊断】所有LLM配置查询结果:', allConfigs.length, '条')
+        
         if (allConfigs.length === 0) {
+          console.error('【诊断】ERROR: 未配置LLM')
           res.status(400).json({ success: false, error: '未配置 LLM，请先配置大模型' })
           return
         }
@@ -111,19 +126,33 @@ export class ReportController {
       }
 
       const llmConfig = configs[0]
+      console.log('【诊断】使用的LLM配置:', JSON.stringify({
+        provider: llmConfig.provider,
+        model: llmConfig.model,
+        id: llmConfig.id
+      }, null, 2))
       
       // 获取项目信息
+      console.log('【诊断】开始查询项目信息...')
       const [projects] = await pool.execute(
         'SELECT * FROM investment_projects WHERE id = ?',
         [report.project_id]
       ) as any[]
       
+      console.log('【诊断】项目查询结果:', projects.length, '条')
+      
       if (projects.length === 0) {
+        console.error('【诊断】ERROR: 项目不存在')
         res.status(404).json({ success: false, error: '项目不存在' })
         return
       }
 
       const project = projects[0]
+      console.log('【诊断】项目信息:', JSON.stringify({
+        id: project.id,
+        project_name: project.project_name,
+        total_investment: project.total_investment
+      }, null, 2))
 
       // 设置 SSE 响应头
       res.setHeader('Content-Type', 'text/event-stream')
@@ -132,6 +161,7 @@ export class ReportController {
       res.setHeader('X-Accel-Buffering', 'no') // 禁用 Nginx 缓冲
 
       // 注册 SSE 连接
+      console.log('【诊断】注册SSE连接...')
       sseManager.register(id, res)
 
       // 更新报告状态为生成中
@@ -139,14 +169,16 @@ export class ReportController {
         'UPDATE generated_reports SET generation_status = ?, updated_at = NOW() WHERE id = ?',
         ['generating', id]
       )
+      console.log('【诊断】报告状态已更新为generating')
 
       // 启动流式生成
-      console.log('开始调用 ReportService.generateReportStream...')
+      console.log('【诊断】开始调用 ReportService.generateReportStream...')
       await ReportService.generateReportStream(id, llmConfig, promptTemplate, project)
       
-      console.log('流式生成调用完成')
+      console.log('【诊断】流式生成调用完成')
     } catch (error) {
-      console.error('生成报告失败:', error)
+      console.error('【诊断】生成报告失败:', error)
+      console.error('【诊断】错误堆栈:', error instanceof Error ? error.stack : '未知')
       
       // 尝试发送错误到前端
       const { id } = req.params

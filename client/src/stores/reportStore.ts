@@ -234,12 +234,19 @@ export const useReportStore = create<ReportState>((set, get) => ({
 
   startGeneration: async () => {
     const { projectId, promptTemplate, reportTitle } = get()
+    console.log('[ReportStore] startGeneration called')
+    console.log('[ReportStore] projectId:', projectId)
+    console.log('[ReportStore] promptTemplate length:', promptTemplate?.length || 0)
+    console.log('[ReportStore] reportTitle:', reportTitle)
+    
     if (!projectId) {
+      console.error('[ReportStore] ERROR: projectId is empty')
       set({ error: '缺少项目ID' })
       return
     }
     
     if (!promptTemplate.trim()) {
+      console.error('[ReportStore] ERROR: promptTemplate is empty')
       set({ error: '请输入提示词' })
       return
     }
@@ -253,13 +260,18 @@ export const useReportStore = create<ReportState>((set, get) => ({
         title: reportTitle
       })
       
-      console.log('[ReportStore] Create response:', createResponse)
+      console.log('[ReportStore] Create response:', JSON.stringify(createResponse, null, 2))
       
-      if (!createResponse || !createResponse.reportId) {
+      // 兼容两种响应格式：
+      // 1. {success: true, reportId: 'xxx'}
+      // 2. {success: true, data: {reportId: 'xxx'}}
+      const reportId = createResponse.data?.reportId || createResponse.reportId
+      
+      if (!createResponse || !reportId) {
+        console.error('[ReportStore] ERROR: createResponse invalid', createResponse)
         throw new Error(createResponse?.error || '创建报告失败')
       }
       
-      const reportId = createResponse.reportId
       console.log('[ReportStore] Report created, id:', reportId)
       
       set({ reportId, generationStatus: 'generating' })
@@ -268,15 +280,18 @@ export const useReportStore = create<ReportState>((set, get) => ({
       console.log('[ReportStore] Starting SSE generation...')
       await reportApi.generateReport(reportId, promptTemplate, {
         onChunk: (content) => {
+          console.log('[ReportStore] onChunk received, length:', content.length)
           set((state) => ({
             reportContent: state.reportContent + content,
             generationStatus: 'generating'
           }))
         },
         onComplete: () => {
+          console.log('[ReportStore] onComplete called')
           set({ generationStatus: 'completed', isLoading: false })
         },
         onError: (error) => {
+          console.error('[ReportStore] onError called, error:', error)
           set({ error, generationStatus: 'failed', isLoading: false })
         }
       })
