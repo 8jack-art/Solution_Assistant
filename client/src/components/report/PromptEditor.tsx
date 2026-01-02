@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Text, Box, Button, Group, Divider, Tooltip, ActionIcon } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import { useReportStore } from '../../stores/reportStore'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -12,8 +13,9 @@ import Strike from '@tiptap/extension-strike'
 import { 
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, 
   Heading1, Heading2, List as ListIcon, ListOrdered, Quote, 
-  Undo, Redo, Save
+  Undo, Redo, Save, Check, X
 } from 'lucide-react'
+import { VariableMenu } from './VariableMenu'
 
 // 工具栏按钮组件
 interface ToolbarButtonProps {
@@ -67,8 +69,6 @@ export function PromptEditor(): React.ReactElement {
   const {
     promptTemplate,
     setPromptTemplate,
-    variableToInsert,
-    setVariableToInsert,
     saveTemplate,
     updateTemplate,
     selectedTemplateId,
@@ -76,13 +76,15 @@ export function PromptEditor(): React.ReactElement {
   } = useReportStore()
 
   const [isSaving, setIsSaving] = useState(false)
+  const [showVariableMenu, setShowVariableMenu] = useState(false)
+  const [variableMenuPosition, setVariableMenuPosition] = useState({ x: 0, y: 0 })
 
   // 创建 Tiptap 编辑器
   const editor = useEditor({
     extensions: [
       StarterKit,
       Placeholder.configure({
-        placeholder: '请输入提示词，指导AI生成报告内容...\n例如：请分析项目{{project_name}}的财务状况。',
+        placeholder: '请输入提示词，指导AI生成报告内容...\n输入 / 可插入变量',
       }),
       Underline,
       Strike,
@@ -93,6 +95,26 @@ export function PromptEditor(): React.ReactElement {
       if (html !== promptTemplate) {
         setPromptTemplate(html)
       }
+    },
+    editorProps: {
+      handleKeyDown: (view, event) => {
+        // 处理 "/" 按键
+        if (event.key === '/' && !showVariableMenu) {
+          event.preventDefault()
+          const coords = view.coordsAtPos(view.state.selection.from)
+          setVariableMenuPosition({ x: coords.left, y: coords.top + 20 })
+          setShowVariableMenu(true)
+          return true
+        }
+        
+        // ESC 关闭菜单
+        if (event.key === 'Escape' && showVariableMenu) {
+          setShowVariableMenu(false)
+          return true
+        }
+        
+        return false
+      },
     },
   })
 
@@ -110,18 +132,26 @@ export function PromptEditor(): React.ReactElement {
     }
   }, [promptTemplate, editor])
 
-  // 处理变量插入
+  // 点击编辑器外部关闭菜单
   useEffect(() => {
-    if (editor && variableToInsert) {
-      editor.commands.insertContent(variableToInsert)
-      setVariableToInsert(null)
+    const handleClickOutside = () => {
+      if (showVariableMenu) {
+        setShowVariableMenu(false)
+      }
     }
-  }, [variableToInsert, editor, setVariableToInsert])
+
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [showVariableMenu])
 
   // 保存提示词为模板
   const handleSavePrompt = async () => {
     if (!promptTemplate || promptTemplate === '<p></p>') {
-      alert('提示词内容为空')
+      notifications.show({
+        title: '提示',
+        message: '提示词内容为空，请先输入提示词',
+        color: 'orange',
+      })
       return
     }
     
@@ -137,7 +167,12 @@ export function PromptEditor(): React.ReactElement {
           description: selectedTemplate.description || '',
           promptTemplate: promptTemplate
         })
-        alert(`模板 "${selectedTemplate.name}" 已更新`)
+        notifications.show({
+          title: '成功',
+          message: `模板 "${selectedTemplate.name}" 已更新`,
+          color: 'green',
+          icon: <Check size={16} />,
+        })
       } else {
         // 创建新模板
         await saveTemplate({
@@ -145,10 +180,20 @@ export function PromptEditor(): React.ReactElement {
           description: '',
           promptTemplate: promptTemplate
         })
-        alert('提示词已保存为新模板')
+        notifications.show({
+          title: '成功',
+          message: '提示词已保存为新模板',
+          color: 'green',
+          icon: <Check size={16} />,
+        })
       }
-    } catch (error) {
-      // 错误已在 store 中处理
+    } catch (error: any) {
+      notifications.show({
+        title: '错误',
+        message: error.message || '保存失败，请稍后重试',
+        color: 'red',
+        icon: <X size={16} />,
+      })
     } finally {
       setIsSaving(false)
     }
@@ -169,7 +214,7 @@ export function PromptEditor(): React.ReactElement {
   }
 
   return (
-    <div className="prompt-editor">
+    <div className="prompt-editor" onClick={(e) => e.stopPropagation()}>
       <Group justify="space-between" mb="xs">
         <Text size="sm" fw={500} c="dark.7">提示词编辑</Text>
         <Tooltip label={selectedTemplateId ? '保存到当前模板' : '保存为新模板'}>
@@ -300,6 +345,7 @@ export function PromptEditor(): React.ReactElement {
           borderRadius: '0 0 8px 8px',
           minHeight: '180px',
           background: 'var(--mantine-color-body)',
+          position: 'relative',
         }}
       >
         <Box style={{ padding: '14px 16px' }}>
@@ -313,6 +359,15 @@ export function PromptEditor(): React.ReactElement {
             }} 
           />
         </Box>
+        
+        {/* 变量菜单 */}
+        {showVariableMenu && editor && (
+          <VariableMenu
+            editor={editor}
+            position={variableMenuPosition}
+            onClose={() => setShowVariableMenu(false)}
+          />
+        )}
       </Box>
 
       {/* 移除默认焦点框样式 */}
@@ -330,7 +385,7 @@ export function PromptEditor(): React.ReactElement {
       `}</style>
 
       <Text size="xs" c="dimmed" mt="xs">
-        💡 提示：点击右侧"可用变量"可插入变量，变量会在生成时自动替换为实际数据。
+        💡 提示：输入 / 可快速插入变量，变量会在生成时自动替换为实际数据。
       </Text>
     </div>
   )

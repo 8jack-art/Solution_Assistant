@@ -19,6 +19,7 @@ export interface InvestmentProject {
   operation_years: number
   loan_ratio: number
   loan_interest_rate: number
+  construction_unit?: string  // 建设单位
   is_locked: boolean
   locked_at?: string
   // 土地信息字段

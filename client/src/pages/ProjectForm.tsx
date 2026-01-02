@@ -16,8 +16,6 @@ import {
   Stack,
   NumberInput,
   Grid,
-  Checkbox,
-  Alert,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import LoadingOverlay from '@/components/LoadingOverlay'
@@ -31,6 +29,7 @@ const ProjectForm: React.FC = () => {
     operation_years: 17,
     loan_ratio: 80, // 百分数形式，默认80%
     loan_interest_rate: 4.9, // 百分数形式
+    construction_unit: '', // 建设单位
     // 用地信息
     land_mode: 'A' as 'A' | 'B' | 'C' | 'D',
     land_area: 0,
@@ -49,7 +48,7 @@ const ProjectForm: React.FC = () => {
   const [landModeAnalyzing, setLandModeAnalyzing] = useState(false)
   const [isEdit, setIsEdit] = useState(false)
   const [project, setProject] = useState<InvestmentProject | null>(null)
-   
+    
   const { id } = useParams()
   const navigate = useNavigate()
 
@@ -139,6 +138,7 @@ const ProjectForm: React.FC = () => {
           operation_years: projectData.operation_years,
           loan_ratio: projectData.loan_ratio * 100, // 转换为百分数
           loan_interest_rate: projectData.loan_interest_rate * 100, // 转换为百分数
+          construction_unit: projectData.construction_unit || '', // 建设单位
           land_mode: projectData.land_mode || 'A',
           land_area: projectData.land_area || 0,
           land_unit_price: projectData.land_unit_price || 0,
@@ -409,7 +409,7 @@ const ProjectForm: React.FC = () => {
               <form onSubmit={handleSubmit}>
                 <Stack gap="md">
                   <TextInput
-                    label="项目名称 *"
+                    label="项目名称"
                     value={formData.project_name}
                     onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
                     required
@@ -422,7 +422,7 @@ const ProjectForm: React.FC = () => {
                   <Grid gutter="md">
                     <Grid.Col span={{ base: 12, md: 6 }}>
                       <NumberInput
-                        label="目标总投资 (万元) *"
+                        label="目标总投资 (万元) "
                         value={formData.total_investment}
                         onChange={(val) => setFormData({ ...formData, total_investment: Number(val) || 0 })}
                         decimalScale={2}
@@ -473,7 +473,7 @@ const ProjectForm: React.FC = () => {
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={12}>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
                       <NumberInput
                         label="贷款利率 (%)"
                         value={formData.loan_interest_rate}
@@ -481,6 +481,18 @@ const ProjectForm: React.FC = () => {
                         decimalScale={2}
                         min={0}
                         max={100}
+                        size="md"
+                        styles={{
+                          input: { height: '42px', fontSize: '15px' }
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <TextInput
+                        label="建设单位"
+                        value={formData.construction_unit}
+                        onChange={(e) => setFormData({ ...formData, construction_unit: e.target.value })}
+                        required
                         size="md"
                         styles={{
                           input: { height: '42px', fontSize: '15px' }
@@ -525,7 +537,7 @@ const ProjectForm: React.FC = () => {
                       }}
                     />
                     <Text size="xs" c="#86909C" mt="xs" style={{ fontSize: '12px' }}>
-                      填写项目信息后，点击“智能分析”按钮可自动提取并填充上方字段
+                      填写项目信息后，点击"智能分析"按钮可自动提取并填充上方字段
                     </Text>
                   </div>
                 </Stack>
@@ -544,7 +556,7 @@ const ProjectForm: React.FC = () => {
                 </div>
               <Stack gap="sm">
                 <Select
-                  label="用地模式 *"
+                  label="用地模式"
                   value={formData.land_mode}
                   onChange={(val) => {
                     const newMode = val as 'A' | 'B' | 'C' | 'D'
@@ -674,144 +686,92 @@ const ProjectForm: React.FC = () => {
 
         {/* 提交按钮区域 */}
         <Group justify="flex-end" mt="lg" gap="md">
-          <Button 
-            variant="outline" 
-            onClick={() => navigate('/dashboard')}
-            size="md"
-            style={{ 
-              height: '36px',
-              borderRadius: '4px',
-              borderColor: '#E5E6EB',
-              color: '#1D2129',
-              fontSize: '14px'
-            }}
-          >
-            取消
-          </Button>
-          <Button 
-            onClick={handleSubmit} 
-            disabled={loading}
-            size="md"
-            style={{ 
-              height: '36px',
-              backgroundColor: '#1E6FFF',
-              color: '#FFFFFF',
-              borderRadius: '4px',
-              fontSize: '14px',
-              fontWeight: 500,
-              padding: '0 24px'
-            }}
-          >
-            {loading ? '保存中...' : (isEdit ? '更新' : '创建')}
-          </Button>
+          {/* 编辑模式下显示主要操作按钮 */}
+          {isEdit && project ? (
+            <>
+              <Button 
+                type="submit"
+                disabled={loading}
+                size="md"
+                onClick={handleSubmit}
+                style={{ 
+                  height: '36px',
+                  backgroundColor: '#1E6FFF',
+                  color: '#FFFFFF',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  padding: '0 24px'
+                }}
+              >
+                {loading ? '保存中...' : '更新'}
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => navigate(`/investment/${project.id}`)}
+                size="md"
+                style={{ 
+                  height: '36px',
+                  borderRadius: '4px',
+                  borderColor: '#E5E6EB',
+                  color: '#1D2129',
+                  fontSize: '14px'
+                }}
+              >
+                投资估算
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => navigate('/dashboard')}
+                size="md"
+                style={{ 
+                  height: '36px',
+                  borderRadius: '4px',
+                  borderColor: '#E5E6EB',
+                  color: '#1D2129',
+                  fontSize: '14px'
+                }}
+              >
+                取消
+              </Button>
+            </>
+          ) : (
+            /* 新建模式 */
+            <>
+              <Button 
+                type="submit"
+                disabled={loading}
+                size="md"
+                onClick={handleSubmit}
+                style={{ 
+                  height: '36px',
+                  backgroundColor: '#1E6FFF',
+                  color: '#FFFFFF',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  padding: '0 24px'
+                }}
+              >
+                {loading ? '保存中...' : '创建'}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => navigate('/dashboard')}
+                size="md"
+                style={{ 
+                  height: '36px',
+                  borderRadius: '4px',
+                  borderColor: '#E5E6EB',
+                  color: '#1D2129',
+                  fontSize: '14px'
+                }}
+              >
+                取消
+              </Button>
+            </>
+          )}
         </Group>
-
-        {isEdit && project && (
-          <Card shadow="sm" padding="lg" radius="sm" withBorder mt="lg" style={{ borderColor: '#E5E6EB', borderRadius: '4px' }}>
-            <Stack gap="md">
-              <Title order={4} style={{ fontSize: '16px', fontWeight: 600, color: '#1D2129' }}>项目操作</Title>
-              <Group gap="sm" wrap="nowrap">
-               <Button 
-                  variant="filled"
-                  onClick={() => navigate(`/investment/${project.id}`, { state: { autoGenerate: true } })}
-                  style={{ 
-                    height: '36px',
-                    backgroundColor: '#1E6FFF',
-                    color: '#FFFFFF',
-                    borderRadius: '4px',
-                    fontSize: '14px'
-                  }}
-                >
-                  投资估算
-                </Button>
-
-                {project.is_locked ? (
-                  <Button 
-                    variant="outline"
-                    onClick={async () => {
-                      if (window.confirm('确定要解锁此项目吗？')) {
-                        try {
-                          const response = await projectApi.unlock(project.id)
-                          if (response.success) {
-                            notifications.show({ title: '✅ 项目已解锁', message: '', color: 'green' })
-                            loadProject()
-                          } else {
-                            notifications.show({ title: '❌ 解锁失败', message: response.error || '', color: 'red' })
-                          }
-                        } catch (error: any) {
-                          notifications.show({ title: '❌ 解锁失败', message: error.response?.data?.error || '操作失败', color: 'red' })
-                        }
-                      }
-                    }}
-                    style={{ 
-                      height: '36px',
-                      borderRadius: '4px',
-                      borderColor: '#E5E6EB',
-                      color: '#1D2129',
-                      fontSize: '14px'
-                    }}
-                  >
-                    解锁项目
-                  </Button>
-                ) : (
-                  <Button 
-                    variant="outline"
-                    onClick={async () => {
-                      if (window.confirm('确定要锁定此项目吗？锁定后将无法修改。')) {
-                        try {
-                          const response = await projectApi.lock(project.id)
-                          if (response.success) {
-                            notifications.show({ title: '✅ 项目已锁定', message: '', color: 'green' })
-                            loadProject()
-                          } else {
-                            notifications.show({ title: '❌ 锁定失败', message: response.error || '', color: 'red' })
-                          }
-                        } catch (error: any) {
-                          notifications.show({ title: '❌ 锁定失败', message: error.response?.data?.error || '操作失败', color: 'red' })
-                        }
-                      }
-                    }}
-                    style={{ 
-                      height: '36px',
-                      borderRadius: '4px',
-                      borderColor: '#E5E6EB',
-                      color: '#1D2129',
-                      fontSize: '14px'
-                    }}
-                  >
-                    锁定项目
-                  </Button>
-                )}
-                <Button 
-                  color="red"
-                  onClick={async () => {
-                    if (window.confirm('确定要删除此项目吗？此操作不可恢复。')) {
-                      try {
-                        const response = await projectApi.delete(project.id)
-                        if (response.success) {
-                          notifications.show({ title: '✅ 项目已删除', message: '', color: 'green' })
-                          setTimeout(() => navigate('/dashboard'), 1000)
-                        } else {
-                          notifications.show({ title: '❌ 删除失败', message: response.error || '', color: 'red' })
-                        }
-                      } catch (error: any) {
-                        notifications.show({ title: '❌ 删除失败', message: error.response?.data?.error || '操作失败', color: 'red' })
-                      }
-                    }
-                  }}
-                  disabled={project.is_locked}
-                  style={{ 
-                    height: '36px',
-                    borderRadius: '4px',
-                    fontSize: '14px'
-                  }}
-                >
-                  删除项目
-                </Button>
-              </Group>
-            </Stack>
-          </Card>
-        )}
       </Container>
     </div>
   )

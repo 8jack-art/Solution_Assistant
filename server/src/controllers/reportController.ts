@@ -706,7 +706,8 @@ export class ReportController {
             constructionYears: project.construction_years,
             operationYears: project.operation_years,
             industry: project.industry || '',
-            location: project.location || ''
+            location: project.location || '',
+            constructionUnit: project.construction_unit || ''
           },
           investment: projectData.investment,
           revenueCost: projectData.revenueCost,

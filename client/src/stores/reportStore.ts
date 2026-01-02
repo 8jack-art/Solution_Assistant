@@ -208,11 +208,13 @@ export const useReportStore = create<ReportState>((set, get) => ({
       // 提取可用变量
       const variables: ReportVariable[] = [
         { key: '{{project_name}}', label: '项目名称', value: data.project?.name || '' },
+        { key: '{{construction_unit}}', label: '建设单位', value: data.project?.constructionUnit || '' },
         { key: '{{total_investment}}', label: '总投资额', value: data.project?.totalInvestment || 0 },
         { key: '{{construction_years}}', label: '建设期', value: data.project?.constructionYears || 0 },
         { key: '{{operation_years}}', label: '运营期', value: data.project?.operationYears || 0 },
         { key: '{{industry}}', label: '所属行业', value: data.project?.industry || '' },
         { key: '{{location}}', label: '项目地点', value: data.project?.location || '' },
+        { key: '{{current_date}}', label: '当前日期', value: new Date().toLocaleDateString('zh-CN') },
         // 财务指标变量
         { key: '{{roi}}', label: '投资回报率', value: data.financialIndicators?.roi || 0 },
         { key: '{{irr}}', label: '内部收益率', value: data.financialIndicators?.irr || 0 },
