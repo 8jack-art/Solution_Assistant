@@ -387,8 +387,9 @@ export class ReportController {
         return
       }
 
-      // 断开 SSE 连接
+      // 断开 SSE 连接并设置停止标志
       sseManager.unregister(id)
+      sseManager.setStopFlag(id)
 
       await ReportService.stopReportGeneration(id)
       
@@ -594,6 +595,71 @@ export class ReportController {
     } catch (error) {
       console.error('重命名模板失败:', error)
       res.status(500).json({ success: false, error: '重命名模板失败' })
+    }
+  }
+
+  /**
+   * 更新模板内容
+   */
+  static async updateTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params
+      const { name, description, promptTemplate } = req.body
+      const userId = ReportController.getUserId(req)
+
+      // 检查模板是否存在
+      const [templates] = await pool.execute(
+        'SELECT * FROM report_templates WHERE id = ?',
+        [id]
+      ) as any[]
+      
+      if (templates.length === 0) {
+        res.status(404).json({ success: false, error: '模板不存在' })
+        return
+      }
+
+      const template = templates[0]
+
+      // 检查权限：只能修改自己的模板，系统模板也可以修改
+      if (template.user_id !== userId && !template.is_system) {
+        res.status(403).json({ success: false, error: '无权操作此模板' })
+        return
+      }
+
+      // 构建更新字段
+      const updates: string[] = []
+      const values: any[] = []
+
+      if (name !== undefined) {
+        updates.push('name = ?')
+        values.push(name)
+      }
+      if (description !== undefined) {
+        updates.push('description = ?')
+        values.push(description)
+      }
+      if (promptTemplate !== undefined) {
+        updates.push('prompt_template = ?')
+        values.push(promptTemplate)
+      }
+
+      if (updates.length === 0) {
+        res.status(400).json({ success: false, error: '没有要更新的字段' })
+        return
+      }
+
+      updates.push('updated_at = NOW()')
+      values.push(id)
+
+      await pool.execute(
+        `UPDATE report_templates SET ${updates.join(', ')} WHERE id = ?`,
+        values
+      )
+
+      res.json({ success: true, message: '模板已更新' })
+    } catch (error) {
+      console.error('更新模板失败:', error)
+      res.status(500).json({ success: false, error: '更新模板失败' })
     }
   }
 

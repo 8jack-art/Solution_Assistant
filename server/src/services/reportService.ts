@@ -473,6 +473,21 @@ ${JSON.stringify(financialIndicators, null, 2)}
       
       try {
         while (true) {
+          // 检查是否需要停止
+          if (sseManager.shouldStop(reportId)) {
+            console.log(`检测到停止标志，终止流式生成: ${reportId}`)
+            
+            // 保存当前已生成的内容
+            await pool.execute(
+              'UPDATE generated_reports SET generation_status = ?, report_content = ?, updated_at = NOW() WHERE id = ?',
+              ['failed', fullContent, reportId]
+            )
+            
+            // 通知前端停止
+            sseManager.fail(reportId, '用户手动停止')
+            return
+          }
+          
           console.log(`等待读取数据块... (当前chunk: ${chunkCount})`)
           const { done, value } = await reader.read()
           

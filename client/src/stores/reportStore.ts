@@ -57,6 +57,7 @@ interface ReportState {
   loadProjectData: () => Promise<void>
   saveTemplate: (data: { name: string; description?: string; promptTemplate: string; isDefault?: boolean }) => Promise<void>
   renameTemplate: (templateId: string, name: string) => Promise<void>
+  updateTemplate: (templateId: string, data: { name?: string; description?: string; promptTemplate: string }) => Promise<void>
   deleteTemplate: (templateId: string) => Promise<void>
   startGeneration: () => Promise<void>
   pauseGeneration: () => Promise<void>
@@ -142,6 +143,22 @@ export const useReportStore = create<ReportState>((set, get) => ({
     } catch (error: any) {
       console.error('重命名模板失败:', error)
       set({ error: error.message || '重命名模板失败', isLoading: false })
+      throw error
+    }
+  },
+
+  updateTemplate: async (templateId: string, data: { name?: string; description?: string; promptTemplate: string }) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await reportApi.updateTemplate(templateId, data)
+      if (response?.success) {
+        await get().loadTemplates()
+      } else {
+        throw new Error(response?.error || '更新模板失败')
+      }
+    } catch (error: any) {
+      console.error('更新模板失败:', error)
+      set({ error: error.message || '更新模板失败', isLoading: false })
       throw error
     }
   },

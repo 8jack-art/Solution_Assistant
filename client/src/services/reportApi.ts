@@ -164,6 +164,12 @@ export const reportApi = {
     return response
   },
 
+  // 更新模板
+  async updateTemplate(templateId: string, data: { name?: string; description?: string; promptTemplate: string }) {
+    const response = await api.put<any, ApiResponse>(`/report/templates/${templateId}`, data)
+    return response
+  },
+
   // 重命名模板
   async renameTemplate(templateId: string, name: string) {
     const response = await api.patch<any, ApiResponse>(`/report/templates/${templateId}`, { name })

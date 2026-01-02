@@ -70,6 +70,9 @@ export function PromptEditor(): React.ReactElement {
     variableToInsert,
     setVariableToInsert,
     saveTemplate,
+    updateTemplate,
+    selectedTemplateId,
+    templates,
   } = useReportStore()
 
   const [isSaving, setIsSaving] = useState(false)
@@ -124,13 +127,26 @@ export function PromptEditor(): React.ReactElement {
     
     setIsSaving(true)
     try {
-      await saveTemplate({
-        name: `模板-${new Date().toLocaleDateString()}`,
-        description: '',
-        promptTemplate: promptTemplate
-      })
-      // 提示保存成功
-      alert('提示词已保存为新模板')
+      // 获取当前选定的模板信息
+      const selectedTemplate = templates?.find(t => t.id === selectedTemplateId)
+      
+      if (selectedTemplateId && selectedTemplate) {
+        // 更新现有模板
+        await updateTemplate(selectedTemplateId, {
+          name: selectedTemplate.name,
+          description: selectedTemplate.description || '',
+          promptTemplate: promptTemplate
+        })
+        alert(`模板 "${selectedTemplate.name}" 已更新`)
+      } else {
+        // 创建新模板
+        await saveTemplate({
+          name: `模板-${new Date().toLocaleDateString()}`,
+          description: '',
+          promptTemplate: promptTemplate
+        })
+        alert('提示词已保存为新模板')
+      }
     } catch (error) {
       // 错误已在 store 中处理
     } finally {
@@ -156,7 +172,7 @@ export function PromptEditor(): React.ReactElement {
     <div className="prompt-editor">
       <Group justify="space-between" mb="xs">
         <Text size="sm" fw={500} c="dark.7">提示词编辑</Text>
-        <Tooltip label="保存为模板">
+        <Tooltip label={selectedTemplateId ? '保存到当前模板' : '保存为新模板'}>
           <ActionIcon 
             variant="subtle" 
             color="blue" 

@@ -8,8 +8,8 @@ class SSEManager {
   private connections: Map<string, Response> = new Map()
   private contentBuffer: Map<string, string> = new Map()
   private flushIntervals: Map<string, NodeJS.Timeout> = new Map()
-
   private lastSentLength: Map<string, number> = new Map()
+  private stopFlags: Map<string, boolean> = new Map() // 停止标志
 
   /**
    * 注册一个新的SSE连接
@@ -74,6 +74,22 @@ class SSEManager {
     // 清除缓冲区
     this.contentBuffer.delete(reportId)
     this.lastSentLength.delete(reportId)
+    this.stopFlags.delete(reportId)
+  }
+
+  /**
+   * 设置停止标志
+   */
+  setStopFlag(reportId: string): void {
+    this.stopFlags.set(reportId, true)
+    console.log(`[SSE Manager] 设置停止标志，报告ID: ${reportId}`)
+  }
+
+  /**
+   * 检查是否需要停止
+   */
+  shouldStop(reportId: string): boolean {
+    return this.stopFlags.get(reportId) || false
   }
 
   /**
