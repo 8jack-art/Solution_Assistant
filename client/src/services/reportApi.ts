@@ -166,15 +166,11 @@ export const reportApi = {
     window.URL.revokeObjectURL(url)
   },
 
-  // 保存样式配置
-  async saveStyleConfig(data: { name: string; config: ReportStyleConfig; isDefault?: boolean }) {
-    const response = await api.post<any, ApiResponse<{ configId: string }>>('/report/style-configs', data)
-    return response
-  },
-
+  // ==================== 样式配置 API ====================
+  
   // 获取样式配置列表
   async getStyleConfigs() {
-    const response = await api.get<any, ApiResponse<{ configs: any[] }>>('/report/style-configs')
+    const response = await api.get<any, ApiResponse<{ configs: any[] }>>('/report/styles')
     if (!response || !response.success) {
       return []
     }
@@ -183,18 +179,26 @@ export const reportApi = {
 
   // 获取默认样式配置
   async getDefaultStyleConfig() {
-    const response = await api.get<any, ApiResponse<{ config: ReportStyleConfig }>>('/report/style-configs/default')
+    const response = await api.get<any, ApiResponse<{ config: any }>>('/report/styles/default')
     if (!response || !response.success) {
       return null
     }
     return (response as any).config
   },
 
-  // 删除样式配置
-  async deleteStyleConfig(configId: string) {
-    const response = await api.delete<any, ApiResponse>(`/report/style-configs/${configId}`)
+  // 保存样式配置
+  async saveStyleConfig(data: { name: string; config: ReportStyleConfig; isDefault?: boolean }) {
+    const response = await api.post<any, ApiResponse<{ configId: string }>>('/report/styles', data)
     return response
   },
+
+  // 删除样式配置
+  async deleteStyleConfig(configId: string) {
+    const response = await api.delete<any, ApiResponse>(`/report/styles/${configId}`)
+    return response
+  },
+
+  // ==================== 模板管理 API ====================
 
   // 获取模板列表
   async getTemplates() {

@@ -46,6 +46,7 @@ interface ReportState {
   
   // 样式配置
   styleConfig: ReportStyleConfig
+  styleConfigs: any[]
   
   // 章节配置
   sections: ReportSections
@@ -65,8 +66,10 @@ interface ReportState {
   // 样式配置操作
   updateStyleConfig: (config: Partial<ReportStyleConfig>) => void
   resetStyleConfig: () => void
-  saveStyleConfig: (name: string) => Promise<void>
+  saveStyleConfig: (name: string, isDefault?: boolean) => Promise<void>
   loadStyleConfigs: () => Promise<any[]>
+  loadDefaultStyleConfig: () => Promise<void>
+  deleteStyleConfig: (configId: string) => Promise<void>
   applyStyleConfig: (config: ReportStyleConfig) => void
   
   // 章节配置操作
@@ -106,6 +109,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
   error: null,
   variableToInsert: null,
   styleConfig: defaultStyleConfig,
+  styleConfigs: [],
   sections: defaultSections,
   resources: {
     tables: {},
@@ -141,17 +145,20 @@ export const useReportStore = create<ReportState>((set, get) => ({
   resetStyleConfig: () => set({ styleConfig: defaultStyleConfig }),
   
   // 保存样式配置
-  saveStyleConfig: async (name: string) => {
+  saveStyleConfig: async (name: string, isDefault: boolean = false) => {
     const { styleConfig } = get()
     set({ isLoading: true, error: null })
     try {
       const response = await reportApi.saveStyleConfig({
         name,
-        config: styleConfig
+        config: styleConfig,
+        isDefault
       })
       if (!response?.success) {
         throw new Error(response?.error || '保存样式失败')
       }
+      // 重新加载样式列表
+      await get().loadStyleConfigs()
       set({ isLoading: false })
     } catch (error: any) {
       console.error('保存样式失败:', error)
@@ -165,12 +172,51 @@ export const useReportStore = create<ReportState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const configs = await reportApi.getStyleConfigs()
-      set({ isLoading: false })
+      set({ styleConfigs: configs, isLoading: false })
       return configs
     } catch (error: any) {
       console.error('加载样式列表失败:', error)
       set({ error: error.message || '加载样式列表失败', isLoading: false })
       return []
+    }
+  },
+  
+  // 加载默认样式配置
+  loadDefaultStyleConfig: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const defaultConfig = await reportApi.getDefaultStyleConfig()
+      if (defaultConfig) {
+        // 解析存储的配置
+        let config = defaultConfig.config
+        if (typeof config === 'string') {
+          config = JSON.parse(config)
+        }
+        set({ styleConfig: config, isLoading: false })
+      } else {
+        set({ isLoading: false })
+      }
+    } catch (error: any) {
+      console.error('加载默认样式失败:', error)
+      set({ error: error.message || '加载默认样式失败', isLoading: false })
+    }
+  },
+  
+  // 删除样式配置
+  deleteStyleConfig: async (configId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await reportApi.deleteStyleConfig(configId)
+      if (!response?.success) {
+        throw new Error(response?.error || '删除样式失败')
+      }
+      // 重新加载样式列表
+      await get().loadStyleConfigs()
+      set({ isLoading: false })
+    } catch (error: any) {
+      console.error('删除样式失败:', error)
+      set({ error: error.message || '删除样式失败', isLoading: false })
+      throw error
     }
   },
   
@@ -440,16 +486,33 @@ export const useReportStore = create<ReportState>((set, get) => ({
   },
   
   exportToWord: async () => {
-    const { reportId, reportTitle, sections, styleConfig, resources } = get()
+    const { reportId, reportTitle, sections, styleConfig, resources, reportContent } = get()
     if (!reportId) {
       set({ error: '请先生成报告' })
       return
     }
-    
+
+    // 检查报告内容是否为空
+    if (!reportContent || reportContent.trim() === '') {
+      set({ error: '报告内容为空，请先生成报告' })
+      return
+    }
+
     try {
+      // 构建包含报告内容的sections
+      // 将第一个正文章节的内容替换为LLM生成的报告内容
+      const sectionsWithContent = {
+        ...sections,
+        body: sections.body?.length > 0
+          ? sections.body.map((section, index) =>
+              index === 0 ? { ...section, content: reportContent } : section
+            )
+          : [{ id: 'main', title: '报告正文', content: reportContent, level: 1 }]
+      }
+
       await reportApi.exportWord({
         title: reportTitle,
-        sections,
+        sections: sectionsWithContent,
         styleConfig,
         resources
       })

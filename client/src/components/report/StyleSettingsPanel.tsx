@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useReportStore } from '../../stores/reportStore'
 import type { ReportStyleConfig } from '../../types/report'
 
@@ -53,16 +53,16 @@ const fontOptions = [
 
 // 可用字号列表
 const fontSizeOptions = [
-  { value: 12, label: '12pt' },
-  { value: 14, label: '14pt' },
-  { value: 16, label: '16pt' },
-  { value: 18, label: '18pt' },
-  { value: 20, label: '20pt' },
-  { value: 22, label: '22pt' },
-  { value: 24, label: '24pt' },
-  { value: 28, label: '28pt' },
-  { value: 32, label: '32pt' },
-  { value: 36, label: '36pt' }
+  { value: 10.5, label: '五号 10.5pt' },
+  { value: 12, label: '小四 12pt' },
+  { value: 14, label: '四号 14pt' },
+  { value: 15, label: '小三 15pt' },
+  { value: 16, label: '三号 16pt' },
+  { value: 18, label: '小二 18pt' },
+  { value: 22, label: '二号 22pt' },
+  { value: 24, label: '小一 24pt' },
+  { value: 28, label: '一号 28pt' },
+  { value: 36, label: '初号 36pt' }
 ]
 
 // 行间距选项
@@ -85,6 +85,7 @@ const firstLineIndentOptions = [
 const marginOptions = [
   { value: 1.5, label: '1.5cm' },
   { value: 2, label: '2cm' },
+  { value: 2.2, label: '2.2cm' },
   { value: 2.5, label: '2.5cm' },
   { value: 3.17, label: '3.17cm（默认）' }
 ]
@@ -104,7 +105,8 @@ interface StyleSettingsPanelProps {
 }
 
 export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose }) => {
-  const { styleConfig, updateStyleConfig, resetStyleConfig } = useReportStore()
+  const { styleConfig, updateStyleConfig, resetStyleConfig, saveStyleConfig } = useReportStore()
+  const [isSaving, setIsSaving] = useState(false)
 
   // 计算样式预览
   const previewStyle = useMemo(() => ({
@@ -178,6 +180,18 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
     })
   }, [styleConfig, updateStyleConfig])
 
+  // 处理保存为默认
+  const handleSaveAsDefault = useCallback(async () => {
+    setIsSaving(true)
+    try {
+      await saveStyleConfig('默认样式', true)
+    } catch (error: any) {
+      console.error('保存样式失败:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [saveStyleConfig])
+
   // 处理重置
   const handleReset = useCallback(() => {
     resetStyleConfig()
@@ -243,7 +257,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
                 value={styleConfig?.fontSizes?.title || defaultStyleConfig.fontSizes.title}
                 onChange={(e) => handleFontSizeChange('title', Number(e.target.value))}
               >
-                {fontSizeOptions.filter(s => s.value >= 24).map(option => (
+                {fontSizeOptions.filter(s => s.value >= 12).map(option => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
@@ -435,6 +449,13 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
         <button className="btn btn-secondary" onClick={handleReset}>
           重置为默认
         </button>
+        <button
+          className="btn btn-primary"
+          onClick={handleSaveAsDefault}
+          disabled={isSaving}
+        >
+          {isSaving ? '保存中...' : '保存为默认'}
+        </button>
         <button className="btn btn-primary" onClick={onClose}>
           完成
         </button>
@@ -523,6 +544,13 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
           font-size: 14px;
           background: #fff;
           cursor: pointer;
+          min-height: 40px;
+          line-height: 1.5;
+        }
+
+        .setting-item select option {
+          padding: 8px 12px;
+          min-height: 36px;
         }
 
         .setting-item select:hover {
