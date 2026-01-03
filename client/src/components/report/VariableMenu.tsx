@@ -18,13 +18,13 @@ const variableGroups = [
     label: '项目信息',
     icon: <Folder size={14} />,
     color: 'blue',
-    filterKeys: ['{{project_name}}', '{{project_type}}', '{{location}}']
+    filterKeys: ['{{project_name}}', '{{project_description}}', '{{project_type}}', '{{location}}']
   },
   {
     label: '投资数据',
     icon: <DollarSign size={14} />,
     color: 'green',
-    filterKeys: ['{{total_investment}}', '{{construction_years}}', '{{operation_years}}']
+    filterKeys: ['{{total_investment}}', '{{construction_years}}', '{{operation_years}}', '{{construction_unit}}']
   },
   {
     label: '财务指标',
@@ -33,24 +33,50 @@ const variableGroups = [
     filterKeys: ['{{roi}}', '{{irr}}', '{{npv}}']
   },
   {
+    label: '表格资源',
+    icon: <FileText size={14} />,
+    color: 'teal',
+    filterKeys: ['{{TABLE:investment_estimate}}', '{{TABLE:revenue_cost_detail}}', '{{TABLE:financial_indicators}}', '{{TABLE:loan_repayment}}']
+  },
+  {
+    label: '图表资源',
+    icon: <FileText size={14} />,
+    color: 'violet',
+    filterKeys: ['{{CHART:investment_composition}}', '{{CHART:revenue_trend}}', '{{CHART:cost_trend}}', '{{CHART:cash_flow_trend}}', '{{CHART:profit_analysis}}']
+  },
+  {
     label: '其他变量',
     icon: <FileText size={14} />,
     color: 'gray',
-    filterKeys: []
+    filterKeys: ['{{current_date}}']
   }
 ]
 
 // 变量详情配置
 const variableDetails: Record<string, { label: string; description: string }> = {
   '{{project_name}}': { label: '项目名称', description: '项目的名称' },
+  '{{project_description}}': { label: '项目描述', description: '项目的详细描述信息' },
   '{{project_type}}': { label: '项目类型', description: '项目类型（如：农业种植、农产品加工等）' },
   '{{location}}': { label: '项目地点', description: '项目建设的地理位置' },
   '{{total_investment}}': { label: '总投资额', description: '项目总投资金额（万元）' },
   '{{construction_years}}': { label: '建设期', description: '项目建设周期（年）' },
   '{{operation_years}}': { label: '运营期', description: '项目运营周期（年）' },
+  '{{construction_unit}}': { label: '建设单位', description: '项目承建单位' },
   '{{roi}}': { label: '投资回报率', description: '投资回报率（%）' },
   '{{irr}}': { label: '内部收益率', description: '内部收益率（%）' },
   '{{npv}}': { label: '净现值', description: '净现值（万元）' },
+  '{{current_date}}': { label: '当前日期', description: '报告生成日期' },
+  // 表格资源
+  '{{TABLE:investment_estimate}}': { label: '投资估算简表', description: '包含项目各项投资估算数据的表格' },
+  '{{TABLE:revenue_cost_detail}}': { label: '收入成本明细表', description: '包含收入和成本明细数据的表格' },
+  '{{TABLE:financial_indicators}}': { label: '财务指标汇总表', description: '包含ROI、IRR、NPV等财务指标的表格' },
+  '{{TABLE:loan_repayment}}': { label: '还款计划表', description: '包含贷款还款计划的表格' },
+  // 图表资源
+  '{{CHART:investment_composition}}': { label: '投资构成图', description: '展示投资构成比例的图表' },
+  '{{CHART:revenue_trend}}': { label: '收入趋势图', description: '展示收入变化趋势的图表' },
+  '{{CHART:cost_trend}}': { label: '成本趋势图', description: '展示成本变化趋势的图表' },
+  '{{CHART:cash_flow_trend}}': { label: '现金流趋势图', description: '展示现金流变化的图表' },
+  '{{CHART:profit_analysis}}': { label: '利润分析图', description: '展示利润分析的图表' },
 }
 
 export function VariableMenu({ editor, position, onClose }: VariableMenuProps) {

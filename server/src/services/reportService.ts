@@ -325,13 +325,15 @@ export class ReportService {
         .replace(/\{\{total_investment\}\}/g, String(project.totalInvestment || 0))
         .replace(/\{\{construction_years\}\}/g, String(project.constructionYears || 0))
         .replace(/\{\{operation_years\}\}/g, String(project.operationYears || 0))
-        .replace(/\{\{project_type\}\}/g, project.project_type || project.industry || '')
-        .replace(/\{\{industry\}\}/g, project.project_type || project.industry || '')
+        .replace(/\{\{project_type\}\}/g, project.projectType || '')
         .replace(/\{\{location\}\}/g, project.location || '')
         .replace(/\{\{roi\}\}/g, String(financialIndicators?.roi || 0))
         .replace(/\{\{irr\}\}/g, String(financialIndicators?.irr || 0))
         .replace(/\{\{npv\}\}/g, String(financialIndicators?.npv || 0))
         .replace(/\{\{current_date\}\}/g, new Date().toLocaleDateString('zh-CN'))
+      
+      // 注意：表格变量 {{TABLE:xxx}} 和图表变量 {{CHART:xxx}} 保持不变
+      // 让 LLM 生成的报告中保留这些标记，导出 Word 时会自动解析并插入实际表格
       
       return processedPrompt
     }

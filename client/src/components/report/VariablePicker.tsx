@@ -23,12 +23,33 @@ export function VariablePicker() {
             <Text size="xs" c="dimmed" mb="xs">基本信息</Text>
             <Group gap={4}>
               {availableVariables
-                .filter(v => ['{{project_name}}', '{{total_investment}}', '{{construction_years}}', '{{operation_years}}'].includes(v.key))
+                .filter(v => ['{{project_name}}', '{{project_description}}', '{{construction_unit}}', '{{total_investment}}', '{{construction_years}}', '{{operation_years}}'].includes(v.key))
                 .map((variable) => (
                   <Badge
                     key={variable.key}
                     variant="light"
                     color="blue"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleCopyVariable(variable.key)}
+                    title="点击复制"
+                  >
+                    {variable.label}
+                  </Badge>
+                ))}
+            </Group>
+          </div>
+
+          {/* 项目类型和地点 */}
+          <div>
+            <Text size="xs" c="dimmed" mb="xs">项目信息</Text>
+            <Group gap={4}>
+              {availableVariables
+                .filter(v => ['{{project_type}}', '{{location}}'].includes(v.key))
+                .map((variable) => (
+                  <Badge
+                    key={variable.key}
+                    variant="light"
+                    color="cyan"
                     style={{ cursor: 'pointer' }}
                     onClick={() => handleCopyVariable(variable.key)}
                     title="点击复制"
@@ -60,12 +81,54 @@ export function VariablePicker() {
             </Group>
           </div>
 
+          {/* 表格资源 */}
+          <div>
+            <Text size="xs" c="dimmed" mb="xs">表格资源</Text>
+            <Group gap={4}>
+              {availableVariables
+                .filter(v => v.key.startsWith('{{TABLE:'))
+                .map((variable) => (
+                  <Badge
+                    key={variable.key}
+                    variant="light"
+                    color="teal"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleCopyVariable(variable.key)}
+                    title="点击复制"
+                  >
+                    {variable.label}
+                  </Badge>
+                ))}
+            </Group>
+          </div>
+
+          {/* 图表资源 */}
+          <div>
+            <Text size="xs" c="dimmed" mb="xs">图表资源</Text>
+            <Group gap={4}>
+              {availableVariables
+                .filter(v => v.key.startsWith('{{CHART:'))
+                .map((variable) => (
+                  <Badge
+                    key={variable.key}
+                    variant="light"
+                    color="violet"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleCopyVariable(variable.key)}
+                    title="点击复制"
+                  >
+                    {variable.label}
+                  </Badge>
+                ))}
+            </Group>
+          </div>
+
           {/* 其他变量 */}
           <div>
             <Text size="xs" c="dimmed" mb="xs">其他</Text>
             <Group gap={4}>
               {availableVariables
-                .filter(v => !['{{project_name}}', '{{total_investment}}', '{{construction_years}}', '{{operation_years}}', '{{roi}}', '{{irr}}', '{{npv}}'].includes(v.key))
+                .filter(v => !['{{project_name}}', '{{project_description}}', '{{construction_unit}}', '{{total_investment}}', '{{construction_years}}', '{{operation_years}}', '{{project_type}}', '{{location}}', '{{roi}}', '{{irr}}', '{{npv}}'].includes(v.key) && !v.key.startsWith('{{TABLE:') && !v.key.startsWith('{{CHART:'))
                 .map((variable) => (
                   <Badge
                     key={variable.key}

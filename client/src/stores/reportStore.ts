@@ -16,6 +16,7 @@ import {
   TableResource,
   ChartResource
 } from '../types/report'
+import { buildAllTableResources } from '../utils/tableResourceBuilder'
 
 interface ReportState {
   // 报告信息
@@ -336,29 +337,32 @@ export const useReportStore = create<ReportState>((set, get) => ({
       const data = await reportApi.getProjectSummary(projectId)
       console.log('[ReportStore] API response:', data)
       
-      // 如果获取失败，使用空数据
+      // 获取项目数据
       if (!data) {
         console.warn('[ReportStore] Failed to get project data, API returned null/undefined')
         set({ isLoading: false, error: '无法加载项目数据' })
         return
       }
       
+      // 提取内部数据对象
+      const projectData = data.data || data
+      console.log('[ReportStore] project data:', JSON.stringify(projectData, null, 2))
+      
       // 提取可用变量
       const variables: ReportVariable[] = [
-        { key: '{{project_name}}', label: '项目名称', value: data.project?.name || '' },
-        { key: '{{construction_unit}}', label: '建设单位', value: data.project?.constructionUnit || '' },
-        { key: '{{total_investment}}', label: '总投资额', value: data.project?.totalInvestment || 0 },
-        { key: '{{construction_years}}', label: '建设期', value: data.project?.constructionYears || 0 },
-        { key: '{{operation_years}}', label: '运营期', value: data.project?.operationYears || 0 },
-        { key: '{{project_type}}', label: '项目类型', value: data.project?.project_type || data.project?.industry || '' },
-        // 保留旧变量名作为兼容
-        { key: '{{industry}}', label: '所属行业（已废弃，请使用项目类型）', value: data.project?.project_type || data.project?.industry || '' },
-        { key: '{{location}}', label: '项目地点', value: data.project?.location || '' },
+        { key: '{{project_name}}', label: '项目名称', value: projectData.project?.name || '' },
+        { key: '{{project_description}}', label: '项目描述', value: projectData.project?.description || '' },
+        { key: '{{construction_unit}}', label: '建设单位', value: projectData.project?.constructionUnit || '' },
+        { key: '{{total_investment}}', label: '总投资额', value: projectData.project?.totalInvestment || 0 },
+        { key: '{{construction_years}}', label: '建设期', value: projectData.project?.constructionYears || 0 },
+        { key: '{{operation_years}}', label: '运营期', value: projectData.project?.operationYears || 0 },
+        { key: '{{project_type}}', label: '项目类型', value: projectData.project?.project_type || '' },
+        { key: '{{location}}', label: '项目地点', value: projectData.project?.location || '' },
         { key: '{{current_date}}', label: '当前日期', value: new Date().toLocaleDateString('zh-CN') },
         // 财务指标变量
-        { key: '{{roi}}', label: '投资回报率', value: data.financialIndicators?.roi || 0 },
-        { key: '{{irr}}', label: '内部收益率', value: data.financialIndicators?.irr || 0 },
-        { key: '{{npv}}', label: '净现值', value: data.financialIndicators?.npv || 0 },
+        { key: '{{roi}}', label: '投资回报率', value: projectData.financialIndicators?.roi || 0 },
+        { key: '{{irr}}', label: '内部收益率', value: projectData.financialIndicators?.irr || 0 },
+        { key: '{{npv}}', label: '净现值', value: projectData.financialIndicators?.npv || 0 },
         // 表格变量
         { key: '{{TABLE:investment_estimate}}', label: '投资估算简表', category: 'table' },
         { key: '{{TABLE:revenue_cost_detail}}', label: '收入成本明细表', category: 'table' },
@@ -372,11 +376,16 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{CHART:profit_analysis}}', label: '利润分析图', category: 'chart' },
       ]
       
-      set({ 
-        projectData: data,
+      // 构建表格资源
+      const tables = buildAllTableResources(projectData)
+      console.log('[ReportStore] built tables:', JSON.stringify(tables, null, 2))
+      
+      set((state) => ({ 
+        projectData: projectData,
         availableVariables: variables,
+        resources: { ...state.resources, tables },
         isLoading: false 
-      })
+      }))
     } catch (error: any) {
       console.error('[ReportStore] Error loading project data:', error)
       set({ error: error.message || '加载项目数据失败', isLoading: false })
@@ -494,6 +503,10 @@ export const useReportStore = create<ReportState>((set, get) => ({
   
   exportToWord: async () => {
     const { reportId, reportTitle, sections, styleConfig, resources, reportContent } = get()
+    
+    console.log('[exportToWord] resources:', JSON.stringify(resources, null, 2))
+    console.log('[exportToWord] tables:', JSON.stringify(resources?.tables, null, 2))
+    
     if (!reportId) {
       set({ error: '请先生成报告' })
       return
@@ -517,11 +530,19 @@ export const useReportStore = create<ReportState>((set, get) => ({
           : [{ id: 'main', title: '报告正文', content: reportContent, level: 1 }]
       }
 
+      // 确保 resources 中的 tables 不为空
+      const finalResources = {
+        tables: resources?.tables || {},
+        charts: resources?.charts || {}
+      }
+      
+      console.log('[exportToWord] finalResources:', JSON.stringify(finalResources, null, 2))
+
       await reportApi.exportWord({
         title: reportTitle,
         sections: sectionsWithContent,
         styleConfig,
-        resources
+        resources: finalResources
       })
     } catch (error: any) {
       console.error('导出失败:', error)
