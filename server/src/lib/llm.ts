@@ -489,10 +489,10 @@ export function generateInvestmentPrompt(projectInfo: {
   projectName: string
   totalInvestment: number
   constructionYears: number
-  industry?: string
+  project_type?: string
 }): LLMMessage[] {
   const systemPrompt = `你是一个专业的投资估算专家，请根据项目信息生成详细的工程费用项。
-
+ 
 请按照以下格式输出JSON：
 {
   "constructionCost": {
@@ -528,15 +528,15 @@ export function generateInvestmentPrompt(projectInfo: {
 4. 只返回JSON格式，不要包含其他文字`
 
   const userPrompt = `请为以下项目生成详细的工程费用项：
-
+ 
 项目名称：${projectInfo.projectName}
 总投资：${projectInfo.totalInvestment}万元
 建设年限：${projectInfo.constructionYears}年
-${projectInfo.industry ? `行业类型：${projectInfo.industry}` : ''}
-
+${projectInfo.project_type ? `项目类型：${projectInfo.project_type}` : ''}
+ 
 请根据项目特点生成合理的费用分解。`
 
- return [
+  return [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt }
   ]
@@ -646,7 +646,7 @@ export function subdivideEngineeringItemPrompt(
 2. 四个费用占比之和必须等于1 (construction_ratio + equipment_ratio + installation_ratio + other_ratio = 1)
 3. 各费用 = 总价 × 对应占比
 4. 所有三级子项的总价之和应等于二级子项的总金额
-5. 单价以“元”为单位，不是万元
+5. 单价以"元"为单位，不是万元
 6. **数值不要太整：工程量和单价应带有小数，避免整数整十整百的数值，使数据更符合实际工程情况。**
 
 费用占比参考：
@@ -766,6 +766,8 @@ export function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[] {
 Please严格按照 following JSON format output,all fields must be filled:
 {
   "project_name": "项目名称",
+  "location": "项目地点",
+  "project_type": "项目类型",
   "total_investment": 数值(单位:万元),
   "construction_years": 整数(建设年限,单位:年),
   "operation_years": 整数(运营年限,单位:年),
@@ -817,7 +819,7 @@ Guangxi Land Acquisition and Leasing Price Range (2024-2025, unit: yuan/acre)
 
 一、Land acquisition price range (district comprehensive land price, including land compensation fee + resettlement allowance)
 
-| Region    | Basic farmland      | Construction land      | Unutilized land      | Typical area           |
+| Region    | Basic农田      | Construction land      | Unutilized land      | Typical area           |
 |---------|---------------|---------------|---------------|--------------------|
 | Nanning    | 3.5~4.8万     | 1.4~1.8万     | 0.4~1.8万     | Liangqing District, Wuming County     |
 | Liuzhou    | 3.8~4.4万     | 1.4~1.6万     | 0.35~1.6万    | City area, Liuzhou District     |
@@ -853,17 +855,16 @@ Guangxi Land Acquisition and Leasing Price Range (2024-2025, unit: yuan/acre)
 | Laibin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
 | Chongzuo    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Pingxiang City Industrial Land 1.5万/acre/year     |
 
-
-
-
+ 
+ 
 `
-
+ 
   const userPrompt = `Please analyze the following project information and extract key data:
-
+ 
 ${projectInfo}
-
+ 
 Please return JSON format structured data.`
-
+ 
   return [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt }

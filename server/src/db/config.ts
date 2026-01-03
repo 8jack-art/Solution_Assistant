@@ -54,6 +54,10 @@ async function ensureFields() {
     "ALTER TABLE investment_projects ADD COLUMN land_remark TEXT",
     "ALTER TABLE investment_projects ADD COLUMN seedling_compensation DECIMAL(15,4) DEFAULT 0",
     "ALTER TABLE investment_projects ADD COLUMN lease_seedling_compensation DECIMAL(15,4) DEFAULT 0",
+    // 项目地点和类型字段
+    "ALTER TABLE investment_projects ADD COLUMN location VARCHAR(255) DEFAULT '' COMMENT '项目地点'",
+    "ALTER TABLE investment_projects ADD COLUMN project_type VARCHAR(100) DEFAULT '' COMMENT '项目类型（曾用名：所属行业）'",
+    "ALTER TABLE investment_projects ADD COLUMN industry VARCHAR(100) DEFAULT '' COMMENT '所属行业（已废弃，保留用于兼容旧数据）'",
     "ALTER TABLE investment_estimates ADD COLUMN custom_land_cost DECIMAL(15,2) DEFAULT NULL COMMENT '自定义土地费用（万元）'",
     // 报告表字段
     "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS error_message TEXT COMMENT '错误信息'",

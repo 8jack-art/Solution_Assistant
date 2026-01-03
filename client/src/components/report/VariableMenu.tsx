@@ -18,7 +18,7 @@ const variableGroups = [
     label: '项目信息',
     icon: <Folder size={14} />,
     color: 'blue',
-    filterKeys: ['{{project_name}}', '{{industry}}', '{{location}}']
+    filterKeys: ['{{project_name}}', '{{project_type}}', '{{location}}']
   },
   {
     label: '投资数据',
@@ -43,7 +43,7 @@ const variableGroups = [
 // 变量详情配置
 const variableDetails: Record<string, { label: string; description: string }> = {
   '{{project_name}}': { label: '项目名称', description: '项目的名称' },
-  '{{industry}}': { label: '所属行业', description: '项目所属的行业分类' },
+  '{{project_type}}': { label: '项目类型', description: '项目类型（如：农业种植、农产品加工等）' },
   '{{location}}': { label: '项目地点', description: '项目建设的地理位置' },
   '{{total_investment}}': { label: '总投资额', description: '项目总投资金额（万元）' },
   '{{construction_years}}': { label: '建设期', description: '项目建设周期（年）' },

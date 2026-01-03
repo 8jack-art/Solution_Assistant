@@ -270,7 +270,7 @@ export class ReportService {
           totalInvestment: project.total_investment,
           constructionYears: project.construction_years,
           operationYears: project.operation_years,
-          industry: project.industry || '',
+          projectType: project.project_type || project.industry || '',
           location: project.location || ''
         },
         investment: investmentData,
@@ -325,7 +325,8 @@ export class ReportService {
         .replace(/\{\{total_investment\}\}/g, String(project.totalInvestment || 0))
         .replace(/\{\{construction_years\}\}/g, String(project.constructionYears || 0))
         .replace(/\{\{operation_years\}\}/g, String(project.operationYears || 0))
-        .replace(/\{\{industry\}\}/g, project.industry || '')
+        .replace(/\{\{project_type\}\}/g, project.project_type || project.industry || '')
+        .replace(/\{\{industry\}\}/g, project.project_type || project.industry || '')
         .replace(/\{\{location\}\}/g, project.location || '')
         .replace(/\{\{roi\}\}/g, String(financialIndicators?.roi || 0))
         .replace(/\{\{irr\}\}/g, String(financialIndicators?.irr || 0))
@@ -347,7 +348,7 @@ export class ReportService {
 总投资额：${project.totalInvestment || 0}万元
 建设期：${project.constructionYears || 0}年
 运营期：${project.operationYears || 0}年
-所属行业：${project.industry || ''}
+项目类型：${project.projectType || ''}
 项目地点：${project.location || ''}
 `
     }
@@ -399,7 +400,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
 总投资额：${project.totalInvestment || 0}万元
 建设期：${project.constructionYears || 0}年
 运营期：${project.operationYears || 0}年
-所属行业：${project.industry || ''}
+项目类型：${project.projectType || ''}
 项目地点：${project.location || ''}`
   }
 

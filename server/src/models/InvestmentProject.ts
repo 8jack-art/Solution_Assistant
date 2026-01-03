@@ -46,10 +46,10 @@ export class InvestmentProjectModel {
         `INSERT INTO investment_projects
          (id, user_id, project_name, total_investment, project_info, status,
           construction_years, operation_years, loan_ratio, loan_interest_rate,
-          construction_unit, is_locked, locked_at,
+          construction_unit, location, project_type, is_locked, locked_at,
           land_mode, land_area, land_unit_price, land_cost, land_remark,
           land_lease_area, land_lease_unit_price, land_purchase_area, land_purchase_unit_price, seedling_compensation, lease_seedling_compensation)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
          [
           id,
           projectData.user_id,
@@ -62,6 +62,8 @@ export class InvestmentProjectModel {
           projectData.loan_ratio,
           projectData.loan_interest_rate,
           projectData.construction_unit || '',
+           projectData.location || '',
+           projectData.project_type || '',
           projectData.is_locked,
           projectData.locked_at || null,
           projectData.land_mode || 'A',

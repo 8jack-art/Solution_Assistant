@@ -30,6 +30,8 @@ const ProjectForm: React.FC = () => {
     loan_ratio: 80, // 百分数形式，默认80%
     loan_interest_rate: 4.9, // 百分数形式
     construction_unit: '', // 建设单位
+    location: '', // 项目地点
+    project_type: '', // 项目类型
     // 用地信息
     land_mode: 'A' as 'A' | 'B' | 'C' | 'D',
     land_area: 0,
@@ -155,6 +157,8 @@ const ProjectForm: React.FC = () => {
           loan_ratio: projectData.loan_ratio * 100, // 转换为百分数
           loan_interest_rate: projectData.loan_interest_rate * 100, // 转换为百分数
           construction_unit: projectData.construction_unit || '', // 建设单位
+          location: projectData.location || '', // 项目地点
+          project_type: projectData.project_type || projectData.industry || '', // 项目类型（兼容旧字段）
           land_mode: projectData.land_mode || 'A',
           land_area: projectData.land_area || 0,
           land_unit_price: projectData.land_unit_price || 0,
@@ -258,6 +262,8 @@ const ProjectForm: React.FC = () => {
         setFormData(prev => ({
           ...prev,
           project_name: analyzedData.project_name || prev.project_name,
+          location: analyzedData.location || prev.location,
+          project_type: analyzedData.project_type || analyzedData.industry || prev.project_type,
           total_investment: analyzedData.total_investment || prev.total_investment,
           construction_years: analyzedData.construction_years || prev.construction_years,
           operation_years: analyzedData.operation_years || prev.operation_years,
@@ -265,6 +271,8 @@ const ProjectForm: React.FC = () => {
           loan_interest_rate: analyzedData.loan_interest_rate || prev.loan_interest_rate,
         }))
         const summary = `项目：${analyzedData.project_name || '未识别'}
+地点：${analyzedData.location || '未识别'}
+行业：${analyzedData.project_type || analyzedData.industry || '未识别'}
 投资：${analyzedData.total_investment || 0}万元
 建设期：${analyzedData.construction_years || 3}年
 运营期：${analyzedData.operation_years || 17}年
@@ -501,7 +509,28 @@ const ProjectForm: React.FC = () => {
                         label="建设单位"
                         value={formData.construction_unit}
                         onChange={(e) => setFormData({ ...formData, construction_unit: e.target.value })}
-                        required
+                        size="md"
+                        styles={{
+                          input: { height: '42px', fontSize: '15px' }
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <TextInput
+                        label="项目地点"
+                        value={formData.location}
+                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                        size="md"
+                        styles={{
+                          input: { height: '42px', fontSize: '15px' }
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <TextInput
+                        label="项目类型"
+                        value={formData.project_type}
+                        onChange={(e) => setFormData({ ...formData, project_type: e.target.value })}
                         size="md"
                         styles={{
                           input: { height: '42px', fontSize: '15px' }

@@ -350,7 +350,9 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{total_investment}}', label: '总投资额', value: data.project?.totalInvestment || 0 },
         { key: '{{construction_years}}', label: '建设期', value: data.project?.constructionYears || 0 },
         { key: '{{operation_years}}', label: '运营期', value: data.project?.operationYears || 0 },
-        { key: '{{industry}}', label: '所属行业', value: data.project?.industry || '' },
+        { key: '{{project_type}}', label: '项目类型', value: data.project?.project_type || data.project?.industry || '' },
+        // 保留旧变量名作为兼容
+        { key: '{{industry}}', label: '所属行业（已废弃，请使用项目类型）', value: data.project?.project_type || data.project?.industry || '' },
         { key: '{{location}}', label: '项目地点', value: data.project?.location || '' },
         { key: '{{current_date}}', label: '当前日期', value: new Date().toLocaleDateString('zh-CN') },
         // 财务指标变量

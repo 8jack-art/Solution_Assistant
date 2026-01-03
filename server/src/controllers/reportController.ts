@@ -777,7 +777,7 @@ export class ReportController {
             totalInvestment: project.total_investment,
             constructionYears: project.construction_years,
             operationYears: project.operation_years,
-            industry: project.industry || '',
+            industry: project.project_type || '',
             location: project.location || '',
             constructionUnit: project.construction_unit || ''
           },
