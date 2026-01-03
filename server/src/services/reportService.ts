@@ -587,7 +587,8 @@ ${JSON.stringify(summary, null, 2)}
           new TextRun({
             text: title,
             bold: true,
-            size: 32
+            size: 32,
+            color: '000000'
           })
         ],
         heading: HeadingLevel.TITLE,
@@ -618,7 +619,8 @@ ${JSON.stringify(summary, null, 2)}
               new TextRun({
                 text: trimmedLine.substring(2),
                 bold: true,
-                size: 28
+                size: 28,
+                color: '000000'
               })
             ],
             heading: HeadingLevel.HEADING_1,
@@ -632,7 +634,8 @@ ${JSON.stringify(summary, null, 2)}
               new TextRun({
                 text: trimmedLine.substring(3),
                 bold: true,
-                size: 26
+                size: 26,
+                color: '000000'
               })
             ],
             heading: HeadingLevel.HEADING_2,
@@ -646,7 +649,8 @@ ${JSON.stringify(summary, null, 2)}
               new TextRun({
                 text: trimmedLine.substring(4),
                 bold: true,
-                size: 24
+                size: 24,
+                color: '000000'
               })
             ],
             heading: HeadingLevel.HEADING_3,
@@ -660,7 +664,8 @@ ${JSON.stringify(summary, null, 2)}
             children: [
               new TextRun({
                 text: '• ' + trimmedLine.substring(2),
-                size: 22
+                size: 22,
+                color: '000000'
               })
             ],
             spacing: { before: 100, after: 100 }
@@ -673,7 +678,8 @@ ${JSON.stringify(summary, null, 2)}
             children: [
               new TextRun({
                 text: trimmedLine,
-                size: 22
+                size: 22,
+                color: '000000'
               })
             ],
             spacing: { before: 100, after: 100 }
@@ -686,7 +692,8 @@ ${JSON.stringify(summary, null, 2)}
             children: [
               new TextRun({
                 text: trimmedLine,
-                size: 22
+                size: 22,
+                color: '000000'
               })
             ],
             spacing: { before: 100, after: 200 }
@@ -1063,7 +1070,8 @@ ${JSON.stringify(summary, null, 2)}
           text: text,
           bold: bold || isHeading,
           size: fontSize,
-          font: isHeading ? styleConfig.fonts.heading : styleConfig.fonts.body
+          font: isHeading ? styleConfig.fonts.heading : styleConfig.fonts.body,
+          color: '000000'
         })
       ],
       heading: isHeading ? headingLevel : undefined,
@@ -1110,7 +1118,8 @@ ${JSON.stringify(summary, null, 2)}
                   text: col,
                   bold: true,
                   size: (styleConfig.fontSizes.tableHeader || 20) * 2,
-                  font: styleConfig.fonts.heading
+                  font: styleConfig.fonts.heading,
+                  color: '000000'
                 })
               ],
               alignment: AlignmentType.CENTER
@@ -1136,7 +1145,8 @@ ${JSON.stringify(summary, null, 2)}
                   new TextRun({
                     text: String(row[col] ?? ''),
                     size: (styleConfig.fontSizes.tableBody || 20) * 2,
-                    font: styleConfig.fonts.body
+                    font: styleConfig.fonts.body,
+                    color: '000000'
                   })
                 ],
                 alignment: AlignmentType.LEFT
