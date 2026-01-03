@@ -266,7 +266,6 @@ export class ReportService {
           id: project.id,
           name: project.project_name,
           description: project.project_info || '',
-          constructionUnit: project.construction_unit || '',
           totalInvestment: project.total_investment,
           constructionYears: project.construction_years,
           operationYears: project.operation_years,
@@ -288,194 +287,31 @@ export class ReportService {
 
   /**
    * 构建包含项目数据的提示词
-   * 
-   * 新的设计：完全由提示词模板控制数据注入
-   * 
-   * 可用的数据标记：
-   * - {{PROJECT}} - 项目基本信息
-   * - {{INVESTMENT}} - 投资估算数据
-   * - {{REVENUE_COST}} - 收入成本数据
-   * - {{FINANCIAL}} - 关键财务指标
-   * - {{ALL_DATA}} - 所有数据（相当于原来的完整注入）
-   * 
-   * 示例：
-   * "请分析 {{PROJECT}} 中的项目情况，投资估算为 {{INVESTMENT}}"
    */
   static buildDataAwarePrompt(basePrompt: string, projectData: any): string {
     const { project, investment, revenueCost, financialIndicators } = projectData
     
-    // 检查是否使用简化的数据标记
-    const hasProjectMarker = basePrompt.includes('{{PROJECT}}')
-    const hasInvestmentMarker = basePrompt.includes('{{INVESTMENT}}')
-    const hasRevenueCostMarker = basePrompt.includes('{{REVENUE_COST}}')
-    const hasFinancialMarker = basePrompt.includes('{{FINANCIAL}}')
-    const hasAllDataMarker = basePrompt.includes('{{ALL_DATA}}')
-    
-    // 如果模板中没有任何数据标记，保持原有行为（向后兼容）
-    if (!hasProjectMarker && !hasInvestmentMarker && !hasRevenueCostMarker && 
-        !hasFinancialMarker && !hasAllDataMarker) {
-      // 检查是否包含旧版变量（如 {{project_name}} 等），如果有则进行变量替换
-      let processedPrompt = basePrompt
-      
-      // 替换单个变量
-      processedPrompt = processedPrompt
-        .replace(/\{\{project_name\}\}/g, project.name || '')
-        .replace(/\{\{project_description\}\}/g, project.description || '')
-        .replace(/\{\{construction_unit\}\}/g, project.constructionUnit || '')
-        .replace(/\{\{total_investment\}\}/g, String(project.totalInvestment || 0))
-        .replace(/\{\{construction_years\}\}/g, String(project.constructionYears || 0))
-        .replace(/\{\{operation_years\}\}/g, String(project.operationYears || 0))
-        .replace(/\{\{industry\}\}/g, project.industry || '')
-        .replace(/\{\{location\}\}/g, project.location || '')
-        .replace(/\{\{roi\}\}/g, String(financialIndicators?.roi || 0))
-        .replace(/\{\{irr\}\}/g, String(financialIndicators?.irr || 0))
-        .replace(/\{\{npv\}\}/g, String(financialIndicators?.npv || 0))
-        .replace(/\{\{current_date\}\}/g, new Date().toLocaleDateString('zh-CN'))
-      
-      return processedPrompt
-    }
-    
-    // 构建注入的数据块
-    let injectedData = ''
-    
-    // 注入项目基本信息
-    if (hasProjectMarker || hasAllDataMarker) {
-      injectedData += `
+    return `${basePrompt}
+
 === 项目基本信息 ===
-项目名称：${project.name || ''}
-项目描述：${project.description || ''}
-总投资额：${project.totalInvestment || 0}万元
-建设期：${project.constructionYears || 0}年
-运营期：${project.operationYears || 0}年
-所属行业：${project.industry || ''}
-项目地点：${project.location || ''}
-`
-    }
-    
-    // 注入投资估算数据
-    if (hasInvestmentMarker || hasAllDataMarker) {
-      // 对投资估算数据进行摘要处理，避免过长的 JSON
-      const investmentSummary = this.summarizeInvestmentData(investment)
-      injectedData += `
+项目名称：${project.name}
+项目描述：${project.description}
+总投资额：${project.totalInvestment}万元
+建设期：${project.constructionYears}年
+运营期：${project.operationYears}年
+所属行业：${project.industry}
+项目地点：${project.location}
+
 === 投资估算数据 ===
-${investmentSummary}
-`
-    }
-    
-    // 注入收入成本数据
-    if (hasRevenueCostMarker || hasAllDataMarker) {
-      const revenueCostSummary = this.summarizeRevenueCostData(revenueCost)
-      injectedData += `
+${JSON.stringify(investment, null, 2)}
+
 === 收入成本数据 ===
-${revenueCostSummary}
-`
-    }
-    
-    // 注入财务指标
-    if (hasFinancialMarker || hasAllDataMarker) {
-      injectedData += `
+${JSON.stringify(revenueCost, null, 2)}
+
 === 关键财务指标 ===
 ${JSON.stringify(financialIndicators, null, 2)}
-`
-    }
-    
-    // 替换模板中的数据标记为实际数据
-    let processedPrompt = basePrompt
-      .replace(/\{\{PROJECT\}\}/g, injectedData.includes('项目基本信息') ? this.formatProjectBasic(project) : '')
-      .replace(/\{\{INVESTMENT\}\}/g, injectedData.includes('投资估算数据') ? this.summarizeInvestmentData(investment) : '')
-      .replace(/\{\{REVENUE_COST\}\}/g, injectedData.includes('收入成本数据') ? this.summarizeRevenueCostData(revenueCost) : '')
-      .replace(/\{\{FINANCIAL\}\}/g, injectedData.includes('关键财务指标') ? JSON.stringify(financialIndicators, null, 2) : '')
-      .replace(/\{\{ALL_DATA\}\}/g, injectedData.trim())
-    
-    return processedPrompt
-  }
 
-  /**
-   * 格式化项目基本信息为文本
-   */
-  private static formatProjectBasic(project: any): string {
-    return `项目名称：${project.name || ''}
-项目描述：${project.description || ''}
-总投资额：${project.totalInvestment || 0}万元
-建设期：${project.constructionYears || 0}年
-运营期：${project.operationYears || 0}年
-所属行业：${project.industry || ''}
-项目地点：${project.location || ''}`
-  }
-
-  /**
-   * 摘要投资估算数据，减少 token 使用
-   */
-  private static summarizeInvestmentData(investment: any): string {
-    if (!investment || Object.keys(investment).length === 0) {
-      return '无投资估算数据'
-    }
-    
-    // 如果数据量小，直接返回 JSON
-    const jsonStr = JSON.stringify(investment, null, 2)
-    if (jsonStr.length < 2000) {
-      return jsonStr
-    }
-    
-    // 数据量大，生成摘要
-    const summary: any = {
-      _note: '原始数据过大，此为摘要',
-      总投资: investment.totalInvestment || investment.total || '未统计',
-    }
-    
-    // 提取主要分类的汇总
-    if (investment.landCost) summary.土地费用 = '[详见原始数据]'
-    if (investment.constructionCost) summary.建设投资 = '[详见原始数据]'
-    if (investment.equipmentCost) summary.设备购置 = '[详见原始数据]'
-    if (investment.installCost) summary.安装工程 = '[详见原始数据]'
-    if (investment.otherCost) summary.其他费用 = '[详见原始数据]'
-    if (investment.contingency) summary.预备费 = '[详见原始数据]'
-    
-    return `原始投资估算数据量较大，以下为关键摘要：
-${JSON.stringify(summary, null, 2)}
-
-如需完整数据，请使用 {{ALL_DATA}} 标记获取全部原始 JSON 数据。`
-  }
-
-  /**
-   * 摘要收入成本数据，减少 token 使用
-   */
-  private static summarizeRevenueCostData(revenueCost: any): string {
-    if (!revenueCost || Object.keys(revenueCost).length === 0) {
-      return '无收入成本数据'
-    }
-    
-    const summary: any = { _note: '原始数据过大，此为摘要' }
-    
-    // 提取收入汇总
-    if (revenueCost.revenueItems && Array.isArray(revenueCost.revenueItems)) {
-      const totalRevenue = revenueCost.revenueItems.reduce((sum: number, item: any) => 
-        sum + (item.annualRevenue || 0), 0)
-      summary.年收入合计 = `${totalRevenue}万元`
-      summary.收入项目数 = revenueCost.revenueItems.length
-    }
-    
-    // 提取成本汇总
-    if (revenueCost.costItems && Array.isArray(revenueCost.costItems)) {
-      const totalCost = revenueCost.costItems.reduce((sum: number, item: any) => 
-        sum + (item.annualCost || 0), 0)
-      summary.年成本合计 = `${totalCost}万元`
-      summary.成本项目数 = revenueCost.costItems.length
-    }
-    
-    // 提取财务指标
-    if (revenueCost.financialIndicators) {
-      summary.财务指标 = {
-        ROI: revenueCost.financialIndicators.roi,
-        IRR: revenueCost.financialIndicators.irr,
-        NPV: revenueCost.financialIndicators.npv
-      }
-    }
-    
-    return `原始收入成本数据量较大，以下为关键摘要：
-${JSON.stringify(summary, null, 2)}
-
-如需完整数据，请使用 {{ALL_DATA}} 标记获取全部原始 JSON 数据。`
+请基于以上数据生成专业的投资方案报告，确保数据准确性和分析深度。`
   }
 
   /**
