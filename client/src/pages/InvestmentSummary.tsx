@@ -22,7 +22,7 @@ import {
   Switch,
 } from '@mantine/core'
 import { IconEdit, IconChartBar, IconCurrencyDollar } from '@tabler/icons-react'
-import { Trash, Check, X, Wand2, RotateCcw, Bot, Clipboard, Pencil, MapPin, DollarSign, ZoomIn, RotateCw, FileSpreadsheet, Info } from 'lucide-react'
+import { Trash, Check, X, Wand2, RotateCcw, Bot, Clipboard, Pencil, MapPin, DollarSign, ZoomIn, RotateCw, FileSpreadsheet, Info, Receipt } from 'lucide-react'
 import { notifications } from '@mantine/notifications'
 
 import LoadingOverlay from '@/components/LoadingOverlay'
@@ -182,10 +182,15 @@ const buildFullEstimateStructure = (estimateData: any, projectData: any): Invest
     贷款总额: estimateData.loanAmount || 0,
     年利率: projectData?.loan_interest_rate || 0.049,
     建设期年限: projectData?.construction_years || 3,
+    贷款期限: projectData?.operation_years || 17, // 添加贷款期限字段，默认运营期年限
     分年利息: estimateData.construction_interest_details?.分年数据 || [],
     合计: constructionInterest,
     占总投资比例: totalInvestment > 0 ? constructionInterest / totalInvestment : 0
   }
+  
+  // 添加调试日志
+  console.log('[buildFullEstimateStructure] construction_interest_details:', estimateData.construction_interest_details);
+  console.log('[buildFullEstimateStructure] 分年利息数据条数:', partF.分年利息?.length || 0);
   
   // G部分：总投资
   const partG: InvestmentItem = {
@@ -349,6 +354,58 @@ const InvestmentSummary: React.FC = () => {
     ratio: { width: '65px', textAlign: 'center' as const },
     remark: { width: '250px' }
   }
+
+  // 预处理表格计算数据（将计算逻辑前置，避免JSX中直接计算）
+  const processedTableData = React.useMemo(() => {
+    if (!estimate) return null
+    
+    const partATotal = {
+      construction: estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0,
+      equipment: estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0,
+      installation: estimate.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0,
+      other: estimate.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0,
+    }
+    
+    // 内联计算B部分合计
+    const partBTotal = estimate.partB.children?.reduce((sum, item) => {
+      const otherCost = item.其它费用 ?? item.合计 ?? 0
+      return sum + otherCost
+    }, 0) || 0
+    
+    const partCTotalOther = partATotal.other + partBTotal
+    
+    return {
+      partATotal,
+      partBTotal,
+      partCTotalOther,
+      partGTotal: estimate.partG?.合计 || 0
+    }
+  }, [estimate])
+  
+  // 处理三级子项计算
+  const processThirdLevelItems = React.useMemo(() => {
+    if (!estimate?.partA?.children) return {}
+    
+    const result: Record<number, any[]> = {}
+    Object.keys(thirdLevelItems).forEach(key => {
+      const parentIndex = parseInt(key)
+      const thirdItems = thirdLevelItems[parentIndex]
+      if (thirdItems && thirdItems.length > 0) {
+        result[parentIndex] = thirdItems.map(subItem => {
+          const totalPrice = (subItem.quantity * subItem.unit_price) / 10000
+          return {
+            ...subItem,
+            totalPrice,
+            constructionCost: totalPrice * subItem.construction_ratio,
+            equipmentCost: totalPrice * subItem.equipment_ratio,
+            installationCost: totalPrice * subItem.installation_ratio,
+            otherCost: totalPrice * subItem.other_ratio
+          }
+        })
+      }
+    })
+    return result
+  }, [estimate?.partA?.children, thirdLevelItems])
 
   // 格式化数量显示：整数型单位显示整数，其他显示2位小数
   const formatQuantity = (quantity: number, unit: string): string => {
@@ -1322,6 +1379,12 @@ const InvestmentSummary: React.FC = () => {
             estimateData.construction_interest_details = estimateResponse.data.estimate.construction_interest_details;
             estimateData.loan_repayment_schedule_simple = estimateResponse.data.estimate.loan_repayment_schedule_simple;
             estimateData.loan_repayment_schedule_detailed = estimateResponse.data.estimate.loan_repayment_schedule_detailed;
+            
+            // 添加调试日志
+            console.log('[数据加载] 数据库中的 construction_interest_details:', estimateResponse.data.estimate.construction_interest_details);
+            console.log('[数据加载] 数据库中的 loan_repayment_schedule_simple:', estimateResponse.data.estimate.loan_repayment_schedule_simple);
+          } else {
+            console.log('[数据加载] estimateResponse.data.estimate 不存在');
           }
           
           // 使用 setTimeout 确保状态更新触发渲染
@@ -2847,12 +2910,12 @@ const InvestmentSummary: React.FC = () => {
         {estimate && (
           <div style={{
             position: 'fixed',
-            left: 'calc(50% - 640px)',  // 根据表格宽度(1200px)计算位置，稍微向右靠近表格
+            left: 'calc(50% - 740px)',  // 位于投资估算简表卡片左侧边缘位置
             top: '280px',
             zIndex: 100,
             display: 'flex',
             flexDirection: 'column',
-            gap: '10px',
+            gap: '8px',  // 缩小间距至8px
             alignItems: 'center'
           }}>
           {/* AI分析子项 */}
@@ -2860,20 +2923,20 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={analyzeWithAI}
               disabled={analyzingAI || generating}
-              size={50}
-              radius={50}
+              size={40}  // 缩小20%：50→40
+              radius={40}
               style={{ 
                 backgroundColor: analyzingAI ? '#C9CDD4' : '#FFFFFF',
                 color: analyzingAI ? '#FFFFFF' : '#165DFF',
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '50px',
-                height: '50px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%'
               }}
             >
-              <Bot size={30} />
+              <Bot size={24} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
           
@@ -2882,20 +2945,20 @@ const InvestmentSummary: React.FC = () => {
               <ActionIcon
                 onClick={() => setShowAIPreview(true)}
                 disabled={generating}
-                size={50}
-                radius={50}
+                size={40}  // 缩小20%：50→40
+                radius={40}
                 style={{ 
                   backgroundColor: '#FFFFFF',
                   color: '#52C41A',
                   border: '1px solid #E5E6EB',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                   transition: 'all 0.2s ease',
-                  width: '50px',
-                  height: '50px',
+                  width: '40px',  // 缩小20%：50→40
+                  height: '40px',  // 缩小20%：50→40
                   borderRadius: '50%'
                 }}
               >
-                <Clipboard size={30} />
+                <Clipboard size={24} />  {/* 缩小20%：30→24 */}
               </ActionIcon>
             </Tooltip>
           )}
@@ -2906,20 +2969,20 @@ const InvestmentSummary: React.FC = () => {
                 <ActionIcon
                   onClick={openEditSubItems}
                   disabled={generating}
-                  size={50}
-                  radius={50}
+                  size={40}  // 缩小20%：50→40
+                  radius={40}
                   style={{ 
                     backgroundColor: '#FFFFFF',
                     color: '#FF7A00',
                     border: '1px solid #E5E6EB',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                     transition: 'all 0.2s ease',
-                    width: '50px',
-                    height: '50px',
+                    width: '40px',  // 缩小20%：50→40
+                    height: '40px',  // 缩小20%：50→40
                     borderRadius: '50%'
                   }}
                 >
-                  <Pencil size={30} />
+                  <Pencil size={24} />  {/* 缩小20%：30→24 */}
                 </ActionIcon>
               </Tooltip>
               
@@ -2927,20 +2990,20 @@ const InvestmentSummary: React.FC = () => {
                 <ActionIcon
                   onClick={openEditLandCost}
                   disabled={generating}
-                  size={50}
-                  radius={50}
+                  size={40}  // 缩小20%：50→40
+                  radius={40}
                   style={{ 
                     backgroundColor: '#FFFFFF',
                     color: '#722ED1',
                     border: '1px solid #E5E6EB',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                     transition: 'all 0.2s ease',
-                    width: '50px',
-                    height: '50px',
+                    width: '40px',  // 缩小20%：50→40
+                    height: '40px',  // 缩小20%：50→40
                     borderRadius: '50%'
                   }}
                 >
-                  <DollarSign size={30} />
+                  <MapPin size={24} />  {/* 缩小20%：30→24 */}
                 </ActionIcon>
               </Tooltip>
               
@@ -2948,20 +3011,20 @@ const InvestmentSummary: React.FC = () => {
                 <ActionIcon
                   onClick={openEditLoan}
                   disabled={generating}
-                  size={50}
-                  radius={50}
+                  size={40}  // 缩小20%：50→40
+                  radius={40}
                   style={{ 
                     backgroundColor: '#FFFFFF',
                     color: '#52C41A',
                     border: '1px solid #E5E6EB',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                     transition: 'all 0.2s ease',
-                    width: '50px',
-                    height: '50px',
+                    width: '40px',  // 缩小20%：50→40
+                    height: '40px',  // 缩小20%：50→40
                     borderRadius: '50%'
                   }}
                 >
-                  <DollarSign size={30} />
+                  <IconCurrencyDollar size={24} stroke={1.5} />  {/* 缩小20%：30→24 */}
                 </ActionIcon>
               </Tooltip>
             </>
@@ -2973,30 +3036,30 @@ const InvestmentSummary: React.FC = () => {
               <ActionIcon
                 onClick={openSubdivideModal}
                 disabled={generating || analyzingSubItem}
-                size={50}
-                radius={50}
+                size={40}  // 缩小20%：50→40
+                radius={40}
                 style={{ 
                   backgroundColor: '#FFFFFF',
                   color: '#1890FF',
                   border: '1px solid #E5E6EB',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                   transition: 'all 0.2s ease',
-                  width: '50px',
-                  height: '50px',
+                  width: '40px',  // 缩小20%：50→40
+                  height: '40px',  // 缩小20%：50→40
                   borderRadius: '50%'
                 }}
               >
-                <ZoomIn size={30} />
+                <ZoomIn size={24} />  {/* 缩小20%：30→24 */}
               </ActionIcon>
             </Tooltip>
           )}
           
           {/* 分割线 */}
           <div style={{ 
-            width: '30px', 
+            width: '24px',  // 缩小20%：30→24
             height: '1px', 
             backgroundColor: '#E5E6EB',
-            margin: '8px 0'
+            margin: '6px 0'  // 稍微缩小
           }} />
           
           {/* 重新生成投资估算 */}
@@ -3004,20 +3067,20 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={handleRegenerate}
               disabled={generating}
-              size={50}
-              radius={50}
+              size={40}  // 缩小20%：50→40
+              radius={40}
               style={{ 
                 backgroundColor: generating ? '#C9CDD4' : '#FFFFFF',
                 color: generating ? '#FFFFFF' : '#52C41A',
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '50px',
-                height: '50px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%'
               }}
             >
-              <RotateCw size={30} />
+              <RotateCw size={24} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
           
@@ -3026,20 +3089,20 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={exportToExcel}
               disabled={!estimate}
-              size={50}
-              radius={50}
+              size={40}  // 缩小20%：50→40
+              radius={40}
               style={{ 
                 backgroundColor: '#FFFFFF',
                 color: '#165DFF',
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '50px',
-                height: '50px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%'
               }}
             >
-              <FileSpreadsheet size={30} />
+              <FileSpreadsheet size={24} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
           
@@ -3069,21 +3132,21 @@ const InvestmentSummary: React.FC = () => {
                 }
               }}
               disabled={!estimate || Math.abs(estimate.gapRate) >= 1.5}
-              size={50}
-              radius={50}
+              size={40}  // 缩小20%：50→40
+              radius={40}
               style={{ 
                 backgroundColor: (!estimate || Math.abs(estimate.gapRate) >= 1.5) ? '#F2F3F5' : '#FFFFFF',
                 color: (!estimate || Math.abs(estimate.gapRate) >= 1.5) ? '#C9CDD4' : '#F7BA1E',
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '50px',
-                height: '50px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%',
                 cursor: (!estimate || Math.abs(estimate.gapRate) >= 1.5) ? 'not-allowed' : 'pointer'
               }}
             >
-              <IconChartBar size={30} stroke={1.5} />
+              <IconChartBar size={24} stroke={1.5} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
         </div>
@@ -3174,7 +3237,7 @@ const InvestmentSummary: React.FC = () => {
             borderRadius: '50%'
           }}
         >
-          <Info size={18} />
+          <Receipt size={18} />
         </ActionIcon>
       </Tooltip>
 
@@ -3237,21 +3300,21 @@ const InvestmentSummary: React.FC = () => {
                     </Table.Thead>
 
                     <Table.Tbody>
-                      {/* A部分主行 */}
+                      {/* A部分主行 - 使用预处理数据 */}
                       <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
                         <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partA.序号}</Table.Td>
                         <Table.Td style={{ ...columnStyles.name }}>{estimate.partA.工程或费用名称}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.construction }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.equipment }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.installation }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                        <Table.Td style={{ ...columnStyles.other }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.construction }}>{(processedTableData?.partATotal?.construction || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.equipment }}>{(processedTableData?.partATotal?.equipment || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.installation }}>{(processedTableData?.partATotal?.installation || 0).toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.other }}>{(processedTableData?.partATotal?.other || 0).toFixed(2)}</Table.Td>
                         <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
                           {estimate.partA.合计?.toFixed(2) || '0.00'}
                         </Table.Td>
                         <Table.Td style={{ ...columnStyles.unit }}></Table.Td>
                         <Table.Td style={{ ...columnStyles.quantity }}></Table.Td>
                         <Table.Td style={{ ...columnStyles.unitPrice }}></Table.Td>
-                                  <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
+                        <Table.Td style={{ ...columnStyles.ratio, fontWeight: 700 }}>
                           {estimate.partG?.合计 && estimate.partG?.合计 > 0
                             ? `${(((estimate.partA.合计 || 0) / estimate.partG?.合计) * 100).toFixed(2)}%`
                             : ''}
@@ -3313,14 +3376,14 @@ const InvestmentSummary: React.FC = () => {
                         </React.Fragment>
                       ))}
 
-                      {/* B部分主行 */}
+                      {/* B部分主行 - 使用预处理数据 */}
                       <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
                         <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partB.序号}</Table.Td>
                         <Table.Td style={{ ...columnStyles.name }}>{estimate.partB.工程或费用名称}</Table.Td>
                         <Table.Td style={{ ...columnStyles.construction }}>0.00</Table.Td>
                         <Table.Td style={{ ...columnStyles.equipment }}>0.00</Table.Td>
                         <Table.Td style={{ ...columnStyles.installation }}>0.00</Table.Td>
-                        <Table.Td style={{ ...columnStyles.other }}>{calculatePartBOtherTotal().toFixed(2)}</Table.Td>
+                        <Table.Td style={{ ...columnStyles.other }}>{(processedTableData?.partBTotal || 0).toFixed(2)}</Table.Td>
                         <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
                           {typeof estimate.partB.合计 === 'number' ? estimate.partB.合计.toFixed(2) : '0.00'}
                         </Table.Td>
@@ -3358,14 +3421,14 @@ const InvestmentSummary: React.FC = () => {
                         </Table.Tr>
                       ))}
 
-                    {/* C部分 - 白色背景 */}
+                    {/* C部分 - 使用预处理数据 */}
                     <Table.Tr style={{ backgroundColor: '#FFFFFF', fontWeight: 700 }}>
                       <Table.Td style={{ ...columnStyles.sequence }}>{estimate.partC.序号}</Table.Td>
                       <Table.Td style={{ ...columnStyles.name }}>{estimate.partC.工程或费用名称}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.construction }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.建设工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.equipment }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.设备购置费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.installation }}>{(estimate.partA.children?.reduce((sum, item) => sum + (item.安装工程费 || 0), 0) || 0).toFixed(2)}</Table.Td>
-                      <Table.Td style={{ ...columnStyles.other }}>{((estimate.partA.children?.reduce((sum, item) => sum + (item.其它费用 || 0), 0) || 0) + calculatePartBOtherTotal()).toFixed(2)}</Table.Td>
+                      <Table.Td style={{ ...columnStyles.construction }}>{(processedTableData?.partATotal?.construction || 0).toFixed(2)}</Table.Td>
+                      <Table.Td style={{ ...columnStyles.equipment }}>{(processedTableData?.partATotal?.equipment || 0).toFixed(2)}</Table.Td>
+                      <Table.Td style={{ ...columnStyles.installation }}>{(processedTableData?.partATotal?.installation || 0).toFixed(2)}</Table.Td>
+                      <Table.Td style={{ ...columnStyles.other }}>{(processedTableData?.partCTotalOther || 0).toFixed(2)}</Table.Td>
                       <Table.Td style={{ ...columnStyles.total, fontWeight: 700 }}>
                         {typeof estimate.partC.合计 === 'number' ? estimate.partC.合计.toFixed(2) : '0.00'}
                       </Table.Td>

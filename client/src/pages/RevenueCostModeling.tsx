@@ -31,6 +31,7 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { projectApi, investmentApi, revenueCostApi } from '@/lib/api'
+import * as XLSX from 'xlsx'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
 import { InvestmentEstimate } from '@/types'
 import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
@@ -73,6 +74,7 @@ const RevenueCostModeling: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [project, setProject] = useState<any>(null)
   const [investmentEstimate, setInvestmentEstimate] = useState<InvestmentEstimate | null>(null)
+  const [dataLoaded, setDataLoaded] = useState(false) // 标记数据是否已完全加载
 
   // 基础数据状态
   const [repaymentPeriod, setRepaymentPeriod] = useState(0)
@@ -194,8 +196,21 @@ const RevenueCostModeling: React.FC = () => {
                 
           // 设置建设期利息详情
           if (estimateData.construction_interest_details) {
-            setConstructionInterestDetails(estimateData.construction_interest_details);
-            console.log('📋 设置建设期利息详情:', estimateData.construction_interest_details);
+            // 确保数据是对象格式（如果是JSON字符串则反序列化）
+            let interestDetails = estimateData.construction_interest_details;
+            if (typeof interestDetails === 'string') {
+              try {
+                interestDetails = JSON.parse(interestDetails);
+                console.log('📋 前端JSON反序列化建设期利息详情成功:', interestDetails);
+              } catch (e) {
+                console.error('📋 前端JSON反序列化建设期利息详情失败:', e);
+                interestDetails = null;
+              }
+            }
+            if (interestDetails) {
+              setConstructionInterestDetails(interestDetails);
+              console.log('📋 设置建设期利息详情:', interestDetails);
+            }
           }
         } else {
           console.warn('⚠️ 投资估算API响应异常:', estimateResponse)
@@ -234,6 +249,7 @@ const RevenueCostModeling: React.FC = () => {
         navigate('/dashboard')
       } finally {
         setLoading(false)
+        setDataLoaded(true) // 标记数据已完全加载
       }
     }
 
@@ -267,10 +283,15 @@ const RevenueCostModeling: React.FC = () => {
       return
     }
 
-    try {
-      console.log('🔄 开始生成并保存建设期利息详情')
-      console.log('📋 项目ID:', project.id, '项目名称:', project.project_name)
+    // 🔧 修复：添加详细的调试日志，跟踪建设期利息数据流
+    console.log('🔄 saveConstructionInterestDetailsIfNeeded 被调用')
+    console.log('📋 estimateData:', estimateData)
+    console.log('📋 project:', project)
+    console.log('📋 estimateData.estimate_data:', estimateData?.estimate_data)
+    console.log('📋 partF:', estimateData?.estimate_data?.partF)
+    console.log('📋 partF.分年利息:', estimateData?.estimate_data?.partF?.分年利息)
       
+    try {
       // 准备建设期利息详情数据
       const constructionInterestDetails = prepareConstructionInterestDetails(estimateData.estimate_data, project)
       
@@ -350,9 +371,12 @@ const RevenueCostModeling: React.FC = () => {
 
   // 准备建设期利息详情数据
   const prepareConstructionInterestDetails = (estimateData: any, project: any) => {
+    // 🔧 修复：使用正确的字段名 分年利息（有"年"字）
     // 添加空值检查
     if (!estimateData?.partF?.分年利息) {
       console.log('⚠️ 未找到partF.分年利息数据，无法生成建设期利息详情')
+      console.log('📋 estimateData:', estimateData)
+      console.log('📋 partF:', estimateData?.partF)
       return null
     }
     
@@ -362,12 +386,14 @@ const RevenueCostModeling: React.FC = () => {
       return null
     }
 
+    // 🔧 修复：使用正确的字段名 分年利息（有"年"字）
     const yearlyInterestData = estimateData.partF.分年利息
     const constructionYears = project.construction_years || 0
     
-    console.log('📊 准备建设期利息详情:', {
+    console.log('✅ 成功读取分年利息数据:', {
       '建设期年限': constructionYears,
-      '分年利息数据条数': yearlyInterestData?.length || 0
+      '分年利息数据条数': yearlyInterestData?.length || 0,
+      '分年利息数据': yearlyInterestData
     })
 
     // 计算各年期末借款余额
@@ -381,6 +407,7 @@ const RevenueCostModeling: React.FC = () => {
       return balance
     }
 
+    // 🔧 修复：使用正确的字段名 分年利息（有"年"字）
     // 准备JSON数据结构
     return {
       基本信息: {
@@ -666,14 +693,13 @@ const RevenueCostModeling: React.FC = () => {
       // 折旧年限内，每年按固定额度折旧
       return i < constructionDepreciationYears ? constructionAnnualDepreciation : 0
     })
-    // 计算有数值的年份的平均值
-    const constructionNonZeroYears = constructionYearlyData.filter(val => val > 0).length
-    const constructionAverageAnnualAmount = constructionNonZeroYears > 0 ? constructionYearlyData.reduce((sum, val) => sum + val, 0) / constructionNonZeroYears : 0
+    // 折旧/摊销额合计 = 运营期各列的合计值，结果保留两位小数
+    const constructionTotalDepreciation = Number(constructionYearlyData.reduce((sum, val) => sum + val, 0).toFixed(2))
     data.push({
       序号: 'A',
       资产类别: '🏢 房屋（建筑物）',
       原值: constructionOriginalValue,
-      年折旧摊销额: constructionAverageAnnualAmount,
+      年折旧摊销额: constructionTotalDepreciation,
       分年数据: constructionYearlyData
     })
 
@@ -682,14 +708,13 @@ const RevenueCostModeling: React.FC = () => {
     const equipmentYearlyData = Array.from({ length: operationYears }, (_, i) => {
       return i < equipmentDepreciationYears ? equipmentAnnualDepreciation : 0
     })
-    // 计算有数值的年份的平均值
-    const equipmentNonZeroYears = equipmentYearlyData.filter(val => val > 0).length
-    const equipmentAverageAnnualAmount = equipmentNonZeroYears > 0 ? equipmentYearlyData.reduce((sum, val) => sum + val, 0) / equipmentNonZeroYears : 0
+    // 折旧/摊销额合计 = 运营期各列的合计值，结果保留两位小数
+    const equipmentTotalDepreciation = Number(equipmentYearlyData.reduce((sum, val) => sum + val, 0).toFixed(2))
     data.push({
       序号: 'D',
       资产类别: '⚙️ 设备购置',
       原值: equipmentOriginalValue,
-      年折旧摊销额: equipmentAverageAnnualAmount,
+      年折旧摊销额: equipmentTotalDepreciation,
       分年数据: equipmentYearlyData
     })
 
@@ -701,24 +726,53 @@ const RevenueCostModeling: React.FC = () => {
     const intangibleYearlyData = Array.from({ length: operationYears }, (_, i) => {
       return i < intangibleAmortizationYears ? intangibleAnnualAmortization : 0
     })
-    // 计算有数值的年份的平均值
-    const intangibleNonZeroYears = intangibleYearlyData.filter(val => val > 0).length
-    const intangibleAverageAnnualAmount = intangibleNonZeroYears > 0 ? intangibleYearlyData.reduce((sum, val) => sum + val, 0) / intangibleNonZeroYears : 0
+    // 折旧/摊销额合计 = 运营期各列的合计值，结果保留两位小数
+    const intangibleTotalAmortization = Number(intangibleYearlyData.reduce((sum, val) => sum + val, 0).toFixed(2))
     data.push({
       序号: 'E',
       资产类别: '🌍 无形资产（土地）',
       原值: intangibleOriginalValue,
-      年折旧摊销额: intangibleAverageAnnualAmount,
+      年折旧摊销额: intangibleTotalAmortization,
       分年数据: intangibleYearlyData
+    })
+
+    // 计算合计行数据
+    // 合计行原值 = 所有行原值之和
+    const totalOriginalValue = data.reduce((sum, row) => sum + (row.原值 ?? 0), 0)
+    
+    // 计算合计行各年的分摊金额
+    const totalYearlyData = Array.from({ length: operationYears }, (_, yearIdx) => {
+      return data.reduce((sum, row) => sum + (row.分年数据?.[yearIdx] ?? 0), 0)
+    })
+    
+    // 合计行年折旧摊销额 = 运营期各列的合计值，结果保留两位小数
+    const totalAnnualDepreciation = Number(totalYearlyData.reduce((sum, val) => sum + val, 0).toFixed(2))
+    
+    console.log('📊 合计行计算过程:')
+    console.log(`  合计行各年分摊金额: [${totalYearlyData.map(v => v.toFixed(2)).join(', ')}]`)
+    console.log(`  折旧/摊销额合计: ${totalYearlyData.reduce((sum, val) => sum + val, 0).toFixed(2)}`)
+    
+    // 添加合计行到数据数组
+    data.push({
+      序号: '合计',
+      资产类别: '合计',
+      原值: totalOriginalValue,
+      年折旧摊销额: totalAnnualDepreciation,
+      分年数据: totalYearlyData
     })
 
     console.log('📉 折旧摊销表数据:', {
       '土地费用': landCost,
       '无形资产原值': intangibleOriginalValue,
       '年摊销额': intangibleAnnualAmortization,
+      '合计行原值': totalOriginalValue,
+      '运营期': operationYears,
+      '合计行年折旧/摊销额': totalAnnualDepreciation,
+      '表格数据行数': data.length,
       '表格数据': data
     })
     setDepreciationData(data)
+    console.log('✅ 折旧摊销数据已设置，depreciationData.length:', data.length)
   }, [
     project,
     investmentEstimate,
@@ -734,6 +788,38 @@ const RevenueCostModeling: React.FC = () => {
   
   // 注意：自动保存已移至 revenueCostStore.ts 中的防抖机制
   // 所有数据修改都会自动保存到数据库
+  
+  // 在页面加载时检查 revenueTableData 是否需要重新生成
+  useEffect(() => {
+    const { revenueTableData, context, generateRevenueTableData } = useRevenueCostStore.getState();
+    
+    if (revenueTableData && revenueTableData.rows) {
+      const row3 = revenueTableData.rows.find(r => r.序号 === '3');
+      const row2 = revenueTableData.rows.find(r => r.序号 === '2');
+      
+      // 检查序号2和序号3的数据是否有效（运营期数据不为0）
+      const row2运营期和 = row2?.运营期?.reduce((sum, v) => sum + (v || 0), 0) || 0;
+      const row3运营期和 = row3?.运营期?.reduce((sum, v) => sum + (v || 0), 0) || 0;
+      
+      // 如果序号2或序号3的数据为0，且存在收入项，则重新生成数据
+      if ((row2运营期和 === 0 || row3运营期和 === 0) && context && revenueItems.length > 0) {
+        const deductibleInputTaxValue = deductibleInputTax || 0;
+        const newTableData = generateRevenueTableData(deductibleInputTaxValue, 0.07);
+        if (newTableData) {
+          // 保存到 store
+          useRevenueCostStore.getState().setRevenueTableData(newTableData);
+        }
+      }
+    } else if (context && revenueItems.length > 0) {
+      // 触发数据生成
+      const deductibleInputTaxValue = deductibleInputTax || 0;
+      const newTableData = generateRevenueTableData(deductibleInputTaxValue, 0.07);
+      if (newTableData) {
+        // 保存到 store
+        useRevenueCostStore.getState().setRevenueTableData(newTableData);
+      }
+    }
+  }, [revenueItems.length, deductibleInputTax, dataLoaded]);
 
   // 打开编辑弹窗（年限和残值率同时编辑）
   const openEditModal = (
@@ -1035,6 +1121,56 @@ const RevenueCostModeling: React.FC = () => {
       }
     };
   }
+
+  // 导出还本付息计划简表为Excel
+  const handleExportRepaymentPlanTable = () => {
+    if (!project || !repaymentTableData || repaymentTableData.length === 0) {
+      notifications.show({
+        title: '导出失败',
+        message: '没有可导出的还本付息计划数据',
+        color: 'red',
+      });
+      return;
+    }
+
+    const excelData: any[] = [];
+    
+    // 添加表头
+    const headerRow: any = { '序号': '', '项目': '', '合计': '' };
+    for (let i = 0; i < repaymentPeriod; i++) {
+      headerRow[`运营期${i + 1}`] = '';
+    }
+    excelData.push(headerRow);
+    
+    // 第二行表头
+    const headerRow2: any = { '序号': '', '项目': '', '合计': '' };
+    for (let i = 0; i < repaymentPeriod; i++) {
+      headerRow2[`${i + 1}`] = i + 1;
+    }
+    excelData.push(headerRow2);
+
+    // 添加数据行
+    repaymentTableData.forEach((row) => {
+      const dataRow: any = { '序号': row.序号, '项目': row.项目 };
+      dataRow['合计'] = row.合计 !== null ? row.合计 : '';
+      for (let i = 0; i < repaymentPeriod; i++) {
+        dataRow[`${i + 1}`] = row.分年数据[i] !== undefined ? row.分年数据[i] : '';
+      }
+      excelData.push(dataRow);
+    });
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '还本付息计划简表');
+
+    XLSX.writeFile(wb, `还本付息计划简表_${project.project_name || '项目'}.xlsx`);
+
+    notifications.show({
+      title: '导出成功',
+      message: '还本付息计划简表已导出为Excel文件',
+      color: 'green',
+    });
+  };
 
   const handleBack = () => {
     if (activeStep > 0) {
@@ -1610,7 +1746,7 @@ const RevenueCostModeling: React.FC = () => {
                           <Table.Th rowSpan={2} style={{ width: '60px', verticalAlign: 'middle' }}>序号</Table.Th>
                           <Table.Th rowSpan={2} style={{ width: '200px', textAlign: 'left', verticalAlign: 'middle' }}>资产类别</Table.Th>
                           <Table.Th rowSpan={2} style={{ width: '120px', verticalAlign: 'middle' }}>原值（万元）</Table.Th>
-                          <Table.Th rowSpan={2} style={{ width: '140px', verticalAlign: 'middle' }}>年折旧/摊销额（万元）</Table.Th>
+                          <Table.Th rowSpan={2} style={{ width: '140px', verticalAlign: 'middle' }}>折旧/摊销额合计（万元）</Table.Th>
                           <Table.Th colSpan={project?.operation_years || 0} style={{ borderBottom: '1px solid #E5E6EB' }}>
                             运营期
                           </Table.Th>
@@ -1625,8 +1761,14 @@ const RevenueCostModeling: React.FC = () => {
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {depreciationData.map((row, idx) => (
-                          <Table.Tr key={idx}>
+                        {depreciationData.map((row) => (
+                          <Table.Tr 
+                            key={row.序号}
+                            style={{ 
+                              backgroundColor: row.序号 === '合计' ? '#E6F7FF' : undefined,
+                              fontWeight: row.序号 === '合计' ? 700 : 600
+                            }}
+                          >
                             <Table.Td>
                               <Text fw={600}>{row.序号}</Text>
                             </Table.Td>
@@ -1656,32 +1798,6 @@ const RevenueCostModeling: React.FC = () => {
                             ))}
                           </Table.Tr>
                         ))}
-                        {/* 合计行 */}
-                        <Table.Tr style={{ backgroundColor: '#E6F7FF' }}>
-                          <Table.Td>
-                            <Text fw={700}>∑</Text>
-                          </Table.Td>
-                          <Table.Td style={{ textAlign: 'left' }}>
-                            <Text fw={600}>合计</Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text fw={700} c="#165DFF">
-                              {depreciationData.reduce((sum, row) => sum + row.原值, 0).toFixed(2)}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text fw={700} c="#00C48C">
-                              {depreciationData.reduce((sum, row) => sum + row.年折旧摊销额, 0).toFixed(2)}
-                            </Text>
-                          </Table.Td>
-                          {Array.from({ length: project?.operation_years || 0 }, (_, yearIdx) => (
-                            <Table.Td key={yearIdx}>
-                              <Text size="xs" fw={600} c="#165DFF">
-                                {depreciationData.reduce((sum, row) => sum + row.分年数据[yearIdx], 0).toFixed(2)}
-                              </Text>
-                            </Table.Td>
-                          ))}
-                        </Table.Tr>
                       </Table.Tbody>
                     </Table>
                   </div>
@@ -1730,8 +1846,8 @@ const RevenueCostModeling: React.FC = () => {
                       。
                       合计：
                       <Text span fw={700} c="#F7BA1E">
-                        {(depreciationData.reduce((sum, row) => {
-                          // 计算总净值 = 原值 - 累计折旧/摊销
+                        {(depreciationData.filter(d => d.序号 !== '合计').reduce((sum, row) => {
+                          // 计算总净值 = 原值 - 累计折旧/摊销（排除合计行）
                           const totalAmount = row.分年数据.reduce((acc, val) => acc + val, 0);
                           return sum + (row.原值 - totalAmount);
                         }, 0)).toFixed(2)}万元
@@ -1756,9 +1872,23 @@ const RevenueCostModeling: React.FC = () => {
               opened={repaymentPlanOpened}
               onClose={() => setRepaymentPlanOpened(false)}
               title={
-                <Group gap="xs">
-                  <IconCurrencyDollar size={20} color="#00C48C" />
-                  <Text fw={600} c="#1D2129">还本付息计划简表（等额本金还款）</Text>
+                <Group justify="space-between" w="100%">
+                  <Group gap="xs">
+                    <IconCurrencyDollar size={20} color="#00C48C" />
+                    <Text fw={600} c="#1D2129">还本付息计划简表（等额本金还款）</Text>
+                  </Group>
+                  <Group gap="xs">
+                    <Tooltip label="导出Excel">
+                      <ActionIcon
+                        variant="light"
+                        color="green"
+                        size={16}
+                        onClick={handleExportRepaymentPlanTable}
+                      >
+                        <IconFileText size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
                 </Group>
               }
               size="1400px"

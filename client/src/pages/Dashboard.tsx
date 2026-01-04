@@ -19,8 +19,11 @@ import {
   SimpleGrid,
   Divider,
   RingProgress,
+  ActionIcon,
+  Modal,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { Trash } from 'lucide-react'
 import { projectApi, InvestmentProject } from '@/lib/api'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import UserProfile from '@/components/UserProfile'
@@ -29,6 +32,8 @@ import { Header } from '@/components/common/Header'
 const Dashboard: React.FC = () => {
   const [projects, setProjects] = useState<InvestmentProject[]>([])
   const [loading, setLoading] = useState(true)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<InvestmentProject | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -55,6 +60,42 @@ const Dashboard: React.FC = () => {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteProject = (project: InvestmentProject) => {
+    setProjectToDelete(project)
+    setDeleteModalOpen(true)
+  }
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return
+    
+    try {
+      const response = await projectApi.delete(projectToDelete.id)
+      if (response.success) {
+        notifications.show({
+          title: '删除成功',
+          message: `项目 "${projectToDelete.project_name}" 已删除`,
+          color: 'green',
+        })
+        // 从列表中移除该项目
+        setProjects(projects.filter(p => p.id !== projectToDelete.id))
+        setDeleteModalOpen(false)
+        setProjectToDelete(null)
+      } else {
+        notifications.show({
+          title: '删除失败',
+          message: response.error || '删除项目失败',
+          color: 'red',
+        })
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: '删除失败',
+        message: error.response?.data?.error || '删除项目失败',
+        color: 'red',
+      })
     }
   }
 
@@ -390,6 +431,24 @@ const Dashboard: React.FC = () => {
                                 >
                                   估算
                                 </Button>
+                                <ActionIcon
+                                  variant="light"
+                                  color="red"
+                                  size="lg"
+                                  radius="md"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDeleteProject(project)
+                                  }}
+                                  style={{
+                                    height: '32px',
+                                    width: '32px',
+                                    borderRadius: '4px',
+                                  }}
+                                  title="删除项目"
+                                >
+                                  <Trash size={18} />
+                                </ActionIcon>
                               </Group>
                             </Table.Td>
                           </Table.Tr>
@@ -404,6 +463,33 @@ const Dashboard: React.FC = () => {
           </Card>
         </Stack>
       </Container>
+      
+      {/* 删除确认Modal */}
+      <Modal
+        opened={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="删除项目"
+        centered
+        size="md"
+      >
+        <Text size="sm" mb="lg">
+          确定要删除项目 "{projectToDelete?.project_name}" 吗？此操作不可恢复。
+        </Text>
+        <Group justify="flex-end" mt="md">
+          <Button
+            variant="outline"
+            onClick={() => setDeleteModalOpen(false)}
+          >
+            取消
+          </Button>
+          <Button
+            color="red"
+            onClick={confirmDeleteProject}
+          >
+            删除
+          </Button>
+        </Group>
+      </Modal>
     </div>
   )
 }

@@ -501,6 +501,28 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
   }, [formData])
 
   /**
+   * 监听revenueItems的变化，当有数据时自动生成revenueTableData
+   * 这样可以确保revenueTableData中的序号3数据是正确的
+   */
+  useEffect(() => {
+    console.log('🔍 [useEffect] 触发检查:', {
+      revenueItemsCount: revenueItems.length,
+      contextExists: !!context,
+      revenueTableDataExists: !!revenueTableData,
+      revenueTableDataRows: revenueTableData?.rows?.length || 0
+    });
+    
+    if (revenueItems.length > 0 && context) {
+      console.log('🔄 [useEffect] 检测到revenueItems变化，自动生成revenueTableData');
+      console.log('📊 收入项数量:', revenueItems.length);
+      console.log('📊 收入项详情:', revenueItems.map(item => ({ name: item.name, quantity: item.quantity, unitPrice: item.unitPrice })));
+      
+      // 调用handleSaveRevenueTableData生成并保存数据
+      handleSaveRevenueTableData();
+    }
+  }, [revenueItems, context]);
+
+  /**
    * 格式化金额显示（2位小数）
    */
   const formatAmount = (amount: number): string => {

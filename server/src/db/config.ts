@@ -69,7 +69,9 @@ async function ensureFields() {
   for (const query of alterQueries) {
     try {
       await pool.execute(query)
-      console.log('✅ 添加字段:', query.match(/ADD COLUMN (\w+)/)?.[1])
+      // 提取字段名（处理 IF NOT EXISTS 语法）
+      const fieldMatch = query.match(/ADD COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/)
+      console.log('✅ 添加字段:', fieldMatch ? fieldMatch[1] : 'unknown')
     } catch (error: any) {
       if (error.code === 'ER_DUP_FIELDNAME') {
         // 字段已存在，跳过

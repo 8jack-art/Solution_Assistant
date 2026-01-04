@@ -378,14 +378,15 @@ const InvestmentCalculator: React.FC = () => {
                   />
                 </div>
 
-                <div className="flex space-x-4">
-                  <Button onClick={handleCalculate} disabled={loading}>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '24px', marginBottom: '16px', marginLeft: '0' }}>
+                  <Button onClick={handleCalculate} disabled={loading} style={{ minWidth: '100px' }}>
                     {loading ? '计算中...' : '计算估算'}
                   </Button>
                   <Button 
                     variant="outline" 
                     onClick={handleSave}
                     disabled={loading || !calculationResult}
+                    style={{ minWidth: '100px' }}
                   >
                     {loading ? '保存中...' : '保存估算'}
                   </Button>

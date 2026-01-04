@@ -71,6 +71,19 @@ const ProjectForm: React.FC = () => {
   }, [])
 
 
+  // 格式化价格显示（根据金额自动选择单位）
+  const formatPrice = (priceInWan: number | undefined | null, isPerYear: boolean = false) => {
+    const price = Number(priceInWan) || 0
+    const priceInYuan = price * 10000
+    if (price < 0.1) {
+      // 小于1000元，用元显示
+      return `${priceInYuan.toFixed(0)}元${isPerYear ? '/亩/年' : '/亩'}`
+    } else {
+      // 大于等于1000元，用万元显示
+      return `${price.toFixed(4)}万元${isPerYear ? '/亩/年' : '/亩'}`
+    }
+  }
+
   // 自动计算土地费用和生成备注
   const calculateLandCost = (data: typeof formData) => {
     let cost = 0
@@ -82,14 +95,14 @@ const ProjectForm: React.FC = () => {
         const seedlingCostA = data.land_area * (data.seedling_compensation || 0)
         cost = landCostA + seedlingCostA
         if (data.seedling_compensation && data.seedling_compensation > 0) {
-          remark = `按一次性征地模式。征地费：${data.land_area}亩×${data.land_unit_price}万元/亩=${landCostA.toFixed(2)}万元。青苗补偿费：${data.land_area}亩×${data.seedling_compensation}万元/亩=${seedlingCostA.toFixed(2)}万元。`
+          remark = `按一次性征地模式。征地费：${data.land_area}亩×${formatPrice(data.land_unit_price)}=${landCostA.toFixed(2)}万元。青苗补偿费：${data.land_area}亩×${formatPrice(data.seedling_compensation)}=${seedlingCostA.toFixed(2)}万元。`
         } else {
-          remark = `按一次性征地模式，${data.land_area}亩×${data.land_unit_price}万元/亩估算。`
+          remark = `按一次性征地模式，${data.land_area}亩×${formatPrice(data.land_unit_price)}估算。`
         }
         break
       case 'B': // 长期租赁
         cost = data.construction_years * data.land_unit_price * data.land_area
-        remark = `按租地模式估算，计入建设期${data.construction_years}年租金，${data.land_area}亩×${data.land_unit_price}万元/亩/年。`
+        remark = `按租地模式估算，计入建设期${data.construction_years}年租金，${data.land_area}亩×${formatPrice(data.land_unit_price, true)}。`
         break
       case 'C': // 无土地需求
         cost = 0
@@ -102,9 +115,9 @@ const ProjectForm: React.FC = () => {
         const purchaseSeedlingCostD = data.land_purchase_area * (data.seedling_compensation || 0)
         cost = leaseCost + purchaseLandCost + leaseSeedlingCostD + purchaseSeedlingCostD
         if ((data.lease_seedling_compensation && data.lease_seedling_compensation > 0) || (data.seedling_compensation && data.seedling_compensation > 0)) {
-          remark = `混合用地模式。租赁部分：${data.land_lease_area}亩×${data.land_lease_unit_price}万元/亩/年×${data.construction_years}年=${leaseCost.toFixed(2)}万元，青苗补偿费${data.land_lease_area}亩×${data.lease_seedling_compensation}万元/亩=${leaseSeedlingCostD.toFixed(2)}万元；征地部分：征地费${data.land_purchase_area}亩×${data.land_purchase_unit_price}万元/亩=${purchaseLandCost.toFixed(2)}万元，青苗补偿费${data.land_purchase_area}亩×${data.seedling_compensation}万元/亩=${purchaseSeedlingCostD.toFixed(2)}万元。`
+          remark = `混合用地模式。租赁部分：${data.land_lease_area}亩×${formatPrice(data.land_lease_unit_price, true)}×${data.construction_years}年=${leaseCost.toFixed(2)}万元，青苗补偿费${data.land_lease_area}亩×${formatPrice(data.lease_seedling_compensation)}=${leaseSeedlingCostD.toFixed(2)}万元；征地部分：征地费${data.land_purchase_area}亩×${formatPrice(data.land_purchase_unit_price)}=${purchaseLandCost.toFixed(2)}万元，青苗补偿费${data.land_purchase_area}亩×${formatPrice(data.seedling_compensation)}=${purchaseSeedlingCostD.toFixed(2)}万元。`
         } else {
-          remark = `混合用地模式。租赁部分：${data.land_lease_area}亩×${data.land_lease_unit_price}万元/亩/年×${data.construction_years}年=${leaseCost.toFixed(2)}万元；征地部分：${data.land_purchase_area}亩×${data.land_purchase_unit_price}万元/亩=${purchaseLandCost.toFixed(2)}万元。`
+          remark = `混合用地模式。租赁部分：${data.land_lease_area}亩×${formatPrice(data.land_lease_unit_price, true)}×${data.construction_years}年=${leaseCost.toFixed(2)}万元；征地部分：${data.land_purchase_area}亩×${formatPrice(data.land_purchase_unit_price)}=${purchaseLandCost.toFixed(2)}万元。`
         }
         break
     }
@@ -262,15 +275,17 @@ const ProjectForm: React.FC = () => {
         setFormData(prev => ({
           ...prev,
           project_name: analyzedData.project_name || prev.project_name,
+          construction_unit: analyzedData.construction_unit || prev.construction_unit,
           location: analyzedData.location || prev.location,
           project_type: analyzedData.project_type || analyzedData.industry || prev.project_type,
           total_investment: analyzedData.total_investment || prev.total_investment,
           construction_years: analyzedData.construction_years || prev.construction_years,
           operation_years: analyzedData.operation_years || prev.operation_years,
-          loan_ratio: analyzedData.loan_ratio || prev.loan_ratio,
-          loan_interest_rate: analyzedData.loan_interest_rate || prev.loan_interest_rate,
+          loan_ratio: analyzedData.loan_ratio || prev.loan_ratio || 80,
+          loan_interest_rate: analyzedData.loan_interest_rate || prev.loan_interest_rate || 4.9,
         }))
         const summary = `项目：${analyzedData.project_name || '未识别'}
+建设单位：${analyzedData.construction_unit || '未识别'}
 地点：${analyzedData.location || '未识别'}
 行业：${analyzedData.project_type || analyzedData.industry || '未识别'}
 投资：${analyzedData.total_investment || 0}万元
@@ -563,14 +578,16 @@ const ProjectForm: React.FC = () => {
                     <Textarea
                       value={formData.project_info}
                       onChange={(e) => setFormData({ ...formData, project_info: e.target.value })}
-                      minRows={6}
-                      autosize
+                      minRows={12}
+                      maxRows={12}
                       placeholder="请输入项目的详细信息，例如：本项目为XX工程，总投资1000万元，建设周期3年，运营期20年，贷款比例70%，年利率4.9%..."
                       size="md"
                       styles={{
-                        input: { 
+                        input: {
                           fontSize: '14px',
-                          lineHeight: '1.6'
+                          lineHeight: '1.6',
+                          overflowY: 'auto',
+                          height: '140px'
                         }
                       }}
                     />
@@ -596,6 +613,7 @@ const ProjectForm: React.FC = () => {
                 <Select
                   label="用地模式"
                   value={formData.land_mode}
+                  allowDeselect={false}
                   onChange={(val) => {
                     const newMode = val as 'A' | 'B' | 'C' | 'D'
                     setFormData({ ...formData, land_mode: newMode })
@@ -627,7 +645,7 @@ const ProjectForm: React.FC = () => {
                         label={formData.land_mode === 'A' ? '征地单价 (万元/亩)' : '年租金单价 (万元/亩/年)'}
                         value={formData.land_unit_price}
                         onChange={(val) => setFormData({ ...formData, land_unit_price: Number(val) || 0 })}
-                        decimalScale={2}
+                        decimalScale={4}
                       />
                     </Grid.Col>
                     {formData.land_mode === 'A' && (
@@ -660,7 +678,7 @@ const ProjectForm: React.FC = () => {
                           label="租赁单价 (万元/亩/年)"
                           value={formData.land_lease_unit_price}
                           onChange={(val) => setFormData({ ...formData, land_lease_unit_price: Number(val) || 0 })}
-                          decimalScale={2}
+                          decimalScale={4}
                         />
                       </Grid.Col>
                       <Grid.Col span={{ base: 12, md: 6 }}>
@@ -687,7 +705,7 @@ const ProjectForm: React.FC = () => {
                           label="征地单价 (万元/亩)"
                           value={formData.land_purchase_unit_price}
                           onChange={(val) => setFormData({ ...formData, land_purchase_unit_price: Number(val) || 0 })}
-                          decimalScale={2}
+                          decimalScale={4}
                         />
                       </Grid.Col>
                       <Grid.Col span={{ base: 12, md: 6 }}>

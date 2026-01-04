@@ -762,10 +762,11 @@ export function analyzeRevenueStructurePrompt(
 
 export function analyzeProjectInfoPrompt(projectInfo: string): LLMMessage[] {
   const systemPrompt = `你是一个专业的项目分析助手。请仔细分析用户提供的项目信息描述,提取关键信息并以JSON格式返回。
-
+ 如项目名称未提及，请根据描述合理推测一个名称。如建设单位未提及，请合理生成一个名称。如项目地点未提及，则根据项目名称合理推测一个地点，例如广西百色市辖区。如贷款比例未提及，则按80%计取。判断用户信息里有无计算式例如：3+17、2+18等，如有分解出来填写在对应字段里。3+17表示建设年限3年，运营年限17年。如未提及，均按3+17计取。
 Please严格按照 following JSON format output,all fields must be filled:
 {
   "project_name": "项目名称",
+  "construction_unit": "建设单位",
   "location": "项目地点",
   "project_type": "项目类型",
   "total_investment": 数值(单位:万元),

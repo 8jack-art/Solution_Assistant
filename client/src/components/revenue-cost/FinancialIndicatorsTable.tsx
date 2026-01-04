@@ -21,7 +21,6 @@ import {
   Loader
 } from '@mantine/core'
 import {
-  IconTable,
   IconDownload,
   IconBuilding,
   IconChartLine,
@@ -30,7 +29,8 @@ import {
   IconFileText,
   IconCode,
   IconSettings,
-  IconBug
+  IconBug,
+  IconChartPie
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, calculateYearlyRevenue, getProductionRateForYear, calculateOtherTaxesAndSurcharges } from '@/stores/revenueCostStore'
@@ -297,6 +297,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   const [debugIndicators, setDebugIndicators] = useState<any>(null)
   const [debugCashFlowData, setDebugCashFlowData] = useState<any[]>([])
   
+  // 财务评价指标汇总表状态
+  const [showFinancialSummaryModal, setShowFinancialSummaryModal] = useState(false)
+  
   // 利润与利润分配表设置状态
   const [subsidyIncome, setSubsidyIncome] = useState(0)
   const [incomeTaxRate, setIncomeTaxRate] = useState(25)
@@ -426,6 +429,12 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       icon: IconFileText,
       color: 'cyan',
       onClick: () => setShowLoanRepaymentModal(true)
+    },
+    {
+      title: '财务评价指标汇总表',
+      icon: IconChartPie,
+      color: 'teal',
+      onClick: () => setShowFinancialSummaryModal(true)
     },
   ]
   
@@ -660,7 +669,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         const partATotal = constructionFee + equipmentFee + installationFee + otherFee
 
         // 从 estimate_data.partB 提取第二部分工程其它费用
-        let partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
+        const partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
         let landCost = 0  // 土地费用
         if (investmentEstimate.estimate_data?.partB?.children) {
           const landItem = investmentEstimate.estimate_data.partB.children.find(
@@ -725,7 +734,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       const partATotal = constructionFee + equipmentFee + installationFee + otherFee
 
       // 从 estimate_data.partB 提取第二部分工程其它费用
-      let partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
+      const partBTotal = Number(investmentEstimate.estimate_data?.partB?.合计) || 0
       let landCost = 0  // 土地费用
       if (investmentEstimate.estimate_data?.partB?.children) {
         const landItem = investmentEstimate.estimate_data.partB.children.find(
@@ -839,7 +848,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       // 1.2 外购燃料及动力费（除税）
       let fuelPowerCost = 0;
       (costConfig.fuelPower.items || []).forEach((item: any) => {
-        let consumption = item.consumption || 0;
+        const consumption = item.consumption || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
         if (['汽油', '柴油'].includes(item.name)) {
@@ -1003,7 +1012,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
 
     let yearInputTax = 0;
     costConfig.fuelPower.items.forEach((item: any) => {
-      let consumption = item.consumption || 0;
+      const consumption = item.consumption || 0;
       let amount = 0;
       // 对汽油和柴油进行特殊处理：单价×数量/10000
       if (['汽油', '柴油'].includes(item.name)) {
@@ -1086,7 +1095,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       // 1.2 外购燃料及动力费（除税）
       let fuelPowerCost = 0;
       (costConfig.fuelPower.items || []).forEach((item: any) => {
-        let consumption = item.consumption || 0;
+        const consumption = item.consumption || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
         if (['汽油', '柴油'].includes(item.name)) {
@@ -1605,7 +1614,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   // 计算税金及附加
   const calculateTaxAndSurcharges = (year?: number): number => {
     if (year !== undefined) {
-      // 优先从 revenueTableData 中获取"其他税费及附加"（序号3）的运营期列数据
+      // 直接从 revenueTableData 中获取"其他税费及附加"（序号3）的运营期列数据
       if (revenueTableData && revenueTableData.rows) {
         const row = revenueTableData.rows.find(r => r.序号 === '3');
         if (row && row.运营期 && row.运营期[year - 1] !== undefined) {
@@ -1617,10 +1626,20 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     } else {
       // 计算所有年份的税金及附加合计
       if (!context) return 0;
+      
+      // 直接从 revenueTableData 中获取"其他税费及附加"（序号3）的合计数据
+      if (revenueTableData && revenueTableData.rows) {
+        const row = revenueTableData.rows.find(r => r.序号 === '3');
+        if (row && row.合计 !== undefined) {
+          return row.合计;
+        }
+      }
+      
+      // 如果没有表格数据，使用原有计算逻辑作为后备
       const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
       let totalSum = 0;
-      years.forEach((year) => {
-        totalSum += calculateTaxAndSurcharges(year);
+      years.forEach((y) => {
+        totalSum += calculateTaxAndSurcharges(y);
       });
       return totalSum;
     }
@@ -1683,7 +1702,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       // 1.2 外购燃料及动力费（除税）
       let fuelPowerCost = 0;
       (costConfig.fuelPower.items || []).forEach((item: any) => {
-        let consumption = item.consumption || 0;
+        const consumption = item.consumption || 0;
         let amount = 0;
         // 对汽油和柴油进行特殊处理：单价×数量/10000
         if (['汽油', '柴油'].includes(item.name)) {
@@ -2226,7 +2245,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         value: row.calc(year)
       }))
     }));
-  }, [context, incomeTaxRate, statutorySurplusRate]);
+  }, [context, incomeTaxRate, statutorySurplusRate, revenueTableData]);
 
   // 渲染利润与利润分配表格
   const renderProfitDistributionModal = () => {
@@ -3041,6 +3060,100 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     }
   }
 
+  // 财务评价指标汇总表数据
+  const financialSummaryRows = useMemo(() => {
+    if (!context) return [];
+    
+    // 获取财务指标计算结果
+    const indicators = useCachedFinancialIndicators();
+    
+    // 计算年均值（运营期平均值）
+    const annualAverage = {
+      operatingRevenue: calculateOperatingRevenue(undefined) / context.operationYears,
+      totalCost: calculateTotalCost(undefined) / context.operationYears,
+      taxAndSurcharges: calculateTaxAndSurcharges(undefined) / context.operationYears,
+      vat: calculateVatAndTaxes(undefined) / context.operationYears,
+      ebit: calculateEBIT(undefined) / context.operationYears,
+      totalProfit: calculateTotalProfit(undefined) / context.operationYears,
+      incomeTax: calculateIncomeTax(undefined) / context.operationYears,
+      netProfit: calculateNetProfit(undefined) / context.operationYears,
+    };
+    
+    // 计算总投资收益率 (ROIA) = 年均息税前利润 / 项目总投资 × 100%
+    // 项目总投资 = 建设投资 + 建设期利息
+    const totalInvestment = calculateConstructionInvestment(undefined);
+    const roiA = totalInvestment > 0 ? (annualAverage.ebit / totalInvestment) * 100 : 0;
+    
+    // 计算投资利税率 = 年均利润总额 / 项目总投资 × 100%
+    const investmentProfitRate = totalInvestment > 0 ? (annualAverage.totalProfit / totalInvestment) * 100 : 0;
+    
+    // 项目资本金净利润率 (ROE) = 年均净利润 / 项目资本金 × 100%
+    // 这里暂时用年均净利润代替
+    const roe = annualAverage.netProfit > 0 ? 100 : 0;
+    
+    return [
+      { id: '1', name: '项目总投资', unit: '万元', data: formatNumberNoRounding(totalInvestment) },
+      { id: '1.1', name: '建设投资', unit: '万元', data: formatNumberNoRounding(calculateConstructionInvestment(undefined)) },
+      { id: '1.2', name: '建设期利息', unit: '万元', data: '0' },
+      { id: '2', name: '资金筹措', unit: '万元', data: formatNumberNoRounding(totalInvestment) },
+      { id: '2.1', name: '项目资本金', unit: '万元', data: formatNumberNoRounding(totalInvestment * 0.3) },
+      { id: '2.2', name: '项目债务资金', unit: '万元', data: formatNumberNoRounding(totalInvestment * 0.7) },
+      { id: '3', name: '年均销售收入', unit: '万元', data: formatNumberNoRounding(annualAverage.operatingRevenue) },
+      { id: '4', name: '年均总成本费用', unit: '万元', data: formatNumberNoRounding(annualAverage.totalCost) },
+      { id: '5', name: '年均销售税金及附加', unit: '万元', data: formatNumberNoRounding(annualAverage.taxAndSurcharges) },
+      { id: '6', name: '年均增值税', unit: '万元', data: formatNumberNoRounding(annualAverage.vat) },
+      { id: '7', name: '年均息税前利润（EBIT）', unit: '万元', data: formatNumberNoRounding(annualAverage.ebit) },
+      { id: '8', name: '年均利润总额', unit: '万元', data: formatNumberNoRounding(annualAverage.totalProfit) },
+      { id: '9', name: '年均所得税', unit: '万元', data: formatNumberNoRounding(annualAverage.incomeTax) },
+      { id: '10', name: '年均净利润', unit: '万元', data: formatNumberNoRounding(annualAverage.netProfit) },
+      { id: '11', name: '总投资收益率', unit: '％', data: formatNumberNoRounding(roiA) },
+      { id: '12', name: '投资利税率', unit: '％', data: formatNumberNoRounding(investmentProfitRate) },
+      { id: '13', name: '项目资本金净利润率', unit: '％', data: formatNumberNoRounding(roe) },
+      { id: '14', name: '平均利息备付率', unit: '-', data: '-' },
+      { id: '15', name: '平均偿债备付率', unit: '-', data: '-' },
+      { id: '16', name: '项目投资税前指标', unit: '', data: '' },
+      { id: '16.1', name: '财务内部收益率', unit: '％', data: formatNumberNoRounding(indicators.preTaxIRR) },
+      { id: '16.2', name: '项目投资财务净现值（Ic=6％）', unit: '万元', data: formatNumberNoRounding(indicators.preTaxNPV) },
+      { id: '16.3', name: '全部投资回收期', unit: '年', data: formatPaybackPeriod(indicators.preTaxStaticPaybackPeriod) },
+      { id: '17', name: '项目投资税后指标', unit: '', data: '' },
+      { id: '17.1', name: '财务内部收益率', unit: '％', data: formatNumberNoRounding(indicators.postTaxIRR) },
+      { id: '17.2', name: '项目投资财务净现值（Ic=6％）', unit: '万元', data: formatNumberNoRounding(indicators.postTaxNPV) },
+      { id: '17.3', name: '全部投资回收期', unit: '年', data: formatPaybackPeriod(indicators.postTaxStaticPaybackPeriod) },
+      { id: '18', name: '资本金内部收益率', unit: '％', data: formatNumberNoRounding(indicators.postTaxIRR) },
+    ];
+  }, [context, preTaxRate, postTaxRate]);
+  
+  // 导出财务评价指标汇总表
+  const handleExportFinancialSummaryTable = () => {
+    if (!context) {
+      notifications.show({
+        title: '导出失败',
+        message: '项目上下文未加载',
+        color: 'red',
+      });
+      return;
+    }
+
+    const excelData = financialSummaryRows.map(row => ({
+      序号: row.id,
+      项目名称: row.name,
+      单位: row.unit,
+      数据: row.data
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '财务评价指标汇总表');
+
+    XLSX.writeFile(wb, `财务评价指标汇总表_${context.projectName || '项目'}.xlsx`);
+
+    notifications.show({
+      title: '导出成功',
+      message: '财务评价指标汇总表已导出为Excel文件',
+      color: 'green',
+    });
+  };
+
   return (
     <>
       <Stack gap="md">
@@ -3592,6 +3705,78 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         }}
       >
         <LoanRepaymentScheduleTable showCard={false} estimate={investmentEstimate} />
+      </Modal>
+
+      {/* 财务评价指标汇总表弹窗 */}
+      <Modal
+        opened={showFinancialSummaryModal}
+        onClose={() => setShowFinancialSummaryModal(false)}
+        centered
+        title={
+          <Group justify="space-between" w="100%">
+            <Text size="md">
+              📊 财务评价指标汇总表
+            </Text>
+            <Group gap="xs">
+              <Tooltip label="导出Excel">
+                <ActionIcon
+                  variant="light"
+                  color="green"
+                  size={16}
+                  onClick={handleExportFinancialSummaryTable}
+                >
+                  <IconDownload size={16} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+          </Group>
+        }
+        size="600px"
+        styles={{
+          body: {
+            maxHeight: '600px',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        <Table
+          striped
+          withTableBorder
+          styles={{
+            th: {
+              backgroundColor: '#F7F8FA',
+              color: '#1D2129',
+              fontWeight: 600,
+              fontSize: '14px',
+              textAlign: 'center',
+              border: '1px solid #E5E6EB'
+            },
+            td: {
+              fontSize: '14px',
+              textAlign: 'center',
+              border: '1px solid #E5E6EB'
+            }
+          }}
+        >
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th style={{ width: '60px' }}>序号</Table.Th>
+              <Table.Th style={{ width: '280px' }}>项目名称</Table.Th>
+              <Table.Th style={{ width: '80px' }}>单位</Table.Th>
+              <Table.Th>数据</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {financialSummaryRows.map((row) => (
+              <Table.Tr key={row.id}>
+                <Table.Td>{row.id}</Table.Td>
+                <Table.Td style={{ textAlign: 'left' }}>{row.name}</Table.Td>
+                <Table.Td>{row.unit}</Table.Td>
+                <Table.Td>{typeof row.data === 'number' ? formatNumberNoRounding(row.data) : row.data}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
       </Modal>
 
       {/* 财务指标调试弹窗 */}

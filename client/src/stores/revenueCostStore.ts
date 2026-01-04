@@ -863,9 +863,11 @@ export const useRevenueCostStore = create<RevenueCostState>()(
       
       /**
        * 计算指定年份的增值税额（用于生成营业收入表）
+       * 注意：这个函数会内部调用 calculateFixedAssetInputTaxForYear 来计算进项税额（固定资产待抵扣）
        */
       calculateVatForYear: (year: number, deductibleInputTax: number = 0): number => {
         const state = get()
+        const operationYears = state.context?.operationYears || 1
         
         // 计算销项税额
         const yearOutputTax = state.revenueItems.reduce((sum, item) => {
@@ -874,7 +876,7 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           return sum + (revenue - revenue / (1 + item.vatRate))
         }, 0)
         
-        // 计算进项税额
+        // 计算进项税额（原材料）
         let yearInputTax = 0
         if (state.costConfig.rawMaterials.items && state.costConfig.rawMaterials.items.length > 0) {
           const productionRate = state.costConfig.rawMaterials.applyProductionRate
@@ -896,12 +898,113 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           })
         }
         
+        // 计算进项税额（燃料动力）- 与 calculateOtherTaxesAndSurcharges 保持一致
+        if (state.costConfig.fuelPower.items && state.costConfig.fuelPower.items.length > 0) {
+          const productionRate = state.costConfig.fuelPower.applyProductionRate
+            ? (state.productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+            : 1
+          
+          state.costConfig.fuelPower.items.forEach((item: any) => {
+            const consumption = item.consumption || 0
+            let amount = 0
+            // 对汽油和柴油进行特殊处理：单价×数量/10000
+            if (['汽油', '柴油'].includes(item.name)) {
+              amount = (item.price || 0) * consumption / 10000 * productionRate
+            } else {
+              amount = consumption * (item.price || 0) * productionRate
+            }
+            
+            const taxRate = (item.taxRate || 13) / 100
+            yearInputTax += amount * taxRate / (1 + taxRate)
+          })
+        }
+        
         // 计算进项税额（固定资产待抵扣）
-        const yearFixedAssetInputTax = deductibleInputTax > 0 ? deductibleInputTax : 0
+        // 参考 calculateOtherTaxesAndSurcharges 函数中的算法
+        let yearFixedAssetInputTax = 0
+        if (deductibleInputTax > 0 && state.context) {
+          const years = Array.from({ length: operationYears }, (_, i) => i + 1)
+          
+          // 计算每年的销项税额和进项税额
+          const yearlyData = years.map((y) => {
+            // 计算销项税额
+            const yOutputTax = state.revenueItems.reduce((sum, item) => {
+              const prodRate = getProductionRateForYear(state.productionRates, y)
+              const rev = calculateYearlyRevenue(item, y, prodRate)
+              return sum + (rev - rev / (1 + item.vatRate))
+            }, 0)
+            
+            // 计算进项税额（原材料）
+            let yInputTax = 0
+            if (state.costConfig.rawMaterials.items && state.costConfig.rawMaterials.items.length > 0) {
+              const prodRate = state.costConfig.rawMaterials.applyProductionRate
+                ? (state.productionRates?.find(p => p.yearIndex === y)?.rate || 1)
+                : 1
+              state.costConfig.rawMaterials.items.forEach((item: any) => {
+                const taxRate = Number(item.taxRate) || 0
+                const taxRateDecimal = taxRate / 100
+                let baseAmount = 0
+                if (item.sourceType === 'percentage') {
+                  baseAmount = state.revenueItems.reduce((s, revItem) => s + calculateTaxableIncome(revItem), 0) * (item.percentage || 0) / 100
+                } else if (item.sourceType === 'quantityPrice') {
+                  baseAmount = (item.quantity || 0) * (item.unitPrice || 0)
+                } else if (item.sourceType === 'directAmount') {
+                  baseAmount = item.directAmount || 0
+                }
+                yInputTax += baseAmount * prodRate * taxRateDecimal / (1 + taxRateDecimal)
+              })
+            }
+            
+            // 计算进项税额（燃料动力）- 与 calculateOtherTaxesAndSurcharges 保持一致
+            if (state.costConfig.fuelPower.items && state.costConfig.fuelPower.items.length > 0) {
+              const prodRate = state.costConfig.fuelPower.applyProductionRate
+                ? (state.productionRates?.find(p => p.yearIndex === y)?.rate || 1)
+                : 1
+              
+              state.costConfig.fuelPower.items.forEach((item: any) => {
+                const consumption = item.consumption || 0
+                let amount = 0
+                if (['汽油', '柴油'].includes(item.name)) {
+                  amount = (item.price || 0) * consumption / 10000 * prodRate
+                } else {
+                  amount = consumption * (item.price || 0) * prodRate
+                }
+                
+                const taxRate = (item.taxRate || 13) / 100
+                yInputTax += amount * taxRate / (1 + taxRate)
+              })
+            }
+            
+            return {
+              year: y,
+              outputTax: yOutputTax,
+              inputTax: yInputTax
+            }
+          })
+          
+          // 计算每年的进项税额（固定资产待抵扣）
+          let remainingDeductibleTax = deductibleInputTax
+          
+          for (const data of yearlyData) {
+            // 计算使增值税等于0所需的进项税额（固定资产待抵扣）
+            const neededFixedAssetInputTax = data.outputTax - data.inputTax
+            
+            // 如果还有剩余的待抵扣进项税，则使用需要的值，否则使用剩余值
+            const actualFixedAssetInputTax = Math.min(Math.max(0, neededFixedAssetInputTax), remainingDeductibleTax)
+            
+            if (data.year === year) {
+              yearFixedAssetInputTax = actualFixedAssetInputTax
+              break
+            }
+            
+            remainingDeductibleTax -= actualFixedAssetInputTax
+          }
+        }
         
         // 增值税 = 销项税额 - 进项税额 - 进项税额（固定资产待抵扣）
         const vatAmount = yearOutputTax - yearInputTax - yearFixedAssetInputTax
         
+        // 确保增值税不为负数
         return Math.max(0, vatAmount)
       },
       
@@ -988,10 +1091,43 @@ export const useRevenueCostStore = create<RevenueCostState>()(
         
         // 2.3 进项税额（固定资产待抵扣）
         const row2_3 = { 序号: '2.3', 收入项目: '进项税额（固定资产待抵扣）', 合计: 0, 运营期: [] as number[] }
+        let accumulatedDeduction = 0
         years.forEach((year) => {
-          const yearFixedAssetInputTax = deductibleInputTax > 0 ? deductibleInputTax / operationYears : 0
+          // 重新计算当年的销项和进项
+          const yearOutputTax = state.revenueItems.reduce((sum, item) => {
+            const productionRate = getProductionRateForYear(state.productionRates, year)
+            const revenue = calculateYearlyRevenue(item, year, productionRate)
+            return sum + (revenue - revenue / (1 + item.vatRate))
+          }, 0)
+          
+          let yearInputTax = 0
+          if (state.costConfig.rawMaterials.items && state.costConfig.rawMaterials.items.length > 0) {
+            const productionRate = state.costConfig.rawMaterials.applyProductionRate
+              ? (state.productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+              : 1
+            state.costConfig.rawMaterials.items.forEach((item: any) => {
+              const taxRate = Number(item.taxRate) || 0
+              const taxRateDecimal = taxRate / 100
+              let baseAmount = 0
+              if (item.sourceType === 'percentage') {
+                baseAmount = state.revenueItems.reduce((s, revItem) => s + calculateTaxableIncome(revItem), 0) * (item.percentage || 0) / 100
+              } else if (item.sourceType === 'quantityPrice') {
+                baseAmount = (item.quantity || 0) * (item.unitPrice || 0)
+              } else if (item.sourceType === 'directAmount') {
+                baseAmount = item.directAmount || 0
+              }
+              yearInputTax += baseAmount * productionRate * taxRateDecimal / (1 + taxRateDecimal)
+            })
+          }
+          
+          // 当年可以抵扣的金额
+          const yearDeductible = Math.max(0, yearOutputTax - yearInputTax)
+          const remainingDeductible = deductibleInputTax - accumulatedDeduction
+          const yearFixedAssetInputTax = Math.min(yearDeductible, remainingDeductible)
+          
           row2_3.运营期.push(yearFixedAssetInputTax)
           row2_3.合计 += yearFixedAssetInputTax
+          accumulatedDeduction += yearFixedAssetInputTax
         })
         rows.push(row2_3)
         
@@ -1005,6 +1141,7 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           row3.运营期.push(otherTaxes)
           row3.合计 += otherTaxes
         })
+        
         rows.push(row3)
         
         // 3.1 城市建设维护税
@@ -1039,10 +1176,13 @@ export const useRevenueCostStore = create<RevenueCostState>()(
        */
       saveRevenueTableData: async (deductibleInputTax: number = 0, urbanTaxRate: number = 0.07): Promise<boolean> => {
         const state = get()
-        if (!state.context) return false
+        if (!state.context) {
+          return false
+        }
         
         // 生成表格数据
         const tableData = state.generateRevenueTableData(deductibleInputTax, urbanTaxRate)
+        
         if (!tableData) return false
         
         // 更新本地状态
@@ -1169,12 +1309,6 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             loanRepaymentTableData: state.loanRepaymentTableData
           };
           
-          console.log('💾 正在保存数据到后端:', {
-            project_id: state.context.projectId,
-            model_data: modelData,
-            workflow_step: state.currentStep
-          });
-          
           const response = await revenueCostApi.save({
             project_id: state.context.projectId,
             model_data: modelData,
@@ -1182,10 +1316,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
           })
           
           set({ isSaving: false })
-          console.log('✅ 数据保存成功:', response);
           return response.success
         } catch (error) {
-          console.error('❌ 保存失败:', error)
+          console.error('保存失败:', error)
           set({ isSaving: false })
           return false
         }
@@ -1226,6 +1359,8 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               loanConfig: modelData?.loanConfig || getDefaultLoanConfig(),
               currentStep: estimate.workflow_step || 'period'
             })
+          } else {
+            console.warn('后端返回的数据中没有estimate:', response);
           }
           
           set({ isSubmitting: false })
