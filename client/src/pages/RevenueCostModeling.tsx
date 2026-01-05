@@ -1172,6 +1172,61 @@ const RevenueCostModeling: React.FC = () => {
     });
   };
 
+  // 导出折旧与摊销估算表为Excel
+  const handleExportDepreciationTable = () => {
+    if (!project || !depreciationData || depreciationData.length === 0) {
+      notifications.show({
+        title: '导出失败',
+        message: '没有可导出的折旧与摊销数据',
+        color: 'red',
+      });
+      return;
+    }
+
+    const excelData: any[] = [];
+    
+    // 添加表头
+    const headerRow: any = { '序号': '', '资产类别': '', '原值（万元）': '', '折旧/摊销额合计（万元）': '' };
+    const operationYears = project?.operation_years || 0;
+    for (let i = 0; i < operationYears; i++) {
+      headerRow[`运营期${i + 1}`] = '';
+    }
+    excelData.push(headerRow);
+    
+    // 第二行表头
+    const headerRow2: any = { '序号': '', '资产类别': '', '原值（万元）': '', '折旧/摊销额合计（万元）': '' };
+    for (let i = 0; i < operationYears; i++) {
+      headerRow2[`${i + 1}`] = i + 1;
+    }
+    excelData.push(headerRow2);
+
+    // 添加数据行
+    depreciationData.forEach((row) => {
+      const dataRow: any = { 
+        '序号': row.序号, 
+        '资产类别': row.资产类别, 
+        '原值（万元）': row.原值, 
+        '折旧/摊销额合计（万元）': row.年折旧摊销额 
+      };
+      for (let i = 0; i < operationYears; i++) {
+        dataRow[`${i + 1}`] = row.分年数据[i] !== undefined ? row.分年数据[i] : '';
+      }
+      excelData.push(dataRow);
+    });
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '折旧与摊销估算表');
+
+    XLSX.writeFile(wb, `折旧与摊销估算表_${project.project_name || '项目'}.xlsx`);
+
+    notifications.show({
+      title: '导出成功',
+      message: '折旧与摊销估算表已导出为Excel文件',
+      color: 'green',
+    });
+  };
+
   const handleBack = () => {
     if (activeStep > 0) {
       setCurrentStep(stepMap[activeStep - 1] as any)
@@ -1692,9 +1747,23 @@ const RevenueCostModeling: React.FC = () => {
               opened={depreciationTableOpened}
               onClose={() => setDepreciationTableOpened(false)}
               title={
-                <Group gap="xs">
-                  <IconFileText size={20} color="#165DFF" />
-                  <Text fw={600} c="#1D2129">折旧与摊销估算表</Text>
+                <Group justify="space-between" w="100%">
+                  <Group gap="xs">
+                    <IconFileText size={20} color="#165DFF" />
+                    <Text fw={600} c="#1D2129">折旧与摊销估算表</Text>
+                  </Group>
+                  <Group gap="xs">
+                    <Tooltip label="导出Excel">
+                      <ActionIcon
+                        variant="light"
+                        color="green"
+                        size={16}
+                        onClick={handleExportDepreciationTable}
+                      >
+                        <IconFileText size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
                 </Group>
               }
               size="1400px"
