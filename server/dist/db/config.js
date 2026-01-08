@@ -1,5 +1,5 @@
-import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
+import * as mysql from 'mysql2/promise';
+import * as dotenv from 'dotenv';
 dotenv.config();
 export const dbConfig = {
     host: process.env.DB_HOST || 'sql.gxch.site',
@@ -23,8 +23,8 @@ export async function testConnection() {
         const connection = await pool.getConnection();
         console.log('✅ MariaDB 连接成功');
         connection.release();
-        // 自动迁移：检查并添加缺失的土地字段
-        await ensureLandFields();
+        // 自动迁移：检查并添加缺失的字段
+        await ensureFields();
         return true;
     }
     catch (error) {
@@ -32,9 +32,11 @@ export async function testConnection() {
         return false;
     }
 }
-// 确保土地信息字段存在
-async function ensureLandFields() {
+// 确保数据库字段存在
+async function ensureFields() {
     const alterQueries = [
+        // 投资项目的土地相关字段
+        "ALTER TABLE investment_projects ADD COLUMN construction_unit VARCHAR(255) DEFAULT '' COMMENT '建设单位'",
         "ALTER TABLE investment_projects ADD COLUMN land_mode VARCHAR(10) DEFAULT 'A'",
         "ALTER TABLE investment_projects ADD COLUMN land_area DECIMAL(15,4) DEFAULT 0",
         "ALTER TABLE investment_projects ADD COLUMN land_unit_price DECIMAL(15,4) DEFAULT 0",
@@ -46,12 +48,23 @@ async function ensureLandFields() {
         "ALTER TABLE investment_projects ADD COLUMN land_remark TEXT",
         "ALTER TABLE investment_projects ADD COLUMN seedling_compensation DECIMAL(15,4) DEFAULT 0",
         "ALTER TABLE investment_projects ADD COLUMN lease_seedling_compensation DECIMAL(15,4) DEFAULT 0",
-        "ALTER TABLE investment_estimates ADD COLUMN custom_land_cost DECIMAL(15,2) DEFAULT NULL COMMENT '自定义土地费用（万元）'"
+        // 项目地点和类型字段
+        "ALTER TABLE investment_projects ADD COLUMN location VARCHAR(255) DEFAULT '' COMMENT '项目地点'",
+        "ALTER TABLE investment_projects ADD COLUMN project_type VARCHAR(100) DEFAULT '' COMMENT '项目类型（曾用名：所属行业）'",
+        "ALTER TABLE investment_projects ADD COLUMN industry VARCHAR(100) DEFAULT '' COMMENT '所属行业（已废弃，保留用于兼容旧数据）'",
+        "ALTER TABLE investment_estimates ADD COLUMN custom_land_cost DECIMAL(15,2) DEFAULT NULL COMMENT '自定义土地费用（万元）'",
+        // 报告表字段
+        "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS error_message TEXT COMMENT '错误信息'",
+        "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS style_config JSON COMMENT '样式配置'",
+        "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS sections_config JSON COMMENT '章节配置'",
+        "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS resources_config JSON COMMENT '资源映射'",
     ];
     for (const query of alterQueries) {
         try {
             await pool.execute(query);
-            console.log('✅ 添加字段:', query.match(/ADD COLUMN (\w+)/)?.[1]);
+            // 提取字段名（处理 IF NOT EXISTS 语法）
+            const fieldMatch = query.match(/ADD COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/);
+            console.log('✅ 添加字段:', fieldMatch ? fieldMatch[1] : 'unknown');
         }
         catch (error) {
             if (error.code === 'ER_DUP_FIELDNAME') {

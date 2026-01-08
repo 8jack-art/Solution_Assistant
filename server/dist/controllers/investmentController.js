@@ -375,12 +375,21 @@ export class InvestmentController {
                 };
             };
             const loanRepaymentScheduleSimple = generateLoanRepaymentScheduleSimple(constructionInterestDetails, project.operation_years);
-            // 辅助函数：确保数值有效并格式化
+            // 辅助函数：确保数值有效并格式化（保留5位小数）
             const toDecimal = (val) => {
                 const num = Number(val);
                 if (isNaN(num) || !isFinite(num))
                     return 0;
-                return Math.round(num * 100) / 100; // 保留两位小数
+                // 使用字符串处理避免浮点数精度问题
+                const str = num.toFixed(10);
+                const decimalIndex = str.indexOf('.');
+                if (decimalIndex === -1) {
+                    return num;
+                }
+                const integerPart = str.substring(0, decimalIndex);
+                const decimalPart = str.substring(decimalIndex + 1, decimalIndex + 6); // 取5位小数
+                const resultStr = integerPart + '.' + decimalPart.padEnd(5, '0');
+                return Number(resultStr);
             };
             // 只有在迭代完成后且需要保存时，才写入数据库
             let savedEstimate = null;

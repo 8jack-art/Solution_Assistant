@@ -1,4 +1,4 @@
-import mysql from 'mysql2/promise';
+import * as mysql from 'mysql2/promise';
 export declare const dbConfig: {
     host: string;
     port: number;

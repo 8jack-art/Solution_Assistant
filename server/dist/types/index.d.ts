@@ -20,6 +20,9 @@ export interface InvestmentProject {
     operation_years: number;
     loan_ratio: number;
     loan_interest_rate: number;
+    construction_unit?: string;
+    location?: string;
+    project_type?: string;
     is_locked: boolean;
     locked_at?: string;
     land_mode?: 'A' | 'B' | 'C' | 'D' | 'E';

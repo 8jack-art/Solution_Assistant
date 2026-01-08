@@ -46,15 +46,18 @@ export class InvestmentEstimateModel {
                         partG: { 序号: 'G', 工程或费用名称: '项目总资金', 合计: 0 }
                     };
                 }
+                // 反序列化 construction_interest_details
                 try {
                     if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
                         row.construction_interest_details = JSON.parse(row.construction_interest_details);
+                        console.log(`[InvestmentEstimate] 成功反序列化 construction_interest_details，类型: ${Array.isArray(row.construction_interest_details) ? '数组' : '对象'}`);
                     }
                 }
                 catch (jsonError) {
                     console.error(`[InvestmentEstimate] 解析construction_interest_details JSON失败，ID${id}:`, jsonError);
                     row.construction_interest_details = null;
                 }
+                // 反序列化 loan_repayment_schedule_simple
                 try {
                     if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
                         row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple);
@@ -64,6 +67,7 @@ export class InvestmentEstimateModel {
                     console.error(`[InvestmentEstimate] 解析loan_repayment_schedule_simple JSON失败，ID${id}:`, jsonError);
                     row.loan_repayment_schedule_simple = null;
                 }
+                // 反序列化 loan_repayment_schedule_detailed
                 try {
                     if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
                         row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed);
@@ -143,15 +147,18 @@ export class InvestmentEstimateModel {
                         partG: { 序号: 'G', 工程或费用名称: '项目总资金', 合计: 0 }
                     };
                 }
+                // 反序列化 construction_interest_details
                 try {
                     if (row.construction_interest_details && typeof row.construction_interest_details === 'string') {
                         row.construction_interest_details = JSON.parse(row.construction_interest_details);
+                        console.log(`[InvestmentEstimate] 成功反序列化 construction_interest_details，类型: ${Array.isArray(row.construction_interest_details) ? '数组' : '对象'}`);
                     }
                 }
                 catch (jsonError) {
                     console.error(`[InvestmentEstimate] 解析construction_interest_details JSON失败，项目${projectId}:`, jsonError);
                     row.construction_interest_details = null;
                 }
+                // 反序列化 loan_repayment_schedule_simple
                 try {
                     if (row.loan_repayment_schedule_simple && typeof row.loan_repayment_schedule_simple === 'string') {
                         row.loan_repayment_schedule_simple = JSON.parse(row.loan_repayment_schedule_simple);
@@ -161,6 +168,7 @@ export class InvestmentEstimateModel {
                     console.error(`[InvestmentEstimate] 解析loan_repayment_schedule_simple JSON失败，项目${projectId}:`, jsonError);
                     row.loan_repayment_schedule_simple = null;
                 }
+                // 反序列化 loan_repayment_schedule_detailed
                 try {
                     if (row.loan_repayment_schedule_detailed && typeof row.loan_repayment_schedule_detailed === 'string') {
                         row.loan_repayment_schedule_detailed = JSON.parse(row.loan_repayment_schedule_detailed);
@@ -198,14 +206,14 @@ export class InvestmentEstimateModel {
         try {
             // 生成UUID
             const id = randomUUID();
-            const [result] = await pool.execute(`INSERT INTO investment_estimates 
-         (id, project_id, estimate_data, total_investment, building_investment, 
-          construction_interest, gap_rate, construction_cost, equipment_cost, 
-          installation_cost, other_cost, land_cost, basic_reserve, price_reserve, 
-          construction_period, iteration_count, final_total, loan_amount, loan_rate, 
-          custom_loan_amount, custom_land_cost, construction_interest_details, 
-          loan_repayment_schedule_simple, loan_repayment_schedule_detailed) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            const [result] = await pool.execute(`INSERT INTO investment_estimates
+         (id, project_id, estimate_data, total_investment, building_investment,
+          construction_interest, gap_rate, construction_cost, equipment_cost,
+          installation_cost, other_cost, land_cost, basic_reserve, price_reserve,
+          construction_period, iteration_count, final_total, loan_amount, loan_rate,
+          custom_loan_amount, custom_land_cost, construction_interest_details,
+          loan_repayment_schedule_simple, loan_repayment_schedule_detailed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
                 id,
                 estimateData.project_id,
                 estimateData.estimate_data ? JSON.stringify(estimateData.estimate_data) : null,
@@ -241,15 +249,38 @@ export class InvestmentEstimateModel {
     static async update(id, updates) {
         try {
             // 过滤掉undefined值的字段
-            const fields = Object.keys(updates).filter(key => key !== 'id' && updates[key] !== undefined);
+            const fields = Object.keys(updates).filter(key => {
+                const value = updates[key];
+                return key !== 'id' && value !== undefined;
+            });
+            // 需要JSON序列化的字段列表
+            const jsonFields = ['estimate_data', 'construction_interest_details', 'loan_repayment_schedule_simple', 'loan_repayment_schedule_detailed'];
             const values = fields.map(field => {
-                if (['estimate_data', 'construction_interest_details', 'loan_repayment_schedule_simple', 'loan_repayment_schedule_detailed'].includes(field)) {
-                    return JSON.stringify(updates[field]);
+                if (jsonFields.includes(field)) {
+                    const value = updates[field];
+                    // 安全序列化：如果是对象则JSON.stringify，否则直接返回
+                    if (value && typeof value === 'object') {
+                        try {
+                            return JSON.stringify(value);
+                        }
+                        catch (e) {
+                            console.error(`JSON序列化失败 field=${field}:`, e);
+                            return null;
+                        }
+                    }
+                    return value;
                 }
                 const value = updates[field];
                 // 将undefined转换为null
                 return value === undefined ? null : value;
             });
+            // 调试日志：打印字段和值的数量
+            console.log(`[InvestmentEstimate] UPDATE - fields数量: ${fields.length}, values数量: ${values.length}`);
+            console.log(`[InvestmentEstimate] UPDATE - fields: ${fields.join(', ')}`);
+            // 确保数量匹配
+            if (fields.length !== values.length) {
+                throw new Error(`字段数量不匹配: fields=${fields.length}, values=${values.length}`);
+            }
             const setClause = fields.map(field => `${field} = ?`).join(', ');
             await pool.execute(`UPDATE investment_estimates SET ${setClause} WHERE id = ?`, [...values, id]);
             return await this.findById(id);

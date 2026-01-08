@@ -37,7 +37,7 @@ export declare function generateInvestmentPrompt(projectInfo: {
     projectName: string;
     totalInvestment: number;
     constructionYears: number;
-    industry?: string;
+    project_type?: string;
 }): LLMMessage[];
 export declare function analyzeEngineeringItemsPrompt(projectName: string, projectDescription: string, totalInvestment: number): LLMMessage[];
 export declare function subdivideEngineeringItemPrompt(itemName: string, itemRemark: string, totalAmount: number, projectName: string, projectDescription: string): LLMMessage[];

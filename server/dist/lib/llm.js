@@ -388,7 +388,7 @@ export class LLMService {
 }
 export function generateInvestmentPrompt(projectInfo) {
     const systemPrompt = `你是一个专业的投资估算专家，请根据项目信息生成详细的工程费用项。
-
+ 
 请按照以下格式输出JSON：
 {
   "constructionCost": {
@@ -423,12 +423,12 @@ export function generateInvestmentPrompt(projectInfo) {
 3. 费用项应具体且符合行业标准
 4. 只返回JSON格式，不要包含其他文字`;
     const userPrompt = `请为以下项目生成详细的工程费用项：
-
+ 
 项目名称：${projectInfo.projectName}
 总投资：${projectInfo.totalInvestment}万元
 建设年限：${projectInfo.constructionYears}年
-${projectInfo.industry ? `行业类型：${projectInfo.industry}` : ''}
-
+${projectInfo.project_type ? `项目类型：${projectInfo.project_type}` : ''}
+ 
 请根据项目特点生成合理的费用分解。`;
     return [
         { role: 'system', content: systemPrompt },
@@ -529,7 +529,7 @@ export function subdivideEngineeringItemPrompt(itemName, itemRemark, totalAmount
 2. 四个费用占比之和必须等于1 (construction_ratio + equipment_ratio + installation_ratio + other_ratio = 1)
 3. 各费用 = 总价 × 对应占比
 4. 所有三级子项的总价之和应等于二级子项的总金额
-5. 单价以“元”为单位，不是万元
+5. 单价以"元"为单位，不是万元
 6. **数值不要太整：工程量和单价应带有小数，避免整数整十整百的数值，使数据更符合实际工程情况。**
 
 费用占比参考：
@@ -633,10 +633,13 @@ export function analyzeRevenueStructurePrompt(projectName, projectDescription, t
 }
 export function analyzeProjectInfoPrompt(projectInfo) {
     const systemPrompt = `你是一个专业的项目分析助手。请仔细分析用户提供的项目信息描述,提取关键信息并以JSON格式返回。
-
+ 如项目名称未提及，请根据描述合理推测一个名称。如建设单位未提及，请合理生成一个名称。如项目地点未提及，则根据项目名称合理推测一个地点，例如广西百色市辖区。如贷款比例未提及，则按80%计取。判断用户信息里有无计算式例如：3+17、2+18等，如有分解出来填写在对应字段里。3+17表示建设年限3年，运营年限17年。如未提及，均按3+17计取。
 Please严格按照 following JSON format output,all fields must be filled:
 {
   "project_name": "项目名称",
+  "construction_unit": "建设单位",
+  "location": "项目地点",
+  "project_type": "项目类型",
   "total_investment": 数值(单位:万元),
   "construction_years": 整数(建设年限,单位:年),
   "operation_years": 整数(运营年限,单位:年),
@@ -688,7 +691,7 @@ Guangxi Land Acquisition and Leasing Price Range (2024-2025, unit: yuan/acre)
 
 一、Land acquisition price range (district comprehensive land price, including land compensation fee + resettlement allowance)
 
-| Region    | Basic farmland      | Construction land      | Unutilized land      | Typical area           |
+| Region    | Basic农田      | Construction land      | Unutilized land      | Typical area           |
 |---------|---------------|---------------|---------------|--------------------|
 | Nanning    | 3.5~4.8万     | 1.4~1.8万     | 0.4~1.8万     | Liangqing District, Wuming County     |
 | Liuzhou    | 3.8~4.4万     | 1.4~1.6万     | 0.35~1.6万    | City area, Liuzhou District     |
@@ -724,14 +727,13 @@ Guangxi Land Acquisition and Leasing Price Range (2024-2025, unit: yuan/acre)
 | Laibin    | 500~2000             | 1.5万~4万            | 0.8万~2万            | —                             |
 | Chongzuo    | 500~2000             | 1.5万~4万            | 0.8万~2万            | Pingxiang City Industrial Land 1.5万/acre/year     |
 
-
-
-
+ 
+ 
 `;
     const userPrompt = `Please analyze the following project information and extract key data:
-
+ 
 ${projectInfo}
-
+ 
 Please return JSON format structured data.`;
     return [
         { role: 'system', content: systemPrompt },

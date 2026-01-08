@@ -26,7 +26,7 @@ const generateContentSchema = z.object({
     project_name: z.string(),
     total_investment: z.number().positive(),
     construction_years: z.number().int().min(1),
-    industry: z.string().optional(),
+    project_type: z.string().optional(),
     use_default_config: z.boolean().default(true),
     config_id: z.string().optional(),
 });
@@ -400,7 +400,7 @@ export class LLMController {
                     error: '用户未认证'
                 });
             }
-            const { project_name, total_investment, construction_years, industry, use_default_config, config_id } = generateContentSchema.parse(req.body);
+            const { project_name, total_investment, construction_years, project_type, use_default_config, config_id } = generateContentSchema.parse(req.body);
             let config;
             if (use_default_config) {
                 config = await LLMConfigModel.findDefaultByUserId(userId);
@@ -418,7 +418,7 @@ export class LLMController {
                 projectName: project_name,
                 totalInvestment: total_investment,
                 constructionYears: construction_years,
-                industry
+                project_type
             });
             let result;
             // 检查是否是智谱AI，如果是则使用新的SDK
