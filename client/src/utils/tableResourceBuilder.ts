@@ -865,3 +865,714 @@ export function buildAllTableResources(projectData: any): Record<string, TableRe
 
   return tables
 }
+
+/**
+ * 构建投资估算简表JSON数据（用于LLM提示词）
+ */
+export function buildInvestmentEstimateJSON(estimateData: any): string {
+  if (!estimateData) return '{}'
+  
+  const jsonData: any = {
+    title: '投资估算简表',
+    summary: {
+      totalInvestment: estimateData.partG?.合计 || 0,
+      constructionInvestment: estimateData.partE?.合计 || 0,
+      interestDuringConstruction: estimateData.partF?.合计 || 0,
+     预备费: estimateData.partD?.合计 || 0
+    },
+    partA: {
+      name: '第一部分 工程费用',
+      total: estimateData.partA?.合计 || 0,
+      children: estimateData.partA?.children?.map((item: any) => ({
+        序号: item.序号,
+        工程或费用名称: item.工程或费用名称,
+        建设工程费: item['建设工程费（万元）'] || item.建设工程费 || 0,
+        设备购置费: item['设备购置费（万元）'] || item.设备购置费 || 0,
+        安装工程费: item['安装工程费（万元）'] || item.安装工程费 || 0,
+        其它费用: item['其它费用（万元）'] || item.其它费用 || 0,
+        合计: item['合计（万元）'] || item.合计 || 0
+      })) || []
+    },
+    partB: {
+      name: '第二部分 工程其它费用',
+      total: estimateData.partB?.合计 || 0,
+      children: estimateData.partB?.children?.map((item: any) => ({
+        序号: item.序号,
+        工程或费用名称: item.工程或费用名称,
+        其它费用: item['其它费用（万元）'] || item.其它费用 || item.合计 || 0,
+        合计: item['合计（万元）'] || item.合计 || 0
+      })) || []
+    }
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建折旧与摊销估算表JSON数据（用于LLM提示词）
+ */
+export function buildDepreciationAmortizationJSON(depreciationData: any, context?: any): string {
+  if (!depreciationData) return '{}'
+  
+  const jsonData: any = {
+    title: '折旧与摊销估算表',
+    summary: {
+      totalDepreciation: 0,
+      totalAmortization: 0
+    },
+    depreciation: [],
+    amortization: []
+  }
+  
+  // 解析折旧数据
+  if (depreciationData.depreciation_schedule) {
+    let scheduleData = depreciationData.depreciation_schedule
+    if (typeof scheduleData === 'string') {
+      try {
+        scheduleData = JSON.parse(scheduleData)
+      } catch (e) {}
+    }
+    
+    if (scheduleData && Array.isArray(scheduleData)) {
+      jsonData.depreciation = scheduleData.map((item: any) => ({
+        资产名称: item.assetName || item.name,
+        资产原值: item.originalValue || item.assetValue || 0,
+        折旧年限: item.depreciationYears || item.years || 0,
+        年折旧率: item.depreciationRate || item.rate || 0,
+        年折旧额: item.annualDepreciation || item.amount || 0
+      }))
+      
+      jsonData.summary.totalDepreciation = jsonData.depreciation.reduce(
+        (sum: number, item: any) => sum + (item.年折旧额 || 0), 0
+      )
+    }
+  }
+  
+  // 解析摊销数据
+  if (depreciationData.amortization_schedule) {
+    let scheduleData = depreciationData.amortization_schedule
+    if (typeof scheduleData === 'string') {
+      try {
+        scheduleData = JSON.parse(scheduleData)
+      } catch (e) {}
+    }
+    
+    if (scheduleData && Array.isArray(scheduleData)) {
+      jsonData.amortization = scheduleData.map((item: any) => ({
+        资产名称: item.assetName || item.name,
+        资产原值: item.originalValue || item.assetValue || 0,
+        摊销年限: item.amortizationYears || item.years || 0,
+        年摊销额: item.annualAmortization || item.amount || 0
+      }))
+      
+      jsonData.summary.totalAmortization = jsonData.amortization.reduce(
+        (sum: number, item: any) => sum + (item.年摊销额 || 0), 0
+      )
+    }
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建营业收入、税金及附加估算表JSON数据（用于LLM提示词）
+ */
+export function buildRevenueTaxJSON(revenueTaxData: any, context?: any): string {
+  if (!revenueTaxData) return '{}'
+  
+  const jsonData: any = {
+    title: '营业收入、营业税金及附加和增值税估算表',
+    revenueItems: [],
+    taxItems: [],
+    summary: {
+      totalRevenue: 0,
+      totalTax: 0,
+      totalVAT: 0
+    }
+  }
+  
+  // 收入项目
+  if (revenueTaxData.revenueItems) {
+    const items = typeof revenueTaxData.revenueItems === 'string' 
+      ? JSON.parse(revenueTaxData.revenueItems) 
+      : revenueTaxData.revenueItems
+    
+    jsonData.revenueItems = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      项目名称: item.name || item.项目名称 || '',
+      产品名称: item.productName || item.product_name || '',
+      单位: item.unit || item.单位 || '',
+      单价: item.price || item.单价 || 0,
+      销量: item.quantity || item.销量 || 0,
+      年营业收入: item.annualRevenue || item.年营业收入 || 0
+    }))
+    
+    jsonData.summary.totalRevenue = jsonData.revenueItems.reduce(
+      (sum: number, item: any) => sum + (item.年营业收入 || 0), 0
+    )
+  }
+  
+  // 税金项目
+  if (revenueTaxData.taxItems) {
+    const items = typeof revenueTaxData.taxItems === 'string'
+      ? JSON.parse(revenueTaxData.taxItems)
+      : revenueTaxData.taxItems
+    
+    jsonData.taxItems = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      项目名称: item.name || item.项目名称 || '',
+      税率: item.taxRate || item.税率 || 0,
+      年税金: item.annualTax || item.年税金 || 0
+    }))
+    
+    jsonData.summary.totalTax = jsonData.taxItems.reduce(
+      (sum: number, item: any) => sum + (item.年税金 || 0), 0
+    )
+  }
+  
+  // 增值税
+  if (revenueTaxData.vatItems) {
+    const items = typeof revenueTaxData.vatItems === 'string'
+      ? JSON.parse(revenueTaxData.vatItems)
+      : revenueTaxData.vatItems
+    
+    jsonData.vatItems = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      项目名称: item.name || item.项目名称 || '',
+      税率: item.vatRate || item.税率 || 0,
+      年增值税: item.annualVAT || item.年增值税 || 0
+    }))
+    
+    jsonData.summary.totalVAT = jsonData.vatItems.reduce(
+      (sum: number, item: any) => sum + (item.年增值税 || 0), 0
+    )
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建外购原材料费估算表JSON数据（用于LLM提示词）
+ */
+export function buildRawMaterialsJSON(rawMaterialsData: any, context?: any): string {
+  if (!rawMaterialsData) return '{}'
+  
+  const jsonData: any = {
+    title: '外购原材料费估算表',
+    items: [],
+    summary: {
+      totalCost: 0
+    }
+  }
+  
+  if (rawMaterialsData.raw_materials) {
+    let items = rawMaterialsData.raw_materials
+    if (typeof items === 'string') {
+      try {
+        items = JSON.parse(items)
+      } catch (e) {}
+    }
+    
+    jsonData.items = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      材料名称: item.name || item.材料名称 || '',
+      单位: item.unit || item.单位 || '',
+      单价: item.unitPrice || item.单价 || 0,
+      年用量: item.annualQuantity || item.年用量 || 0,
+      年费用: item.annualCost || item.年费用 || 0
+    }))
+    
+    jsonData.summary.totalCost = jsonData.items.reduce(
+      (sum: number, item: any) => sum + (item.年费用 || 0), 0
+    )
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建外购燃料和动力费估算表JSON数据（用于LLM提示词）
+ */
+export function buildFuelPowerJSON(fuelPowerData: any, context?: any): string {
+  if (!fuelPowerData) return '{}'
+  
+  const jsonData: any = {
+    title: '外购燃料和动力费估算表',
+    items: [],
+    summary: {
+      totalCost: 0
+    }
+  }
+  
+  if (fuelPowerData.fuel_power) {
+    let items = fuelPowerData.fuel_power
+    if (typeof items === 'string') {
+      try {
+        items = JSON.parse(items)
+      } catch (e) {}
+    }
+    
+    jsonData.items = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      名称: item.name || item.名称 || item.fuelType || '',
+      单位: item.unit || item.单位 || '',
+      单价: item.unitPrice || item.单价 || 0,
+      年用量: item.annualQuantity || item.年用量 || 0,
+      年费用: item.annualCost || item.年费用 || 0
+    }))
+    
+    jsonData.summary.totalCost = jsonData.items.reduce(
+      (sum: number, item: any) => sum + (item.年费用 || 0), 0
+    )
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建利润与利润分配表JSON数据（用于LLM提示词）
+ */
+export function buildProfitDistributionJSON(profitData: any, context?: any): string {
+  if (!profitData) return '{}'
+  
+  const jsonData: any = {
+    title: '利润与利润分配表',
+    yearlyData: [],
+    summary: {
+      totalRevenue: 0,
+      totalCost: 0,
+      totalProfit: 0,
+      totalTax: 0,
+      totalNetProfit: 0
+    }
+  }
+  
+  // 解析年度利润数据
+  if (profitData.profit_distribution || profitData.yearlyProfit) {
+    let yearlyData = profitData.profit_distribution || profitData.yearlyProfit
+    if (typeof yearlyData === 'string') {
+      try {
+        yearlyData = JSON.parse(yearlyData)
+      } catch (e) {}
+    }
+    
+    if (yearlyData && Array.isArray(yearlyData)) {
+      jsonData.yearlyData = yearlyData.map((item: any) => ({
+        年份: item.year || item.年份 || 0,
+        营业收入: item.revenue || item.营业收入 || 0,
+        总成本费用: item.totalCost || item.总成本费用 || 0,
+        营业税金及附加: item.tax || item.营业税金及附加 || 0,
+        利润总额: item.profitBeforeTax || item.利润总额 || 0,
+        所得税: item.incomeTax || item.所得税 || 0,
+        净利润: item.netProfit || item.净利润 || 0
+      }))
+    }
+  }
+  
+  // 计算合计
+  jsonData.summary.totalRevenue = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.营业收入 || 0), 0
+  )
+  jsonData.summary.totalCost = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.总成本费用 || 0), 0
+  )
+  jsonData.summary.totalProfit = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.利润总额 || 0), 0
+  )
+  jsonData.summary.totalTax = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.所得税 || 0), 0
+  )
+  jsonData.summary.totalNetProfit = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.净利润 || 0), 0
+  )
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建项目投资现金流量表JSON数据（用于LLM提示词）
+ */
+export function buildProjectCashFlowJSON(cashFlowData: any, context?: any): string {
+  if (!cashFlowData) return '{}'
+  
+  const jsonData: any = {
+    title: '项目投资现金流量表',
+    yearlyData: [],
+    summary: {
+      totalCashInflow: 0,
+      totalCashOutflow: 0,
+      netCashFlow: 0,
+      npv: 0,
+      irr: 0
+    }
+  }
+  
+  // 解析年度现金流量数据
+  if (cashFlowData.project_cash_flow || cashFlowData.yearlyCashFlow) {
+    let yearlyData = cashFlowData.project_cash_flow || cashFlowData.yearlyCashFlow
+    if (typeof yearlyData === 'string') {
+      try {
+        yearlyData = JSON.parse(yearlyData)
+      } catch (e) {}
+    }
+    
+    if (yearlyData && Array.isArray(yearlyData)) {
+      jsonData.yearlyData = yearlyData.map((item: any) => ({
+        年份: item.year || item.年份 || 0,
+        现金流入: item.cashInflow || item.现金流入 || 0,
+        现金流出: item.cashOutflow || item.现金流出 || 0,
+        净现金流量: item.netCashFlow || item.净现金流量 || 0,
+        累计净现金流量: item.cumulativeCashFlow || item.累计净现金流量 || 0,
+        所得税前净现金流量: item.cashFlowBeforeTax || item.所得税前净现金流量 || 0,
+        所得税后净现金流量: item.cashFlowAfterTax || item.所得税后净现金流量 || 0
+      }))
+    }
+  }
+  
+  // 计算合计
+  jsonData.summary.totalCashInflow = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.现金流入 || 0), 0
+  )
+  jsonData.summary.totalCashOutflow = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.现金流出 || 0), 0
+  )
+  jsonData.summary.netCashFlow = jsonData.yearlyData.reduce(
+    (sum: number, item: any) => sum + (item.净现金流量 || 0), 0
+  )
+  
+  // 获取NPV和IRR
+  if (cashFlowData.npv) jsonData.summary.npv = cashFlowData.npv
+  if (cashFlowData.irr) jsonData.summary.irr = cashFlowData.irr
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建财务计算指标表JSON数据（用于LLM提示词）
+ */
+export function buildFinancialIndicatorsJSON(financialData: any, context?: any): string {
+  if (!financialData) return '{}'
+  
+  const indicators = financialData.financialIndicators || {}
+  const investment = financialData.investment || {}
+  const revenueCost = financialData.revenueCost || {}
+  
+  // 计算年均收入和成本
+  const totalRevenue = revenueCost.revenueItems?.reduce(
+    (sum: number, item: any) => sum + (item.annualRevenue || 0), 0
+  ) || indicators.totalRevenue || 0
+  
+  const totalCost = revenueCost.costItems?.reduce(
+    (sum: number, item: any) => sum + (item.annualCost || 0), 0
+  ) || indicators.totalCost || 0
+  
+  const jsonData: any = {
+    title: '财务计算指标表',
+    investment: {
+      totalInvestment: investment.partG?.合计 || indicators.totalInvestment || 0,
+      constructionInvestment: investment.partE?.合计 || 0,
+      interestDuringConstruction: investment.partF?.合计 || 0,
+      contingency: investment.partD?.合计 || 0
+    },
+    annualMetrics: {
+      revenue: totalRevenue,
+      totalCost: totalCost,
+      profit: totalRevenue - totalCost,
+      tax: indicators.annualTax || 0,
+      vat: indicators.annualVAT || 0,
+      ebit: indicators.annualEBIT || (totalRevenue - totalCost + (indicators.annualTax || 0))
+    },
+    profitability: {
+      roi: indicators.roi || 0,  // 总投资收益率
+      roe: indicators.roe || 0,  // 项目资本金净利润率
+      netProfitMargin: totalRevenue > 0 ? ((totalRevenue - totalCost - (indicators.annualTax || 0)) / totalRevenue) * 100 : 0
+    },
+    liquidity: {
+      interestCoverageRatio: indicators.interestCoverageRatio || 0,
+      debtServiceCoverageRatio: indicators.debtServiceCoverageRatio || 0
+    },
+    investmentReturns: {
+      firrBeforeTax: indicators.firrBeforeTax || indicators.irr || 0,  // 税前财务内部收益率
+      firrAfterTax: indicators.firrAfterTax || indicators.irr || 0,      // 税后财务内部收益率
+      npvBeforeTax: indicators.npvBeforeTax || indicators.npv || 0,      // 税前财务净现值
+      npvAfterTax: indicators.npvAfterTax || indicators.npv || 0,        // 税后财务净现值
+      paybackPeriodBeforeTax: indicators.paybackPeriodBeforeTax || indicators.paybackPeriod || 0,  // 税前投资回收期
+      paybackPeriodAfterTax: indicators.paybackPeriodAfterTax || indicators.paybackPeriod || 0     // 税后投资回收期
+    }
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建借款还本付息计划表JSON数据（用于LLM提示词）
+ */
+export function buildLoanRepaymentJSON(loanData: any, context?: any): string {
+  if (!loanData) return '{}'
+  
+  // 获取建设期和运营期
+  let constructionYears = 2
+  let operationYears = 10
+  
+  if (context) {
+    constructionYears = context.constructionYears || constructionYears
+    operationYears = context.operationYears || operationYears
+  }
+  
+  if (loanData.partF?.建设期年限) {
+    constructionYears = loanData.partF.建设期年限
+  }
+  
+  const totalYears = constructionYears + operationYears
+  const jsonData: any = {
+    title: '借款还本付息计划表',
+    context: {
+      constructionYears,
+      operationYears,
+      totalYears,
+      loanAmount: loanData.partF?.贷款总额 || 0,
+      annualInterestRate: loanData.partF?.年利率 || 0
+    },
+    yearlyData: [],
+    summary: {
+      totalInterest: 0,
+      totalRepayment: 0
+    }
+  }
+  
+  // 解析还款计划数据
+  const repaymentSchedule = loanData.loan_repayment_schedule_simple || 
+                            loanData.loan_repayment_schedule_detailed ||
+                            loanData.construction_interest_details
+  
+  if (repaymentSchedule) {
+    let scheduleData = repaymentSchedule
+    if (typeof scheduleData === 'string') {
+      try {
+        scheduleData = JSON.parse(scheduleData)
+      } catch (e) {}
+    }
+    
+    if (scheduleData?.rows && Array.isArray(scheduleData.rows)) {
+      jsonData.yearlyData = scheduleData.rows.map((row: any, idx: number) => ({
+        序号: row.序号,
+        项目: row.项目,
+        合计: row.合计,
+        constructionPeriod: row.建设期 || [],
+        operationPeriod: row.运营期 || []
+      }))
+    }
+  } else if (loanData.partF?.分年利息) {
+    // 如果没有保存的计划数据，从分年利息构建
+    const yearlyInterest = loanData.partF.分年利息 || []
+    for (let i = 0; i < totalYears; i++) {
+      const isConstruction = i < constructionYears
+      jsonData.yearlyData.push({
+        年份: i + 1,
+        时期: isConstruction ? '建设期' : '运营期',
+        期初借款余额: isConstruction ? (i === 0 ? 0 : yearlyInterest[i-1]?.期末借款余额 || 0) : 0,
+        当期借款金额: isConstruction ? (yearlyInterest[i]?.当期借款金额 || 0) : 0,
+        当期利息: yearlyInterest[i]?.当期利息 || 0,
+        当期还本: isConstruction ? 0 : 0,
+        当期付息: yearlyInterest[i]?.当期利息 || 0,
+        期末借款余额: isConstruction ? (yearlyInterest[i]?.期末借款余额 || 0) : 0
+      })
+    }
+    
+    jsonData.summary.totalInterest = yearlyInterest.reduce(
+      (sum: number, item: any) => sum + (item.当期利息 || 0), 0
+    )
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建财务评价指标汇总表JSON数据（用于LLM提示词）
+ */
+export function buildFinancialSummaryJSON(financialData: any, context?: any): string {
+  if (!financialData) return '{}'
+  
+  const indicators = financialData.financialIndicators || {}
+  const investment = financialData.investment || {}
+  const revenueCost = financialData.revenueCost || {}
+  
+  // 获取建设期和运营期
+  let constructionYears = 2
+  let operationYears = 10
+  
+  if (context) {
+    constructionYears = context.constructionYears || constructionYears
+    operationYears = context.operationYears || operationYears
+  }
+  
+  if (investment.partF?.建设期年限) {
+    constructionYears = investment.partF.建设期年限
+  }
+  
+  // 计算年均数据
+  const totalRevenue = revenueCost.revenueItems?.reduce(
+    (sum: number, item: any) => sum + (item.annualRevenue || 0), 0
+  ) || indicators.totalRevenue || 0
+  
+  const totalCost = revenueCost.costItems?.reduce(
+    (sum: number, item: any) => sum + (item.annualCost || 0), 0
+  ) || indicators.totalCost || 0
+  
+  const totalInvestment = investment.partG?.合计 || indicators.totalInvestment || 0
+  const equity = indicators.equity || (totalInvestment * 0.3)
+  const constructionInvestment = investment.partE?.合计 || 0
+  const constructionInterest = investment.partF?.合计 || 0
+  const annualTax = indicators.annualTax || 0
+  const annualVAT = indicators.annualVAT || 0
+  const annualProfit = totalRevenue - totalCost
+  const annualEBIT = indicators.annualEBIT || (annualProfit + annualTax + (constructionInterest / constructionYears))
+  const annualNetProfit = annualProfit - annualTax
+  
+  // 计算指标
+  const roi = totalInvestment > 0 ? (annualEBIT / totalInvestment) * 100 : 0
+  const investmentTaxRate = totalInvestment > 0 ? ((annualEBIT + annualTax + annualVAT) / totalInvestment) * 100 : 0
+  const roe = equity > 0 ? (annualNetProfit / equity) * 100 : 0
+  
+  const jsonData: any = {
+    title: '财务评价指标汇总表',
+    basicInfo: {
+      projectName: financialData.project?.name || '',
+      constructionYears,
+      operationYears,
+      totalInvestment,
+      equity,
+      debt: totalInvestment - equity
+    },
+    annualMetrics: {
+      revenue: totalRevenue,
+      totalCost,
+      profit: annualProfit,
+      ebit: annualEBIT,
+      netProfit: annualNetProfit,
+      tax: annualTax,
+      vat: annualVAT
+    },
+    investment: {
+      totalInvestment,
+      constructionInvestment,
+      interestDuringConstruction: constructionInterest,
+      equity,
+      debt: totalInvestment - equity
+    },
+    profitability: {
+      roi: { value: roi, unit: '%', description: '总投资收益率' },
+      investmentTaxRate: { value: investmentTaxRate, unit: '%', description: '投资利税率' },
+      roe: { value: roe, unit: '%', description: '项目资本金净利润率' },
+      netProfitMargin: { 
+        value: totalRevenue > 0 ? (annualNetProfit / totalRevenue) * 100 : 0, 
+        unit: '%', 
+        description: '净利润率' 
+      }
+    },
+    liquidity: {
+      interestCoverageRatio: { 
+        value: indicators.interestCoverageRatio || 0, 
+        unit: '-', 
+        description: '平均利息备付率' 
+      },
+      debtServiceCoverageRatio: { 
+        value: indicators.debtServiceCoverageRatio || 0, 
+        unit: '-', 
+        description: '平均偿债备付率' 
+      }
+    },
+    investmentReturns: {
+      firrBeforeTax: { 
+        value: indicators.firrBeforeTax || indicators.irr || 0, 
+        unit: '%', 
+        description: '财务内部收益率（税前）' 
+      },
+      firrAfterTax: { 
+        value: indicators.firrAfterTax || indicators.irr || 0, 
+        unit: '%', 
+        description: '财务内部收益率（税后）' 
+      },
+      npvBeforeTax: { 
+        value: indicators.npvBeforeTax || indicators.npv || 0, 
+        unit: '万元', 
+        description: '财务净现值（税前）' 
+      },
+      npvAfterTax: { 
+        value: indicators.npvAfterTax || indicators.npv || 0, 
+        unit: '万元', 
+        description: '财务净现值（税后）' 
+      },
+      paybackPeriodBeforeTax: { 
+        value: indicators.paybackPeriodBeforeTax || indicators.paybackPeriod || 0, 
+        unit: '年', 
+        description: '投资回收期（税前）' 
+      },
+      paybackPeriodAfterTax: { 
+        value: indicators.paybackPeriodAfterTax || indicators.paybackPeriod || 0, 
+        unit: '年', 
+        description: '投资回收期（税后）' 
+      }
+    }
+  }
+  
+  return JSON.stringify(jsonData, null, 2)
+}
+
+/**
+ * 构建所有表格数据JSON（用于LLM提示词）
+ */
+export function buildAllTableDataJSON(projectData: any): Record<string, string> {
+  const jsonData: Record<string, string> = {}
+  
+  // 获取建设期和运营期
+  const context = {
+    constructionYears: projectData.investment?.partF?.建设期年限 || 
+                      projectData.project?.constructionYears || 2,
+    operationYears: projectData.project?.operationYears || 10
+  }
+  
+  // 投资估算简表
+  jsonData['DATA:investment_estimate'] = buildInvestmentEstimateJSON(projectData.investment)
+  
+  // 折旧与摊销估算表
+  jsonData['DATA:depreciation_amortization'] = buildDepreciationAmortizationJSON(
+    projectData.depreciation, context
+  )
+  
+  // 营业收入税金及附加估算表
+  jsonData['DATA:revenue_tax'] = buildRevenueTaxJSON(
+    projectData.revenueTax || projectData, context
+  )
+  
+  // 外购原材料费估算表
+  jsonData['DATA:raw_materials'] = buildRawMaterialsJSON(
+    projectData.rawMaterials || projectData, context
+  )
+  
+  // 外购燃料和动力费估算表
+  jsonData['DATA:fuel_power'] = buildFuelPowerJSON(
+    projectData.fuelPower || projectData, context
+  )
+  
+  // 利润与利润分配表
+  jsonData['DATA:profit_distribution'] = buildProfitDistributionJSON(
+    projectData.profitDistribution || projectData, context
+  )
+  
+  // 项目投资现金流量表
+  jsonData['DATA:project_cash_flow'] = buildProjectCashFlowJSON(
+    projectData.projectCashFlow || projectData, context
+  )
+  
+  // 财务计算指标表
+  jsonData['DATA:financial_indicators'] = buildFinancialIndicatorsJSON(projectData, context)
+  
+  // 借款还本付息计划表
+  jsonData['DATA:loan_repayment'] = buildLoanRepaymentJSON(projectData.investment, context)
+  
+  // 财务评价指标汇总表
+  jsonData['DATA:financial_summary'] = buildFinancialSummaryJSON(projectData, context)
+  
+  return jsonData
+}

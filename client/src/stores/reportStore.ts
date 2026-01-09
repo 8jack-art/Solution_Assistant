@@ -41,6 +41,7 @@ interface ReportState {
   availableVariables: ReportVariable[]
   projectData: any
   projectOverview: string | null  // 项目概况
+  customVariables: Record<string, string>  // 自定义变量 key -> value
   
   // 加载状态
   isLoading: boolean
@@ -50,11 +51,18 @@ interface ReportState {
   saveProjectOverview: (content: string) => Promise<void>
   loadProjectOverview: () => Promise<void>
   
+  // 自定义变量操作
+  addCustomVariable: (key: string, value: string) => void
+  removeCustomVariable: (key: string) => void
+  updateCustomVariable: (key: string, value: string) => void
+  clearCustomVariables: () => void
+  
   // 变量插入
   variableToInsert: string | null
   
   // 样式配置
   styleConfig: ReportStyleConfig
+  wordStyleConfig: ReportStyleConfig  // Word导出专用样式配置
   styleConfigs: any[]
   
   // 章节配置
@@ -62,6 +70,9 @@ interface ReportState {
   
   // 资源（表格和图表）
   resources: ResourceMap
+  
+  // 内部初始化方法
+  _init: () => Promise<void>
   
   // Actions
   setProjectId: (id: string) => void
@@ -74,13 +85,18 @@ interface ReportState {
   
   // 样式配置操作
   updateStyleConfig: (config: Partial<ReportStyleConfig>) => void
+  updateWordStyleConfig: (config: Partial<ReportStyleConfig>) => void
   resetStyleConfig: () => void
+  resetWordStyleConfig: () => void
   saveStyleConfig: () => Promise<void>
+  saveWordStyleConfig: () => Promise<void>
   saveStyleConfigWithParams: (name: string, isDefault?: boolean) => Promise<void>
   loadStyleConfigs: () => Promise<any[]>
   loadDefaultStyleConfig: () => Promise<void>
+  loadDefaultWordStyleConfig: () => Promise<void>
   deleteStyleConfig: (configId: string) => Promise<void>
   applyStyleConfig: (config: ReportStyleConfig) => void
+  applyWordStyleConfig: (config: ReportStyleConfig) => void
   
   // 章节配置操作
   updateSections: (sections: Partial<ReportSections>) => void
@@ -120,16 +136,44 @@ export const useReportStore = create<ReportState>((set, get) => ({
   error: null,
   variableToInsert: null,
   styleConfig: defaultStyleConfig,
+  wordStyleConfig: defaultStyleConfig,
   styleConfigs: [],
   sections: defaultSections,
   resources: {
     tables: {},
     charts: {}
   },
+  customVariables: {},
+
+  // 自定义变量操作实现
+  addCustomVariable: (key: string, value: string) => {
+    set((state) => ({
+      customVariables: { ...state.customVariables, [key]: value }
+    }))
+  },
+  
+  removeCustomVariable: (key: string) => {
+    set((state) => {
+      const newVariables = { ...state.customVariables }
+      delete newVariables[key]
+      return { customVariables: newVariables }
+    })
+  },
+  
+  updateCustomVariable: (key: string, value: string) => {
+    set((state) => ({
+      customVariables: { ...state.customVariables, [key]: value }
+    }))
+  },
+  
+  clearCustomVariables: () => {
+    set({ customVariables: {} })
+  },
 
   // 初始化时加载默认样式配置
   _init: async () => {
     await get().loadDefaultStyleConfig()
+    await get().loadDefaultWordStyleConfig()
   },
 
   setProjectId: (id) => set({ projectId: id }),
@@ -158,35 +202,70 @@ export const useReportStore = create<ReportState>((set, get) => ({
     styleConfig: { ...state.styleConfig, ...config }
   })),
   
+  updateWordStyleConfig: (config) => set((state) => ({
+    wordStyleConfig: { ...state.wordStyleConfig, ...config }
+  })),
+  
   resetStyleConfig: () => set({ styleConfig: defaultStyleConfig }),
   
-  // 保存样式配置（无参数版本，自动使用默认名称）
+  resetWordStyleConfig: () => set({ wordStyleConfig: defaultStyleConfig }),
+  
+  // 保存预览样式配置
   saveStyleConfig: async () => {
     const { styleConfig } = get()
     set({ isLoading: true, error: null })
     try {
-      // 验证并补全配置，确保所有必要字段都存在
       const completeConfig = validateAndCompleteStyleConfig(styleConfig)
-      console.log('[saveStyleConfig] 准备保存的配置:', JSON.stringify(completeConfig, null, 2))
+      console.log('[saveStyleConfig] 准备保存预览样式配置:', JSON.stringify(completeConfig, null, 2))
       
       const response = await reportApi.saveStyleConfig({
-        name: '默认样式',
+        name: '预览样式',
         config: completeConfig,
-        isDefault: true
+        isDefault: true,
+        configType: 'preview'
       })
       
       console.log('[saveStyleConfig] API响应:', JSON.stringify(response, null, 2))
       
       if (!response?.success) {
-        throw new Error(response?.error || '保存样式失败')
+        throw new Error(response?.error || '保存预览样式失败')
       }
-      // 重新加载样式列表
       await get().loadStyleConfigs()
       set({ isLoading: false, styleConfig: completeConfig })
       console.log('[saveStyleConfig] 保存成功')
     } catch (error: any) {
-      console.error('保存样式失败:', error)
-      set({ error: error.message || '保存样式失败', isLoading: false })
+      console.error('保存预览样式失败:', error)
+      set({ error: error.message || '保存预览样式失败', isLoading: false })
+      throw error
+    }
+  },
+  
+  // 保存Word样式配置
+  saveWordStyleConfig: async () => {
+    const { wordStyleConfig } = get()
+    set({ isLoading: true, error: null })
+    try {
+      const completeConfig = validateAndCompleteStyleConfig(wordStyleConfig)
+      console.log('[saveWordStyleConfig] 准备保存Word样式配置:', JSON.stringify(completeConfig, null, 2))
+      
+      const response = await reportApi.saveStyleConfig({
+        name: 'Word样式',
+        config: completeConfig,
+        isDefault: true,
+        configType: 'word'
+      })
+      
+      console.log('[saveWordStyleConfig] API响应:', JSON.stringify(response, null, 2))
+      
+      if (!response?.success) {
+        throw new Error(response?.error || '保存Word样式失败')
+      }
+      await get().loadStyleConfigs()
+      set({ isLoading: false, wordStyleConfig: completeConfig })
+      console.log('[saveWordStyleConfig] 保存成功')
+    } catch (error: any) {
+      console.error('保存Word样式失败:', error)
+      set({ error: error.message || '保存Word样式失败', isLoading: false })
       throw error
     }
   },
@@ -196,7 +275,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
     const { styleConfig } = get()
     set({ isLoading: true, error: null })
     try {
-      // 验证并补全配置，确保所有必要字段都存在
       const completeConfig = validateAndCompleteStyleConfig(styleConfig)
       const response = await reportApi.saveStyleConfig({
         name,
@@ -206,7 +284,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
       if (!response?.success) {
         throw new Error(response?.error || '保存样式失败')
       }
-      // 重新加载样式列表
       await get().loadStyleConfigs()
       set({ isLoading: false, styleConfig: completeConfig })
     } catch (error: any) {
@@ -230,26 +307,45 @@ export const useReportStore = create<ReportState>((set, get) => ({
     }
   },
   
-  // 加载默认样式配置
+  // 加载默认预览样式配置
   loadDefaultStyleConfig: async () => {
     set({ isLoading: true, error: null })
     try {
-      const defaultConfig = await reportApi.getDefaultStyleConfig()
+      const defaultConfig = await reportApi.getDefaultStyleConfig('preview')
       if (defaultConfig) {
-        // 解析存储的配置
         let config = defaultConfig.config
         if (typeof config === 'string') {
           config = JSON.parse(config)
         }
-        // 验证并补全配置，确保包含所有必要字段
         const completeConfig = validateAndCompleteStyleConfig(config)
         set({ styleConfig: completeConfig, isLoading: false })
       } else {
         set({ isLoading: false })
       }
     } catch (error: any) {
-      console.error('加载默认样式失败:', error)
-      set({ error: error.message || '加载默认样式失败', isLoading: false })
+      console.error('加载默认预览样式失败:', error)
+      set({ error: error.message || '加载默认预览样式失败', isLoading: false })
+    }
+  },
+  
+  // 加载默认Word样式配置
+  loadDefaultWordStyleConfig: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const defaultConfig = await reportApi.getDefaultStyleConfig('word')
+      if (defaultConfig) {
+        let config = defaultConfig.config
+        if (typeof config === 'string') {
+          config = JSON.parse(config)
+        }
+        const completeConfig = validateAndCompleteStyleConfig(config)
+        set({ wordStyleConfig: completeConfig, isLoading: false })
+      } else {
+        set({ isLoading: false })
+      }
+    } catch (error: any) {
+      console.error('加载默认Word样式失败:', error)
+      set({ error: error.message || '加载默认Word样式失败', isLoading: false })
     }
   },
   
@@ -261,7 +357,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
       if (!response?.success) {
         throw new Error(response?.error || '删除样式失败')
       }
-      // 重新加载样式列表
       await get().loadStyleConfigs()
       set({ isLoading: false })
     } catch (error: any) {
@@ -271,9 +366,14 @@ export const useReportStore = create<ReportState>((set, get) => ({
     }
   },
   
-  // 应用样式配置
+  // 应用预览样式配置
   applyStyleConfig: (config: ReportStyleConfig) => {
     set({ styleConfig: config })
+  },
+  
+  // 应用Word样式配置
+  applyWordStyleConfig: (config: ReportStyleConfig) => {
+    set({ wordStyleConfig: config })
   },
   
   // 章节配置操作
@@ -382,22 +482,17 @@ export const useReportStore = create<ReportState>((set, get) => ({
       const data = await reportApi.getProjectSummary(projectId)
       console.log('[ReportStore] API response:', data)
       
-      // 获取项目数据
       if (!data) {
         console.warn('[ReportStore] Failed to get project data, API returned null/undefined')
         set({ isLoading: false, error: '无法加载项目数据' })
         return
       }
       
-      // 提取内部数据对象
       const projectData = data.data || data
       console.log('[ReportStore] project data:', JSON.stringify(projectData, null, 2))
       
-      // 提取可用变量（注意：project_overview 从 projectOverview 状态获取）
       const variables: ReportVariable[] = [
         { key: '{{project_name}}', label: '项目名称', value: projectData.project?.name || '' },
-        // 移除 project_description，改为使用 project_overview 变量
-        // { key: '{{project_description}}', label: '项目描述', value: projectData.project?.description || '' },
         { key: '{{construction_unit}}', label: '建设单位', value: projectData.project?.constructionUnit || '' },
         { key: '{{total_investment}}', label: '总投资额', value: projectData.project?.totalInvestment || 0 },
         { key: '{{construction_years}}', label: '建设期', value: projectData.project?.constructionYears || 0 },
@@ -405,16 +500,26 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{project_type}}', label: '项目类型', value: projectData.project?.project_type || '' },
         { key: '{{location}}', label: '项目地点', value: projectData.project?.location || '' },
         { key: '{{current_date}}', label: '当前日期', value: new Date().toLocaleDateString('zh-CN') },
-        // 财务指标变量
         { key: '{{roi}}', label: '投资回报率', value: projectData.financialIndicators?.roi || 0 },
         { key: '{{irr}}', label: '内部收益率', value: projectData.financialIndicators?.irr || 0 },
         { key: '{{npv}}', label: '净现值', value: projectData.financialIndicators?.npv || 0 },
-        // 表格变量
+        // 表格数据（JSON格式，用于LLM提示词）
+        { key: '{{DATA:investment_estimate}}', label: '投资估算简表JSON', category: 'tableData' },
+        { key: '{{DATA:depreciation_amortization}}', label: '折旧与摊销估算表JSON', category: 'tableData' },
+        { key: '{{DATA:revenue_tax}}', label: '营业收入税金及附加估算表JSON', category: 'tableData' },
+        { key: '{{DATA:raw_materials}}', label: '外购原材料费估算表JSON', category: 'tableData' },
+        { key: '{{DATA:fuel_power}}', label: '外购燃料和动力费估算表JSON', category: 'tableData' },
+        { key: '{{DATA:profit_distribution}}', label: '利润与利润分配表JSON', category: 'tableData' },
+        { key: '{{DATA:project_cash_flow}}', label: '项目投资现金流量表JSON', category: 'tableData' },
+        { key: '{{DATA:financial_indicators}}', label: '财务计算指标表JSON', category: 'tableData' },
+        { key: '{{DATA:loan_repayment}}', label: '借款还本付息计划表JSON', category: 'tableData' },
+        { key: '{{DATA:financial_summary}}', label: '财务评价指标汇总表JSON', category: 'tableData' },
+        // 表格资源（渲染HTML）
         { key: '{{TABLE:investment_estimate}}', label: '投资估算简表', category: 'table' },
         { key: '{{TABLE:revenue_cost_detail}}', label: '收入成本明细表', category: 'table' },
         { key: '{{TABLE:financial_indicators}}', label: '财务指标汇总表', category: 'table' },
         { key: '{{TABLE:loan_repayment}}', label: '还款计划表', category: 'table' },
-        // 图表变量
+        // 图表资源
         { key: '{{CHART:investment_composition}}', label: '投资构成图', category: 'chart' },
         { key: '{{CHART:revenue_trend}}', label: '收入趋势图', category: 'chart' },
         { key: '{{CHART:cost_trend}}', label: '成本趋势图', category: 'chart' },
@@ -422,7 +527,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{CHART:profit_analysis}}', label: '利润分析图', category: 'chart' },
       ]
       
-      // 构建表格资源
       const tables = buildAllTableResources(projectData)
       console.log('[ReportStore] built tables:', JSON.stringify(tables, null, 2))
       
@@ -433,7 +537,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
         isLoading: false 
       }))
       
-      // 加载已保存的项目概况
       await get().loadProjectOverview()
     } catch (error: any) {
       console.error('[ReportStore] Error loading project data:', error)
@@ -462,7 +565,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
     
     set({ isLoading: true, error: null, reportContent: '' })
     try {
-      // 创建报告记录
       console.log('[ReportStore] Creating report...')
       const createResponse = await reportApi.createReport({
         projectId,
@@ -471,9 +573,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
       
       console.log('[ReportStore] Create response:', JSON.stringify(createResponse, null, 2))
       
-      // 兼容两种响应格式：
-      // 1. {success: true, reportId: 'xxx'}
-      // 2. {success: true, data: {reportId: 'xxx'}}
       const createResponseAny = createResponse as any
       const reportId = (createResponseAny.data?.reportId || createResponseAny.reportId) as string
       
@@ -486,7 +585,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
       
       set({ reportId, generationStatus: 'generating' })
       
-      // 启动 SSE 流式生成
       console.log('[ReportStore] Starting SSE generation...')
       await reportApi.generateReport(reportId, promptTemplate, {
         onChunk: (content: string) => {
@@ -552,11 +650,12 @@ export const useReportStore = create<ReportState>((set, get) => ({
   },
   
   exportToWord: async () => {
-    const { reportId, reportTitle, reportContent } = get()
+    const { reportId, reportTitle, reportContent, wordStyleConfig, resources } = get()
     
     console.log('[exportToWord] 开始导出Word文档')
     console.log('[exportToWord] reportId:', reportId)
-    console.log('[exportToWord] reportContent长度:', reportContent?.length || 0)
+    console.log('[exportToWord] wordStyleConfig:', JSON.stringify(wordStyleConfig, null, 2))
+    console.log('[exportToWord] resources:', JSON.stringify(resources, null, 2))
     
     if (!reportId) {
       set({ error: '请先生成报告' })
@@ -564,15 +663,13 @@ export const useReportStore = create<ReportState>((set, get) => ({
     }
 
     try {
-      // 先加载最新的样式配置，确保使用用户最新保存的设置
-      console.log('[exportToWord] 加载最新样式配置...')
-      await get().loadDefaultStyleConfig()
+      // 先加载最新的Word样式配置
+      console.log('[exportToWord] 加载最新Word样式配置...')
+      await get().loadDefaultWordStyleConfig()
       
-      // 获取最新的配置
-      const { styleConfig } = get()
-      console.log('[exportToWord] 加载后的styleConfig:', JSON.stringify(styleConfig, null, 2))
+      const { wordStyleConfig: config } = get()
+      console.log('[exportToWord] 加载后的wordStyleConfig:', JSON.stringify(config, null, 2))
       
-      // 如果 reportContent 为空，尝试从数据库获取报告内容
       let content = reportContent
       if (!content || content.trim() === '' || content === '<p></p>') {
         console.log('[exportToWord] 前端 reportContent 为空，尝试从数据库获取...')
@@ -582,8 +679,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
           if (reportData?.report_content) {
             content = reportData.report_content
             console.log('[exportToWord] 从数据库获取到报告内容，长度:', content.length)
-            console.log('[exportToWord] 数据库内容前100字符:', content.substring(0, 100))
-            // 更新前端状态
             set({ reportContent: content })
           }
         } catch (e) {
@@ -591,15 +686,12 @@ export const useReportStore = create<ReportState>((set, get) => ({
         }
       }
 
-      // 检查报告内容是否为空
       if (!content || content.trim() === '' || content === '<p></p>') {
         set({ error: '报告内容为空，请先生成报告' })
         return
       }
 
-      // 将Markdown转换为HTML
       let htmlContent = content
-      // 检查是否是Markdown格式（以#开头或包含markdown特征）
       const isMarkdown = content.startsWith('#') || /^#{1,6}\s/.test(content) || content.includes('**') || content.includes('\n- ')
       console.log('[exportToWord] 是否为Markdown格式:', isMarkdown)
       
@@ -616,17 +708,16 @@ export const useReportStore = create<ReportState>((set, get) => ({
       }
       
       console.log('[exportToWord] 使用html-to-docx导出')
-      console.log('[exportToWord] 原始styleConfig:', JSON.stringify(styleConfig, null, 2))
       
-      // 确保配置完整，验证并补全
-      const completeConfig = validateAndCompleteStyleConfig(styleConfig)
+      const completeConfig = validateAndCompleteStyleConfig(config)
       console.log('[exportToWord] completeConfig:', JSON.stringify(completeConfig, null, 2))
       
-      // 使用html-to-docx导出，确保所见即所得
+      // 传递表格和图表资源用于变量替换
       await reportApi.exportHtml({
         title: reportTitle,
         htmlContent,
-        styleConfig: completeConfig
+        styleConfig: completeConfig,
+        resources
       })
       
       console.log('[exportToWord] Word导出成功')
@@ -644,12 +735,14 @@ export const useReportStore = create<ReportState>((set, get) => ({
       error: null,
       variableToInsert: null,
       styleConfig: defaultStyleConfig,
+      wordStyleConfig: defaultStyleConfig,
       sections: defaultSections,
       resources: {
         tables: {},
         charts: {}
       },
-      projectOverview: null
+      projectOverview: null,
+      customVariables: {}
     })
   },
   
@@ -657,7 +750,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
   
   insertVariable: (variable) => set({ variableToInsert: variable }),
   
-  // 项目概况保存
   saveProjectOverview: async (content: string) => {
     const { projectId } = get()
     if (!projectId) throw new Error('缺少项目ID')
@@ -676,7 +768,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
     }
   },
   
-  // 项目概况加载
   loadProjectOverview: async () => {
     const { projectId } = get()
     if (!projectId) return

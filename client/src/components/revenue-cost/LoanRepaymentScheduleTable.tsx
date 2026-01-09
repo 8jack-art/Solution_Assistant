@@ -198,15 +198,15 @@ const LoanRepaymentScheduleTable = forwardRef<{ handleExportExcel: () => void },
       yearlyInterestData[index]?.当期利息 || 0
     );
 
-    // 计算运营期还款数据
-    // 优先从数据库读取运营期数据，如果没有则计算
+    // 运营期还款数据 - 仅从数据库读取，不进行实时计算
+    // 如果数据库中没有保存的还本付息计划简表数据，则所有运营期付息数据为0
     const yearlyPrincipal: number[] = Array(operationYears).fill(0);
     const yearlyInterest: number[] = Array(operationYears).fill(0);
     const yearlyPayment: number[] = Array(operationYears).fill(0);
     const beginningBalance: number[] = Array(operationYears).fill(0);
     const endingBalance: number[] = Array(operationYears).fill(0);
 
-    // 检查数据库中是否已保存运营期数据
+    // 从数据库读取运营期还本付息数据
     if (savedLoanData.loanRepaymentScheduleSimple?.还款计划) {
       const savedSchedule = savedLoanData.loanRepaymentScheduleSimple.还款计划;
       
@@ -221,42 +221,6 @@ const LoanRepaymentScheduleTable = forwardRef<{ handleExportExcel: () => void },
           endingBalance[yearIndex] = yearData.期末借款余额 || 0;
         }
       });
-    } else {
-      // 获取贷款总额和利率
-      const loanAmount = estimate?.partF?.贷款总额 || loanConfig.loanAmount;
-      const interestRate = estimate?.partF?.年利率 || loanConfig.interestRate;
-      
-      // 计算等额本息还款
-      const monthlyRate = interestRate / 100 / 12;
-      const totalMonths = loanConfig.loanTerm * 12;
-      const monthlyPayment = loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths) / (Math.pow(1 + monthlyRate, totalMonths) - 1);
-
-      let remainingPrincipal = loanAmount;
-      let currentYear = 1;
-
-      for (let month = 1; month <= totalMonths && currentYear <= operationYears; month++) {
-        const interestPayment = remainingPrincipal * monthlyRate;
-        const principalPayment = monthlyPayment - interestPayment;
-        
-        yearlyInterest[currentYear - 1] += interestPayment;
-        yearlyPrincipal[currentYear - 1] += principalPayment;
-        yearlyPayment[currentYear - 1] += monthlyPayment;
-        
-        remainingPrincipal -= principalPayment;
-        
-        // 每12个月进入下一年
-        if (month % 12 === 0) {
-          currentYear++;
-        }
-      }
-
-      // 计算期初和期末借款余额
-      let balance = loanAmount;
-      for (let year = 1; year <= operationYears; year++) {
-        beginningBalance[year - 1] = balance;
-        balance -= yearlyPrincipal[year - 1];
-        endingBalance[year - 1] = Math.max(0, balance);
-      }
     }
 
     // 计算还本付息资金来源

@@ -4,7 +4,7 @@ export interface ReportVariable {
   key: string
   label: string
   value?: string
-  category?: 'basic' | 'table' | 'chart'
+  category?: 'basic' | 'table' | 'tableData' | 'chart'
 }
 
 export interface ReportTemplate {

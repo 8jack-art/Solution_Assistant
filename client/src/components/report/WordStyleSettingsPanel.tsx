@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useEffect, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useReportStore } from '../../stores/reportStore'
 import type { ReportStyleConfig } from '../../types/report'
 
@@ -23,7 +23,6 @@ const defaultStyleConfig: ReportStyleConfig = {
     firstLineIndent: 2,
     headingIndent: 0
   },
-  // 独立段落样式默认值
   heading1: {
     font: '黑体',
     fontSize: 22,
@@ -130,112 +129,111 @@ const headerBgOptions = [
   { value: 'FCE4D6', label: '淡橙色' }
 ]
 
-interface StyleSettingsPanelProps {
+interface WordStyleSettingsPanelProps {
   onClose?: () => void
 }
 
-export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose }) => {
-  const { styleConfig, updateStyleConfig, saveStyleConfig } = useReportStore()
+export const WordStyleSettingsPanel: React.FC<WordStyleSettingsPanelProps> = ({ onClose }) => {
+  const { wordStyleConfig, updateWordStyleConfig, saveWordStyleConfig } = useReportStore()
   const [isSaving, setIsSaving] = useState(false)
   const [lastSavedConfig, setLastSavedConfig] = useState<ReportStyleConfig | null>(null)
 
   // 计算样式预览
   const previewStyle = useMemo(() => ({
-    fontFamily: styleConfig?.body?.font || defaultStyleConfig.body.font,
-    fontSize: `${(styleConfig?.body?.fontSize || defaultStyleConfig.body.fontSize)}px`,
-    fontWeight: (styleConfig?.body?.bold || defaultStyleConfig.body.bold) ? 'bold' : 'normal',
-    lineHeight: String(styleConfig?.body?.lineSpacing || 1.5)
-  }), [styleConfig])
+    fontFamily: wordStyleConfig?.body?.font || defaultStyleConfig.body.font,
+    fontSize: `${(wordStyleConfig?.body?.fontSize || defaultStyleConfig.body.fontSize)}px`,
+    fontWeight: (wordStyleConfig?.body?.bold || defaultStyleConfig.body.bold) ? 'bold' : 'normal',
+    lineHeight: String(wordStyleConfig?.body?.lineSpacing || 1.5)
+  }), [wordStyleConfig])
 
   // 自动保存样式配置到数据库
   const autoSave = useCallback(async (config: ReportStyleConfig) => {
     if (isSaving) return
     
-    // 检查配置是否有变化
     if (lastSavedConfig && JSON.stringify(config) === JSON.stringify(lastSavedConfig)) {
       return
     }
 
     setIsSaving(true)
     try {
-      console.log('[autoSave] 开始保存样式配置...')
-      await saveStyleConfig()
+      console.log('[WordStyleSettingsPanel] 开始保存Word样式配置...')
+      await saveWordStyleConfig()
       setLastSavedConfig(config)
-      console.log('[autoSave] 样式配置已保存')
+      console.log('[WordStyleSettingsPanel] Word样式配置已保存')
     } catch (error: any) {
-      console.error('自动保存样式失败:', error)
+      console.error('自动保存Word样式失败:', error)
     } finally {
       setIsSaving(false)
     }
-  }, [saveStyleConfig, isSaving, lastSavedConfig])
+  }, [saveWordStyleConfig, isSaving, lastSavedConfig])
 
   // 处理表格样式变更
   const handleTableStyleChange = useCallback((field: string, value: any) => {
     const newConfig = {
       table: {
-        ...styleConfig?.table,
+        ...wordStyleConfig?.table,
         [field]: value
       }
     }
-    updateStyleConfig(newConfig)
-    autoSave({ ...styleConfig, ...newConfig })
-  }, [styleConfig, updateStyleConfig, autoSave])
+    updateWordStyleConfig(newConfig)
+    autoSave({ ...wordStyleConfig, ...newConfig })
+  }, [wordStyleConfig, updateWordStyleConfig, autoSave])
 
   // 处理页面边距变更
   const handleMarginChange = useCallback((field: string, value: number) => {
     const newConfig = {
       page: {
-        ...styleConfig?.page,
+        ...wordStyleConfig?.page,
         margin: {
-          ...styleConfig?.page?.margin,
+          ...wordStyleConfig?.page?.margin,
           [field]: value
         }
       }
     }
-    updateStyleConfig(newConfig)
-    autoSave({ ...styleConfig, ...newConfig })
-  }, [styleConfig, updateStyleConfig, autoSave])
+    updateWordStyleConfig(newConfig)
+    autoSave({ ...wordStyleConfig, ...newConfig })
+  }, [wordStyleConfig, updateWordStyleConfig, autoSave])
 
   // 处理标题1样式变更
   const handleHeading1Change = useCallback((field: string, value: any) => {
     const newConfig = {
       heading1: {
-        ...styleConfig?.heading1,
+        ...wordStyleConfig?.heading1,
         [field]: value
       }
     }
-    updateStyleConfig(newConfig)
-    autoSave({ ...styleConfig, ...newConfig })
-  }, [styleConfig, updateStyleConfig, autoSave])
+    updateWordStyleConfig(newConfig)
+    autoSave({ ...wordStyleConfig, ...newConfig })
+  }, [wordStyleConfig, updateWordStyleConfig, autoSave])
 
   // 处理标题2样式变更
   const handleHeading2Change = useCallback((field: string, value: any) => {
     const newConfig = {
       heading2: {
-        ...styleConfig?.heading2,
+        ...wordStyleConfig?.heading2,
         [field]: value
       }
     }
-    updateStyleConfig(newConfig)
-    autoSave({ ...styleConfig, ...newConfig })
-  }, [styleConfig, updateStyleConfig, autoSave])
+    updateWordStyleConfig(newConfig)
+    autoSave({ ...wordStyleConfig, ...newConfig })
+  }, [wordStyleConfig, updateWordStyleConfig, autoSave])
 
   // 处理正文样式变更
   const handleBodyChange = useCallback((field: string, value: any) => {
     const newConfig = {
       body: {
-        ...styleConfig?.body,
+        ...wordStyleConfig?.body,
         [field]: value
       }
     }
-    updateStyleConfig(newConfig)
-    autoSave({ ...styleConfig, ...newConfig })
-  }, [styleConfig, updateStyleConfig, autoSave])
+    updateWordStyleConfig(newConfig)
+    autoSave({ ...wordStyleConfig, ...newConfig })
+  }, [wordStyleConfig, updateWordStyleConfig, autoSave])
 
   return (
-    <div className="style-settings-panel">
+    <div className="word-style-settings-panel">
       <div className="panel-header">
-        <h3>预览样式设置</h3>
+        <h3>Word 导出样式设置</h3>
         {isSaving && <span className="saving-indicator">保存中...</span>}
         {!isSaving && lastSavedConfig && <span className="saved-indicator">已保存</span>}
       </div>
@@ -243,12 +241,12 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
       <div className="panel-content">
         {/* 标题1样式设置 */}
         <section className="settings-section">
-          <h4>标题1样式（预览）</h4>
+          <h4>标题1样式（Word导出）</h4>
           <div className="settings-grid">
             <div className="setting-item">
               <label>字体</label>
               <select
-                value={styleConfig?.heading1?.font || defaultStyleConfig.heading1.font}
+                value={wordStyleConfig?.heading1?.font || defaultStyleConfig.heading1.font}
                 onChange={(e) => handleHeading1Change('font', e.target.value)}
               >
                 {fontOptions.map(option => (
@@ -259,7 +257,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>字号</label>
               <select
-                value={styleConfig?.heading1?.fontSize || defaultStyleConfig.heading1.fontSize}
+                value={wordStyleConfig?.heading1?.fontSize || defaultStyleConfig.heading1.fontSize}
                 onChange={(e) => handleHeading1Change('fontSize', Number(e.target.value))}
               >
                 {fontSizeOptions.map(option => (
@@ -270,7 +268,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>行间距</label>
               <select
-                value={styleConfig?.heading1?.lineSpacing || defaultStyleConfig.heading1.lineSpacing}
+                value={wordStyleConfig?.heading1?.lineSpacing || defaultStyleConfig.heading1.lineSpacing}
                 onChange={(e) => handleHeading1Change('lineSpacing', e.target.value === 'fixed' ? 'fixed' : Number(e.target.value))}
               >
                 {lineSpacingOptions.map(option => (
@@ -282,7 +280,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
               <label>
                 <input
                   type="checkbox"
-                  checked={styleConfig?.heading1?.bold ?? defaultStyleConfig.heading1.bold}
+                  checked={wordStyleConfig?.heading1?.bold ?? defaultStyleConfig.heading1.bold}
                   onChange={(e) => handleHeading1Change('bold', e.target.checked)}
                 />
                 加粗
@@ -293,12 +291,12 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
 
         {/* 标题2样式设置 */}
         <section className="settings-section">
-          <h4>标题2样式（预览）</h4>
+          <h4>标题2样式（Word导出）</h4>
           <div className="settings-grid">
             <div className="setting-item">
               <label>字体</label>
               <select
-                value={styleConfig?.heading2?.font || defaultStyleConfig.heading2.font}
+                value={wordStyleConfig?.heading2?.font || defaultStyleConfig.heading2.font}
                 onChange={(e) => handleHeading2Change('font', e.target.value)}
               >
                 {fontOptions.map(option => (
@@ -309,7 +307,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>字号</label>
               <select
-                value={styleConfig?.heading2?.fontSize || defaultStyleConfig.heading2.fontSize}
+                value={wordStyleConfig?.heading2?.fontSize || defaultStyleConfig.heading2.fontSize}
                 onChange={(e) => handleHeading2Change('fontSize', Number(e.target.value))}
               >
                 {fontSizeOptions.map(option => (
@@ -320,7 +318,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>行间距</label>
               <select
-                value={styleConfig?.heading2?.lineSpacing || defaultStyleConfig.heading2.lineSpacing}
+                value={wordStyleConfig?.heading2?.lineSpacing || defaultStyleConfig.heading2.lineSpacing}
                 onChange={(e) => handleHeading2Change('lineSpacing', e.target.value === 'fixed' ? 'fixed' : Number(e.target.value))}
               >
                 {lineSpacingOptions.map(option => (
@@ -332,7 +330,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
               <label>
                 <input
                   type="checkbox"
-                  checked={styleConfig?.heading2?.bold ?? defaultStyleConfig.heading2.bold}
+                  checked={wordStyleConfig?.heading2?.bold ?? defaultStyleConfig.heading2.bold}
                   onChange={(e) => handleHeading2Change('bold', e.target.checked)}
                 />
                 加粗
@@ -343,12 +341,12 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
 
         {/* 正文样式设置 */}
         <section className="settings-section">
-          <h4>正文样式（预览）</h4>
+          <h4>正文样式（Word导出）</h4>
           <div className="settings-grid">
             <div className="setting-item">
               <label>字体</label>
               <select
-                value={styleConfig?.body?.font || defaultStyleConfig.body.font}
+                value={wordStyleConfig?.body?.font || defaultStyleConfig.body.font}
                 onChange={(e) => handleBodyChange('font', e.target.value)}
               >
                 {fontOptions.map(option => (
@@ -359,7 +357,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>字号</label>
               <select
-                value={styleConfig?.body?.fontSize || defaultStyleConfig.body.fontSize}
+                value={wordStyleConfig?.body?.fontSize || defaultStyleConfig.body.fontSize}
                 onChange={(e) => handleBodyChange('fontSize', Number(e.target.value))}
               >
                 {fontSizeOptions.map(option => (
@@ -370,7 +368,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>行间距</label>
               <select
-                value={styleConfig?.body?.lineSpacing || defaultStyleConfig.body.lineSpacing}
+                value={wordStyleConfig?.body?.lineSpacing || defaultStyleConfig.body.lineSpacing}
                 onChange={(e) => handleBodyChange('lineSpacing', e.target.value === 'fixed' ? 'fixed' : Number(e.target.value))}
               >
                 {lineSpacingOptions.map(option => (
@@ -381,7 +379,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>首行缩进</label>
               <select
-                value={styleConfig?.body?.firstLineIndent ?? defaultStyleConfig.body.firstLineIndent}
+                value={wordStyleConfig?.body?.firstLineIndent ?? defaultStyleConfig.body.firstLineIndent}
                 onChange={(e) => handleBodyChange('firstLineIndent', Number(e.target.value))}
               >
                 {firstLineIndentOptions.map(option => (
@@ -394,12 +392,12 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
 
         {/* 页面设置 */}
         <section className="settings-section">
-          <h4>页面边距（预览）</h4>
+          <h4>页面边距（Word导出）</h4>
           <div className="settings-grid">
             <div className="setting-item">
               <label>上边距</label>
               <select
-                value={styleConfig?.page?.margin?.top || defaultStyleConfig.page.margin.top}
+                value={wordStyleConfig?.page?.margin?.top || defaultStyleConfig.page.margin.top}
                 onChange={(e) => handleMarginChange('top', Number(e.target.value))}
               >
                 {marginOptions.map(option => (
@@ -410,7 +408,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>下边距</label>
               <select
-                value={styleConfig?.page?.margin?.bottom || defaultStyleConfig.page.margin.bottom}
+                value={wordStyleConfig?.page?.margin?.bottom || defaultStyleConfig.page.margin.bottom}
                 onChange={(e) => handleMarginChange('bottom', Number(e.target.value))}
               >
                 {marginOptions.map(option => (
@@ -421,7 +419,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>左边距</label>
               <select
-                value={styleConfig?.page?.margin?.left || defaultStyleConfig.page.margin.left}
+                value={wordStyleConfig?.page?.margin?.left || defaultStyleConfig.page.margin.left}
                 onChange={(e) => handleMarginChange('left', Number(e.target.value))}
               >
                 {marginOptions.map(option => (
@@ -432,7 +430,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>右边距</label>
               <select
-                value={styleConfig?.page?.margin?.right || defaultStyleConfig.page.margin.right}
+                value={wordStyleConfig?.page?.margin?.right || defaultStyleConfig.page.margin.right}
                 onChange={(e) => handleMarginChange('right', Number(e.target.value))}
               >
                 {marginOptions.map(option => (
@@ -445,12 +443,12 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
 
         {/* 表格样式设置 */}
         <section className="settings-section">
-          <h4>表格样式（预览）</h4>
+          <h4>表格样式（Word导出）</h4>
           <div className="settings-grid">
             <div className="setting-item">
               <label>表头背景色</label>
               <select
-                value={styleConfig?.table?.headerBg || defaultStyleConfig.table.headerBg}
+                value={wordStyleConfig?.table?.headerBg || defaultStyleConfig.table.headerBg}
                 onChange={(e) => handleTableStyleChange('headerBg', e.target.value)}
               >
                 {headerBgOptions.map(option => (
@@ -462,7 +460,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
               <label>
                 <input
                   type="checkbox"
-                  checked={styleConfig?.table?.zebraStripe ?? defaultStyleConfig.table.zebraStripe}
+                  checked={wordStyleConfig?.table?.zebraStripe ?? defaultStyleConfig.table.zebraStripe}
                   onChange={(e) => handleTableStyleChange('zebraStripe', e.target.checked)}
                 />
                 斑马纹
@@ -471,7 +469,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
             <div className="setting-item">
               <label>单元格对齐</label>
               <select
-                value={styleConfig?.table?.alignment || defaultStyleConfig.table.alignment}
+                value={wordStyleConfig?.table?.alignment || defaultStyleConfig.table.alignment}
                 onChange={(e) => handleTableStyleChange('alignment', e.target.value)}
               >
                 <option value="left">左对齐</option>
@@ -484,28 +482,28 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
 
         {/* 样式预览 */}
         <section className="settings-section">
-          <h4>预览样式预览</h4>
+          <h4>Word导出样式预览</h4>
           <div className="style-preview" style={previewStyle}>
-            <p>这是正文字体的预览文本，用于查看当前设置的显示效果。</p>
+            <p>这是Word导出时正文字体的预览文本，用于查看当前设置的显示效果。</p>
             <p style={{ 
-              fontWeight: (styleConfig?.heading1?.bold ?? defaultStyleConfig.heading1.bold) ? 'bold' : 'normal', 
-              fontFamily: styleConfig?.heading1?.font || defaultStyleConfig.heading1.font, 
-              fontSize: `${(styleConfig?.heading1?.fontSize || defaultStyleConfig.heading1.fontSize) * 1.2}px` 
-            }}>这是标题1预览</p>
+              fontWeight: (wordStyleConfig?.heading1?.bold ?? defaultStyleConfig.heading1.bold) ? 'bold' : 'normal', 
+              fontFamily: wordStyleConfig?.heading1?.font || defaultStyleConfig.heading1.font, 
+              fontSize: `${(wordStyleConfig?.heading1?.fontSize || defaultStyleConfig.heading1.fontSize) * 1.2}px` 
+            }}>这是标题1预览（Word导出）</p>
             <p style={{ 
-              fontWeight: (styleConfig?.heading2?.bold ?? defaultStyleConfig.heading2.bold) ? 'bold' : 'normal', 
-              fontFamily: styleConfig?.heading2?.font || defaultStyleConfig.heading2.font, 
-              fontSize: `${(styleConfig?.heading2?.fontSize || defaultStyleConfig.heading2.fontSize) * 1.2}px` 
-            }}>这是标题2预览</p>
+              fontWeight: (wordStyleConfig?.heading2?.bold ?? defaultStyleConfig.heading2.bold) ? 'bold' : 'normal', 
+              fontFamily: wordStyleConfig?.heading2?.font || defaultStyleConfig.heading2.font, 
+              fontSize: `${(wordStyleConfig?.heading2?.fontSize || defaultStyleConfig.heading2.fontSize) * 1.2}px` 
+            }}>这是标题2预览（Word导出）</p>
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
               <thead>
-                <tr style={{ backgroundColor: (styleConfig?.table?.headerBg || defaultStyleConfig.table.headerBg) || 'transparent' }}>
+                <tr style={{ backgroundColor: (wordStyleConfig?.table?.headerBg || defaultStyleConfig.table.headerBg) || 'transparent' }}>
                   <th style={{ padding: '8px', border: '1px solid #000' }}>表头1</th>
                   <th style={{ padding: '8px', border: '1px solid #000' }}>表头2</th>
                 </tr>
               </thead>
               <tbody>
-                <tr style={{ backgroundColor: (styleConfig?.table?.zebraStripe ?? defaultStyleConfig.table.zebraStripe) ? '#F5F5F5' : 'transparent' }}>
+                <tr style={{ backgroundColor: (wordStyleConfig?.table?.zebraStripe ?? defaultStyleConfig.table.zebraStripe) ? '#F5F5F5' : 'transparent' }}>
                   <td style={{ padding: '8px', border: '1px solid #000' }}>数据1</td>
                   <td style={{ padding: '8px', border: '1px solid #000' }}>数据2</td>
                 </tr>
@@ -526,7 +524,7 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
       </div>
 
       <style>{`
-        .style-settings-panel {
+        .word-style-settings-panel {
           background: #fff;
           border-radius: 8px;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -543,23 +541,23 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
           align-items: center;
           padding: 16px 20px;
           border-bottom: 1px solid #e8e8e8;
-          background: #fafafa;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
         .panel-header h3 {
           margin: 0;
           font-size: 16px;
-          color: #333;
+          color: #fff;
         }
 
         .saving-indicator {
           font-size: 12px;
-          color: #1890ff;
+          color: #ffd700;
         }
 
         .saved-indicator {
           font-size: 12px;
-          color: #52c41a;
+          color: #90EE90;
         }
 
         .panel-content {
@@ -575,8 +573,8 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
         .settings-section h4 {
           margin: 0 0 12px 0;
           font-size: 14px;
-          color: #666;
-          border-bottom: 1px solid #e8e8e8;
+          color: #667eea;
+          border-bottom: 2px solid #667eea;
           padding-bottom: 8px;
         }
 
@@ -632,12 +630,12 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
         }
 
         .setting-item select:hover {
-          border-color: #1890ff;
+          border-color: #667eea;
         }
 
         .style-preview {
           padding: 16px;
-          background: #f5f5f5;
+          background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
           border-radius: 4px;
           font-size: 14px;
         }
@@ -660,16 +658,16 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
         }
 
         .btn-primary {
-          background: #1890ff;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: #fff;
         }
 
         .btn-primary:hover {
-          background: #40a9ff;
+          background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%);
         }
       `}</style>
     </div>
   )
 }
 
-export default StyleSettingsPanel
+export default WordStyleSettingsPanel

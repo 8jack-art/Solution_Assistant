@@ -480,7 +480,8 @@ export class ReportController {
       const { 
         title, 
         htmlContent, 
-        styleConfig 
+        styleConfig,
+        resources
       } = req.body
       const userId = ReportController.getUserId(req)
 
@@ -494,12 +495,15 @@ export class ReportController {
         return
       }
 
+      console.log('exportHtml 收到的 resources:', JSON.stringify(resources, null, 2))
+
       // 生成 Word 文档（使用固定导出样式，忽略用户配置）
       const buffer = await ReportService.generateWordFromHtml(
         htmlContent,
         title || '投资方案报告',
         styleConfig,
-        true  // 使用固定导出样式，忽略用户样式配置
+        true,  // 使用固定导出样式，忽略用户样式配置
+        resources  // 传递表格和图表资源
       )
 
       // 设置响应头

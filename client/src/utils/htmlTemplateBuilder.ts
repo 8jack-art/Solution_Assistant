@@ -44,8 +44,9 @@ function generateStyles(config: ReportStyleConfig): string {
   const tableTitleFontSize = config.fontSizes?.tableTitle || 12
   const tableHeaderFontSize = config.fontSizes?.tableHeader || 10.5
   const tableBodyFontSize = config.fontSizes?.tableBody || 10.5
-  const lineSpacing = config.paragraph?.lineSpacing || 1.5
-  const firstLineIndent = config.paragraph?.firstLineIndent || 2
+  // 使用body独立的行间距配置，fallback到paragraph
+  const lineSpacing = config.body?.lineSpacing ?? config.paragraph?.lineSpacing ?? 1.5
+  const firstLineIndent = config.body?.firstLineIndent ?? config.paragraph?.firstLineIndent ?? 2
   const headerBg = config.table?.headerBg || 'EEEEEE'
   const zebraStripe = config.table?.zebraStripe || false
   const marginTop = (config.page?.margin?.top || 2.5) * 28.35
@@ -254,9 +255,9 @@ export interface HtmlToDocxOptions {
 export function generateDocxOptions(styleConfig: ReportStyleConfig): HtmlToDocxOptions {
   const font = styleConfig.fonts?.body || '宋体'
   const fontSize = styleConfig.fontSizes?.body || 12
-  const lineSpacing = (typeof styleConfig.paragraph?.lineSpacing === 'number' 
-    ? styleConfig.paragraph.lineSpacing 
-    : 1.5) * 240
+  // 使用body独立的行间距配置，fallback到paragraph
+  const lineSpacingRaw = styleConfig.body?.lineSpacing ?? styleConfig.paragraph?.lineSpacing ?? 1.5
+  const lineSpacing = (typeof lineSpacingRaw === 'number' ? lineSpacingRaw : 1.5) * 240
   const margins = {
     top: (styleConfig.page?.margin?.top || 2.5) * 28.35 * 20,
     bottom: (styleConfig.page?.margin?.bottom || 2.5) * 28.35 * 20,

@@ -346,12 +346,13 @@ export class ReportService {
    * - {{REVENUE_COST}} - 收入成本数据
    * - {{FINANCIAL}} - 关键财务指标
    * - {{ALL_DATA}} - 所有数据（相当于原来的完整注入）
+   * - {{DATA:xxx}} - 表格数据JSON（10个表格）
    * 
    * 示例：
    * "请分析 {{PROJECT}} 中的项目情况，投资估算为 {{INVESTMENT}}"
    */
   static buildDataAwarePrompt(basePrompt: string, projectData: any): string {
-    const { project, investment, revenueCost, financialIndicators, projectOverview } = projectData
+    const { project, investment, revenueCost, financialIndicators, projectOverview, tableDataJSON } = projectData
     
     // 检查是否使用简化的数据标记
     const hasProjectMarker = basePrompt.includes('{{PROJECT}}')
@@ -360,9 +361,13 @@ export class ReportService {
     const hasFinancialMarker = basePrompt.includes('{{FINANCIAL}}')
     const hasAllDataMarker = basePrompt.includes('{{ALL_DATA}}')
     
+    // 检查是否有表格数据变量 {{DATA:xxx}}
+    const dataVariableRegex = /\{\{DATA:(\w+)\}\}/g
+    const hasDataVariables = dataVariableRegex.test(basePrompt)
+    
     // 如果模板中没有任何数据标记，保持原有行为（向后兼容）
     if (!hasProjectMarker && !hasInvestmentMarker && !hasRevenueCostMarker && 
-        !hasFinancialMarker && !hasAllDataMarker) {
+        !hasFinancialMarker && !hasAllDataMarker && !hasDataVariables) {
       // 检查是否包含旧版变量（如 {{project_name}} 等），如果有则进行变量替换
       let processedPrompt = basePrompt
       
@@ -386,6 +391,25 @@ export class ReportService {
       // 让 LLM 生成的报告中保留这些标记，导出 Word 时会自动解析并插入实际表格
       
       return processedPrompt
+    }
+    
+    // 替换 {{DATA:xxx}} 变量
+    let dataReplacedPrompt = basePrompt
+    if (hasDataVariables && tableDataJSON) {
+      dataReplacedPrompt = basePrompt.replace(dataVariableRegex, (match, dataKey) => {
+        const variableKey = `{{DATA:${dataKey}}}`
+        if (tableDataJSON[variableKey]) {
+          return tableDataJSON[variableKey]
+        }
+        // 如果找不到对应的数据，尝试使用简化的key
+        const altKey = `DATA:${dataKey}`
+        if (tableDataJSON[altKey]) {
+          return tableDataJSON[altKey]
+        }
+        return `[表格数据 ${dataKey} 未找到]`
+      })
+    } else {
+      dataReplacedPrompt = basePrompt
     }
     
     // 构建注入的数据块
@@ -433,7 +457,7 @@ ${JSON.stringify(financialIndicators, null, 2)}
     }
     
     // 替换模板中的数据标记为实际数据
-    let processedPrompt = basePrompt
+    const processedPrompt = dataReplacedPrompt
       .replace(/\{\{PROJECT\}\}/g, injectedData.includes('项目基本信息') ? this.formatProjectBasic(project) : '')
       .replace(/\{\{INVESTMENT\}\}/g, injectedData.includes('投资估算数据') ? this.summarizeInvestmentData(investment) : '')
       .replace(/\{\{REVENUE_COST\}\}/g, injectedData.includes('收入成本数据') ? this.summarizeRevenueCostData(revenueCost) : '')
@@ -2011,12 +2035,14 @@ ${JSON.stringify(financialIndicators || {}, null, 2)}
    * @param title 文档标题
    * @param styleConfig 样式配置（仅在 useFixedExportStyle 为 false 时使用）
    * @param useFixedExportStyle 是否使用固定导出样式（默认 true），为 true 时忽略用户配置，使用默认样式
+   * @param resources 资源数据（表格和图表），用于变量替换
    */
   static async generateWordFromHtml(
     htmlContent: string,
     title: string,
     styleConfig?: ReportStyleConfig,
-    useFixedExportStyle: boolean = true
+    useFixedExportStyle: boolean = true,
+    resources?: ResourceMap
   ): Promise<Buffer> {
     try {
       console.log('开始从HTML生成Word文档（html-to-docx）')
@@ -2035,8 +2061,11 @@ ${JSON.stringify(financialIndicators || {}, null, 2)}
       
       console.log('最终使用的样式配置:', JSON.stringify(config, null, 2))
       
+      // 先处理变量替换
+      let processedContent = this.replaceVariablesInContent(htmlContent, resources || { tables: {}, charts: {} }, config)
+      
       // 构建 HTML 内容，包含样式
-      const htmlBodyContent = this.buildStyledHtmlContent(htmlContent, config)
+      const htmlBodyContent = this.buildStyledHtmlContent(processedContent, config)
       
       // 构建完整的 HTML 文档
       const fullHtml = `<!DOCTYPE html>
@@ -2195,5 +2224,90 @@ ${JSON.stringify(financialIndicators || {}, null, 2)}
     }
     
     return htmlContent
+  }
+
+  /**
+   * 替换内容中的变量标记
+   * 将 {{TABLE:xxx}} 和 {{CHART:xxx}} 替换为实际的表格HTML或图表图片
+   */
+  static replaceVariablesInContent(
+    content: string,
+    resources: ResourceMap,
+    config: ReportStyleConfig
+  ): string {
+    let result = content
+
+    // 替换表格变量 {{TABLE:tableId}}
+    result = result.replace(/\{\{TABLE:(\w+)\}\}/g, (match, tableId) => {
+      const tableResource = resources.tables?.[tableId]
+      if (tableResource) {
+        return this.generateTableHtml(tableResource, config)
+      }
+      return `[表格 ${tableId} 未找到]`
+    })
+
+    // 替换图表变量 {{CHART:chartId}}
+    result = result.replace(/\{\{CHART:(\w+)\}\}/g, (match, chartId) => {
+      const chartResource = resources.charts?.[chartId]
+      if (chartResource) {
+        return this.generateChartHtml(chartResource, config)
+      }
+      return `[图表 ${chartId} 未找到]`
+    })
+
+    return result
+  }
+
+  /**
+   * 生成表格HTML
+   */
+  static generateTableHtml(tableResource: TableResource, config: ReportStyleConfig): string {
+    if (!tableResource.data || tableResource.data.length === 0) {
+      return `<p>[表格 ${tableResource.title} 无数据]</p>`
+    }
+
+    const columns = tableResource.columns
+    const data = tableResource.data
+
+    // 生成表头
+    const headerRow = columns.map(col => 
+      `<th style="background-color: #${config.table?.headerBg || 'EEEEEE'}; font-weight: bold; text-align: center; padding: 8pt; border: 1px solid #000000; font-family: ${config.fonts?.heading || '黑体'}; font-size: ${config.fontSizes?.tableHeader || 10.5}pt;">${col}</th>`
+    ).join('')
+
+    // 生成数据行
+    const dataRows = data.map((row, rowIndex) => {
+      const rowBg = config.table?.zebraStripe && rowIndex % 2 === 1 ? 'background-color: #F5F5F5;' : ''
+      const cells = columns.map(col => 
+        `<td style="padding: 8pt; border: 1px solid #000000; text-align: left; ${rowBg} font-family: ${config.fonts?.body || '宋体'}; font-size: ${config.fontSizes?.tableBody || 10.5}pt;">${row[col] ?? ''}</td>`
+      ).join('')
+      return `<tr>${cells}</tr>`
+    }).join('')
+
+    return `
+      <p style="font-weight: bold; font-family: ${config.fonts?.body || '宋体'}; font-size: ${config.fontSizes?.tableTitle || 12}pt; margin-bottom: 8pt; margin-top: 16pt;">${tableResource.title}</p>
+      <table style="border-collapse: collapse; width: 100%; margin: 8pt 0;">
+        <thead>
+          <tr>${headerRow}</tr>
+        </thead>
+        <tbody>
+          ${dataRows}
+        </tbody>
+      </table>
+    `
+  }
+
+  /**
+   * 生成图表HTML
+   */
+  static generateChartHtml(chartResource: ChartResource, config: ReportStyleConfig): string {
+    // 移除base64前缀
+    const base64Data = chartResource.base64Image.replace(/^data:image\/[a-z]+;base64,/, '')
+    
+    return `
+      <p style="font-weight: bold; font-family: ${config.fonts?.heading || '黑体'}; font-size: 14pt; text-align: center; margin-bottom: 8pt; margin-top: 16pt;">${chartResource.title}</p>
+      <div style="text-align: center; margin: 16pt 0;">
+        <img src="data:image/png;base64,${base64Data}" alt="${chartResource.title}" style="max-width: 100%; height: auto;" />
+      </div>
+    `
   }
 }

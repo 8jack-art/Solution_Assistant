@@ -1192,23 +1192,108 @@ const InvestmentSummary: React.FC = () => {
 
   // 加载计数器，用于调试重复加载问题
   const loadCounterRef = useRef(0)
+  // 加载状态锁，防止重复加载
+  const isLoadingRef = useRef(false)
+  // 记录当前加载的ID，用于清理过期请求
+  const currentLoadIdRef = useRef<string | null>(null)
   
   useEffect(() => {
+    if (!id) return
+    
     loadCounterRef.current += 1
     console.log(`[数据加载] useEffect执行 #${loadCounterRef.current}, id=${id}`)
     
-    if (id) {
-      // 清除该项目的缓存，确保获取最新数据
-      dataCache.invalidate(`investment:${id}`)
-      console.log('[数据加载] 已清除缓存，强制从服务器获取最新数据')
-      loadProjectAndEstimate()
+    // 防止重复加载：如果已经在加载中，且ID相同，则跳过
+    if (isLoadingRef.current && currentLoadIdRef.current === id) {
+      console.log('[数据加载] 已在加载中，跳过重复请求')
+      return
     }
+    
+    // 设置加载状态
+    isLoadingRef.current = true
+    currentLoadIdRef.current = id
+    
+    const loadData = async () => {
+      try {
+        // 先尝试从缓存获取（不强制清除缓存）
+        const cacheKey = `investment:${id}`
+        const cachedData = dataCache.get(cacheKey)
+        
+        if (cachedData) {
+          console.log('[数据加载] 使用缓存数据')
+          
+          // 缓存格式可能与数据库格式不符，需要兼容处理
+          // 缓存结构: { data: { estimate: { estimate_data: {...} } } }
+          let estimateData = null
+          let projectData = null
+          
+          // 尝试从缓存提取 estimate_data
+          if (cachedData.data?.estimate?.estimate_data) {
+            estimateData = cachedData.data.estimate.estimate_data
+          } else if (cachedData.data?.estimate) {
+            // 兼容：estimate_data 不存在时直接使用 estimate
+            estimateData = cachedData.data.estimate
+          }
+          
+          // 尝试从缓存提取 project 数据
+          if (cachedData.data?.project) {
+            projectData = cachedData.data.project
+          }
+          
+          if (estimateData) {
+            // 恢复三级子项数据
+            if (estimateData.thirdLevelItems) {
+              setThirdLevelItems(estimateData.thirdLevelItems)
+            }
+            // 恢复项目类型
+            if (estimateData.projectType) {
+              setProjectType(estimateData.projectType)
+            }
+            
+            // 如果有项目数据，直接使用；否则需要加载项目信息
+            if (projectData) {
+              setProject(projectData)
+              setEstimate(estimateData)
+            } else {
+              // 项目数据不在缓存中，需要单独加载
+              console.log('[数据加载] 缓存中没有项目信息，加载项目数据')
+              const projectResponse = await projectApi.getById(id!)
+              if (projectResponse.success && projectResponse.data?.project) {
+                setProject(projectResponse.data.project)
+                setEstimate(estimateData)
+              } else {
+                // 项目加载失败，只设置estimate
+                setEstimate(estimateData)
+              }
+            }
+          } else {
+            console.log('[数据加载] 缓存数据格式异常，从服务器加载')
+            await loadProjectAndEstimate()
+          }
+        } else {
+          console.log('[数据加载] 缓存不存在，从服务器加载')
+          await loadProjectAndEstimate()
+        }
+      } catch (error) {
+        console.error('[数据加载] 失败:', error)
+        // 出错时回退到服务器加载
+        await loadProjectAndEstimate()
+      } finally {
+        isLoadingRef.current = false
+      }
+    }
+    
+    loadData()
     
     // 组件卸载时取消所有请求
     return () => {
       console.log(`[数据加载] useEffect清理 #${loadCounterRef.current}`)
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
+      }
+      // 清理加载状态（如果当前正在加载的是这个ID）
+      if (currentLoadIdRef.current === id) {
+        isLoadingRef.current = false
       }
     }
   }, [id])

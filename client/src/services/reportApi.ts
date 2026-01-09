@@ -171,6 +171,7 @@ export const reportApi = {
     title?: string
     htmlContent: string
     styleConfig?: ReportStyleConfig
+    resources?: ResourceMap
   }) {
     const token = localStorage.getItem('token')
     const response = await fetch(`/api/report/export-html`, {
@@ -182,7 +183,8 @@ export const reportApi = {
       body: JSON.stringify({
         title: options.title || '投资方案报告',
         htmlContent: options.htmlContent,
-        styleConfig: options.styleConfig
+        styleConfig: options.styleConfig,
+        resources: options.resources
       })
     })
 
@@ -213,8 +215,11 @@ export const reportApi = {
   },
 
   // 获取默认样式配置
-  async getDefaultStyleConfig() {
-    const response = await api.get<any, ApiResponse<{ config: any }>>('/report/styles/default')
+  async getDefaultStyleConfig(configType?: 'preview' | 'word') {
+    const url = configType 
+      ? `/report/styles/default?type=${configType}` 
+      : '/report/styles/default'
+    const response = await api.get<any, ApiResponse<{ config: any }>>(url)
     if (!response || !response.success) {
       return null
     }
@@ -222,7 +227,7 @@ export const reportApi = {
   },
 
   // 保存样式配置
-  async saveStyleConfig(data: { name: string; config: ReportStyleConfig; isDefault?: boolean }) {
+  async saveStyleConfig(data: { name: string; config: ReportStyleConfig; isDefault?: boolean; configType?: 'preview' | 'word' }) {
     const response = await api.post<any, ApiResponse<{ configId: string }>>('/report/styles', data)
     return response
   },

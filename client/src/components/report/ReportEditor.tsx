@@ -163,12 +163,16 @@ export function ReportEditor({ readonly = false, styleConfig }: ReportEditorProp
     useReportStore.setState({ reportContent: content })
   }, [])
 
-  // 获取当前样式配置
-  const currentStyle = useMemo(() => ({
-    fontFamily: storeStyleConfig?.fonts?.body || '宋体',
-    fontSize: (storeStyleConfig?.fontSizes?.body || 16) + 'px',
-    lineHeight: storeStyleConfig?.paragraph?.lineSpacing || 1.5,
-  }), [storeStyleConfig])
+  // 获取当前样式配置（使用body独立的行间距配置）
+  const currentStyle = useMemo(() => {
+    const lineSpacing = storeStyleConfig?.body?.lineSpacing ?? 
+                        storeStyleConfig?.paragraph?.lineSpacing ?? 1.5
+    return {
+      fontFamily: storeStyleConfig?.fonts?.body || '宋体',
+      fontSize: (storeStyleConfig?.fontSizes?.body || 16) + 'px',
+      lineHeight: typeof lineSpacing === 'number' ? lineSpacing : 1.5,
+    }
+  }, [storeStyleConfig])
 
   // 创建 Tiptap 编辑器
   const editor = useEditor({

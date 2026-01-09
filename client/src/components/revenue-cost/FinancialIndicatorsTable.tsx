@@ -255,7 +255,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   depreciationData = [],
   investmentEstimate
 }) => {
-  const { context, revenueItems, productionRates, costConfig, revenueTableData, costTableData, profitDistributionTableData } = useRevenueCostStore()
+  const { context, revenueItems, productionRates, costConfig, revenueTableData, costTableData, profitDistributionTableData, loanRepaymentTableData } = useRevenueCostStore()
   const [showProfitTaxModal, setShowProfitTaxModal] = useState(false)
   
   // 表格弹窗状态
@@ -1326,7 +1326,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     let totalRow1_1 = 0;
     years.forEach((year) => {
       const yearData = cashFlowTableData.yearlyData[year - 1];
-      const yearTotal = yearData ? yearData.operatingRevenue : 0;
+          const yearTotal = yearData ? yearData.operatingRevenue : 0;
       row1_1[`${year}`] = yearTotal;
       totalRow1_1 += yearTotal;
     });
@@ -2120,7 +2120,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   };
 
   // 保存利润与利润分配表数据
-  const saveProfitDistributionTableData = () => {
+  const saveProfitDistributionTableData = (): void => {
     if (!context) return;
     
     const operationYears = context.operationYears;
@@ -2791,6 +2791,22 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     // 项目资本金净利润率 (ROE) = 年均净利润 / 项目资本金 × 100%
     const roe = projectEquity > 0 ? (annualAverage.netProfit / projectEquity) * 100 : 0;
     
+    // 从借款还本付息计划表获取利息备付率和偿债备付率的合计值
+    const getInterestCoverageRatio = (): number => {
+      if (!loanRepaymentTableData?.rows) return 0;
+      const row = loanRepaymentTableData.rows.find(r => r.序号 === '3.4');
+      return row?.合计 ?? 0;
+    };
+    
+    const getDebtServiceCoverageRatio = (): number => {
+      if (!loanRepaymentTableData?.rows) return 0;
+      const row = loanRepaymentTableData.rows.find(r => r.序号 === '3.5');
+      return row?.合计 ?? 0;
+    };
+    
+    const interestCoverageRatioTotal = getInterestCoverageRatio();
+    const debtServiceCoverageRatioTotal = getDebtServiceCoverageRatio();
+    
     return [
       { id: '1', name: '项目总投资', unit: '万元', data: formatNumberNoRounding(totalInvestment) },
       { id: '1.1', name: '建设投资', unit: '万元', data: formatNumberNoRounding(calculateConstructionInvestment(undefined)) },
@@ -2809,8 +2825,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '11', name: '总投资收益率', unit: '％', data: formatNumberNoRounding(roiA) },
       { id: '12', name: '投资利税率', unit: '％', data: formatNumberNoRounding(investmentProfitRate) },
       { id: '13', name: '项目资本金净利润率', unit: '％', data: formatNumberNoRounding(roe) },
-      { id: '14', name: '平均利息备付率', unit: '-', data: '-' },
-      { id: '15', name: '平均偿债备付率', unit: '-', data: '-' },
+      { id: '14', name: '平均利息备付率', unit: '-', data: formatNumberNoRounding(interestCoverageRatioTotal) },
+      { id: '15', name: '平均偿债备付率', unit: '-', data: formatNumberNoRounding(debtServiceCoverageRatioTotal) },
       { id: '16', name: '项目投资税前指标', unit: '', data: '' },
       { id: '16.1', name: '财务内部收益率', unit: '％', data: formatNumberNoRounding(indicators.preTaxIRR) },
       { id: '16.2', name: `项目投资财务净现值（Ic=${preTaxRate}％）`, unit: '万元', data: formatNumberNoRounding(indicators.preTaxNPV) },
@@ -2819,8 +2835,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '17.1', name: '财务内部收益率', unit: '％', data: formatNumberNoRounding(indicators.postTaxIRR) },
       { id: '17.2', name: `项目投资财务净现值（Ic=${postTaxRate}％）`, unit: '万元', data: formatNumberNoRounding(indicators.postTaxNPV) },
       { id: '17.3', name: '全部投资回收期', unit: '年', data: formatPaybackPeriod(indicators.postTaxDynamicPaybackPeriod) }
-    ]; 
-  }, [context, preTaxRate, postTaxRate, revenueTableData]);
+    ];
+  }, [context, preTaxRate, postTaxRate, revenueTableData, loanRepaymentTableData]);
   
   // 导出财务评价指标汇总表
   const handleExportFinancialSummaryTable = () => {
@@ -2833,7 +2849,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       return;
     }
 
-    const excelData = financialSummaryRows.map(row => ({
+      const excelData = financialSummaryRows.map((row: any) => ({
       序号: row.id,
       项目名称: row.name,
       单位: row.unit,

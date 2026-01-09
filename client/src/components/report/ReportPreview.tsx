@@ -1,6 +1,6 @@
 import { Paper, Text, Badge, Loader, Center, Box, Group, ScrollArea } from '@mantine/core'
 import { useReportStore } from '../../stores/reportStore'
-import type { ReportStyleConfig } from '../../types/report'
+import type { ReportStyleConfig, ResourceMap } from '../../types/report'
 import { useMemo, useEffect, useCallback, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -142,6 +142,92 @@ const convertToHtml = (content: string): string => {
   markdownCache.set(content, html)
   
   return html
+}
+
+// 生成表格HTML（用于预览）
+const generateTableHtml = (tableResource: any, config: ReportStyleConfig): string => {
+  if (!tableResource?.data?.length) {
+    return '<p>[表格无数据]</p>'
+  }
+
+  const columns = tableResource.columns || []
+  const data = tableResource.data
+
+  const headerRow = columns.map((col: string) => 
+    `<th style="background-color: #${config.table?.headerBg || 'EEEEEE'}; font-weight: bold; text-align: center; padding: 8px; border: 1px solid #000;">${col}</th>`
+  ).join('')
+
+  const dataRows = data.map((row: any, rowIndex: number) => {
+    const rowBg = config.table?.zebraStripe && rowIndex % 2 === 1 ? 'background-color: #F5F5F5;' : ''
+    const cells = columns.map((col: string) => 
+      `<td style="padding: 8px; border: 1px solid #000; ${rowBg}">${row[col] ?? ''}</td>`
+    ).join('')
+    return `<tr>${cells}</tr>`
+  }).join('')
+
+  return `
+    <p style="font-weight: bold; font-family: ${config.fonts?.body || '宋体'}; font-size: ${config.fontSizes?.tableTitle || 18}px; margin-bottom: 8px; margin-top: 16px;">${tableResource.title || '表格'}</p>
+    <table style="border-collapse: collapse; width: 100%; margin: 8px 0;">
+      <thead>
+        <tr>${headerRow}</tr>
+      </thead>
+      <tbody>
+        ${dataRows}
+      </tbody>
+    </table>
+  `
+}
+
+// 生成图表HTML（用于预览）
+const generateChartHtml = (chartResource: any): string => {
+  if (!chartResource?.base64Image) {
+    return '<p>[图表无数据]</p>'
+  }
+
+  return `
+    <p style="font-weight: bold; font-family: 黑体; font-size: 18px; text-align: center; margin-bottom: 8px; margin-top: 16px;">${chartResource.title || '图表'}</p>
+    <div style="text-align: center; margin: 16px 0;">
+      <img src="${chartResource.base64Image}" alt="${chartResource.title || '图表'}" style="max-width: 100%; height: auto; max-height: 400px;" />
+    </div>
+  `
+}
+
+// 替换内容中的变量标记
+const replaceVariablesInContent = (content: string, resources: ResourceMap, config: ReportStyleConfig): string => {
+  if (!content) return ''
+
+  let result = content
+
+  // 替换表格数据变量 {{DATA:tableId}} - JSON格式数据
+  result = result.replace(/\{\{DATA:(\w+)\}\}/g, (match, dataId) => {
+    const tableResource = resources.tables?.[dataId]
+    if (tableResource && tableResource.data) {
+      // 将表格数据转为JSON字符串显示
+      const jsonStr = JSON.stringify(tableResource.data, null, 2)
+      return `<pre style="background-color: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 12px;">${jsonStr}</pre>`
+    }
+    return `[表格数据 ${dataId} 未找到]`
+  })
+
+  // 替换表格变量 {{TABLE:tableId}}
+  result = result.replace(/\{\{TABLE:(\w+)\}\}/g, (match, tableId) => {
+    const tableResource = resources.tables?.[tableId]
+    if (tableResource) {
+      return generateTableHtml(tableResource, config)
+    }
+    return `[表格 ${tableId} 未找到]`
+  })
+
+  // 替换图表变量 {{CHART:chartId}}
+  result = result.replace(/\{\{CHART:(\w+)\}\}/g, (match, chartId) => {
+    const chartResource = resources.charts?.[chartId]
+    if (chartResource) {
+      return generateChartHtml(chartResource)
+    }
+    return `[图表 ${chartId} 未找到]`
+  })
+
+  return result
 }
 
 // 将配置转换为CSS样式
@@ -435,8 +521,9 @@ export function ReportPreview() {
     if (currentSections.cover.enabled) currentPage++
     if (currentSections.toc.enabled) currentPage++
     
-    // 处理reportContent（可能是Markdown）
-    const processedReportContent = convertToHtml(reportContent)
+    // 处理reportContent：先替换变量，再转换为HTML
+    const reportContentWithVars = replaceVariablesInContent(reportContent, resources, currentStyle)
+    const processedReportContent = convertToHtml(reportContentWithVars)
     
     return (
       <ReportPage pageNumber={currentPage} totalPages={pageCount}>
@@ -467,8 +554,9 @@ export function ReportPreview() {
           const headingSize = section.level === 1 ? '24px' : section.level === 2 ? '20px' : '18px'
           const borderBottom = section.level === 1 ? '2px solid #1890ff' : '1px solid #e8e8e8'
           
-          // 处理章节内容（可能是Markdown）
-          const processedContent = convertToHtml(section.content)
+          // 处理章节内容：先替换变量，再转换为HTML
+          const contentWithVars = replaceVariablesInContent(section.content, resources, currentStyle)
+          const processedContent = convertToHtml(contentWithVars)
           
           // 检查是否需要新的一页
           if (index > 0 && section.level === 1) {
@@ -521,7 +609,7 @@ export function ReportPreview() {
         })}
       </ReportPage>
     )
-  }, [reportContent, currentSections.body, currentStyle, pageCount])
+  }, [reportContent, currentSections.body, currentStyle, resources, pageCount])
 
   // 构建附录内容
   const renderAppendix = useCallback(() => {
@@ -543,8 +631,9 @@ export function ReportPreview() {
           附录
         </h2>
         {currentSections.appendix.map((section, index) => {
-          // 处理附录内容（可能是Markdown）
-          const processedContent = convertToHtml(section.content)
+          // 处理附录内容：先替换变量，再转换为HTML
+          const contentWithVars = replaceVariablesInContent(section.content, resources, currentStyle)
+          const processedContent = convertToHtml(contentWithVars)
           
           return (
             <div key={`appendix-${index}`} style={{ marginBottom: '24px' }}>
@@ -569,7 +658,7 @@ export function ReportPreview() {
         })}
       </ReportPage>
     )
-  }, [reportContent, currentSections.appendix, currentSections.cover.enabled, currentSections.toc.enabled, currentSections.body.length, currentStyle, pageCount])
+  }, [reportContent, currentSections.appendix, currentSections.cover.enabled, currentSections.toc.enabled, currentSections.body.length, currentStyle, resources, pageCount])
 
   // 渲染空状态
   const renderEmptyState = () => {

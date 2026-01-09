@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useReportStore } from '../../stores/reportStore'
-import { Text, Badge, Group, Stack, ActionIcon, Tooltip } from '@mantine/core'
-import { Sparkles } from 'lucide-react'
+import { Text, Badge, Group, Stack, ActionIcon, Tooltip, Button, Modal, TextInput, Textarea } from '@mantine/core'
+import { Sparkles, Plus, Trash2 } from 'lucide-react'
 import { ProjectOverviewModal } from './ProjectOverviewModal'
 
 export function VariablePicker() {
-  const { projectOverview } = useReportStore()
+  const { projectOverview, customVariables, addCustomVariable, removeCustomVariable } = useReportStore()
   const [modalOpened, setModalOpened] = useState(false)
+  const [newVariableModalOpened, setNewVariableModalOpened] = useState(false)
+  const [newVariableKey, setNewVariableKey] = useState('')
+  const [newVariableValue, setNewVariableValue] = useState('')
 
   const handleCopyVariable = (variableKey: string) => {
     navigator.clipboard.writeText(variableKey)
@@ -15,20 +18,48 @@ export function VariablePicker() {
   // 项目概况变量状态：有内容时蓝色可点击，空时灰色不可点击
   const hasProjectOverview = !!projectOverview && projectOverview.trim() !== ''
 
+  // 创建自定义变量
+  const handleCreateVariable = () => {
+    if (newVariableKey.trim()) {
+      const key = `{{${newVariableKey.trim()}}}`
+      addCustomVariable(key, newVariableValue)
+      setNewVariableKey('')
+      setNewVariableValue('')
+      setNewVariableModalOpened(false)
+    }
+  }
+
+  // 删除自定义变量
+  const handleDeleteVariable = (key: string) => {
+    removeCustomVariable(key)
+  }
+
   return (
     <div className="variable-picker">
       <Group justify="space-between" mb="xs">
         <Text size="sm" fw={500}>可用变量</Text>
-        <Tooltip label="AI生成项目概况">
-          <ActionIcon
-            variant="subtle"
-            color="blue"
-            size="sm"
-            onClick={() => setModalOpened(true)}
-          >
-            <Sparkles size={14} />
-          </ActionIcon>
-        </Tooltip>
+        <Group gap={4}>
+          <Tooltip label="新建变量">
+            <ActionIcon
+              variant="subtle"
+              color="green"
+              size="sm"
+              onClick={() => setNewVariableModalOpened(true)}
+            >
+              <Plus size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="AI生成项目概况">
+            <ActionIcon
+              variant="subtle"
+              color="blue"
+              size="sm"
+              onClick={() => setModalOpened(true)}
+            >
+              <Sparkles size={14} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
       </Group>
       
       <Stack gap="xs">
@@ -165,6 +196,103 @@ export function VariablePicker() {
           </Group>
         </div>
 
+        {/* 表格数据 */}
+        <div>
+          <Text size="xs" c="dimmed" mb="xs">表格数据</Text>
+          <Group gap={4}>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:investment_estimate}}')}
+              title="点击复制"
+            >
+              投资估算简表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:depreciation_amortization}}')}
+              title="点击复制"
+            >
+              折旧与摊销估算表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:revenue_tax}}')}
+              title="点击复制"
+            >
+              营业收入税金及附加估算表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:raw_materials}}')}
+              title="点击复制"
+            >
+              外购原材料费估算表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:fuel_power}}')}
+              title="点击复制"
+            >
+              外购燃料和动力费估算表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:profit_distribution}}')}
+              title="点击复制"
+            >
+              利润与利润分配表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:project_cash_flow}}')}
+              title="点击复制"
+            >
+              项目投资现金流量表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:financial_indicators}}')}
+              title="点击复制"
+            >
+              财务计算指标表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:loan_repayment}}')}
+              title="点击复制"
+            >
+              借款还本付息计划表
+            </Badge>
+            <Badge
+              variant="light"
+              color="violet"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{DATA:financial_summary}}')}
+              title="点击复制"
+            >
+              财务评价指标汇总表
+            </Badge>
+          </Group>
+        </div>
+
         {/* 表格资源 */}
         <div>
           <Text size="xs" c="dimmed" mb="xs">表格资源</Text>
@@ -175,6 +303,40 @@ export function VariablePicker() {
             <Badge variant="light" color="teal">还款计划表</Badge>
           </Group>
         </div>
+
+        {/* 自定义变量 */}
+        {Object.keys(customVariables).length > 0 && (
+          <div>
+            <Text size="xs" c="dimmed" mb="xs">自定义变量</Text>
+            <Group gap={4}>
+              {Object.entries(customVariables).map(([key, value]) => (
+                <Badge
+                  key={key}
+                  variant="light"
+                  color="violet"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleCopyVariable(key)}
+                  title="点击复制"
+                  rightSection={
+                    <ActionIcon
+                      size="xs"
+                      variant="transparent"
+                      color="gray"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteVariable(key)
+                      }}
+                    >
+                      <Trash2 size={10} />
+                    </ActionIcon>
+                  }
+                >
+                  {key.replace('{{', '').replace('}}', '')}
+                </Badge>
+              ))}
+            </Group>
+          </div>
+        )}
       </Stack>
       
       <Text size="xs" c="dimmed" mt="xs">
@@ -186,6 +348,53 @@ export function VariablePicker() {
         opened={modalOpened}
         onClose={() => setModalOpened(false)}
       />
+
+      {/* 新建变量Modal */}
+      <Modal
+        opened={newVariableModalOpened}
+        onClose={() => {
+          setNewVariableModalOpened(false)
+          setNewVariableKey('')
+          setNewVariableValue('')
+        }}
+        title="新建变量"
+        size="sm"
+      >
+        <Stack gap="md">
+          <TextInput
+            label="变量名"
+            placeholder="例如: my_variable"
+            value={newVariableKey}
+            onChange={(e) => setNewVariableKey(e.target.value)}
+            description="变量名会自动添加 {{ }} 包裹"
+          />
+          <Textarea
+            label="变量值"
+            placeholder="输入变量的值..."
+            value={newVariableValue}
+            onChange={(e) => setNewVariableValue(e.target.value)}
+            minRows={3}
+          />
+          <Group justify="flex-end" mt="md">
+            <Button 
+              variant="light" 
+              onClick={() => {
+                setNewVariableModalOpened(false)
+                setNewVariableKey('')
+                setNewVariableValue('')
+              }}
+            >
+              取消
+            </Button>
+            <Button 
+              onClick={handleCreateVariable}
+              disabled={!newVariableKey.trim()}
+            >
+              创建
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </div>
   )
 }

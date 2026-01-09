@@ -381,8 +381,8 @@ export const investmentApi = {
   getByProjectId: (projectId: string, options?: { signal?: AbortSignal; useCache?: boolean }) => {
     const cacheKey = `investment:${projectId}`
     
-    // 尝试从缓存获取
-    if (options?.useCache !== false) {
+    // 尝试从缓存获取（仅在明确要求使用缓存时）
+    if (options?.useCache === true) {
       const cachedData = dataCache.get(cacheKey)
       if (cachedData) {
         console.log(`[API] 使用缓存数据: ${cacheKey}`)
@@ -420,8 +420,8 @@ export const investmentApi = {
         dataCache.invalidate(cacheKey)  // 清除可能有问题的缓存
       }
       
-      // 缓存结果（仅在成功且数据完整时缓存）
-      if (options?.useCache !== false && response.success && response.data?.estimate?.estimate_data) {
+      // 缓存结果（成功且数据完整时缓存）
+      if (response.success && response.data?.estimate?.estimate_data) {
         dataCache.set(cacheKey, response)
         console.log(`[API] 已缓存数据: ${cacheKey}`)
       }

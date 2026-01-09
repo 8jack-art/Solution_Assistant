@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { Text, Group, Menu, Badge, Box, TextInput, Stack } from '@mantine/core'
 import { 
   Folder, DollarSign, TrendingUp, Search, 
-  ChevronRight, FileText 
+  ChevronRight, FileText, Table 
 } from 'lucide-react'
 import { useReportStore } from '../../stores/reportStore'
 
@@ -31,6 +31,23 @@ const variableGroups = [
     icon: <TrendingUp size={14} />,
     color: 'orange',
     filterKeys: ['{{roi}}', '{{irr}}', '{{npv}}']
+  },
+  {
+    label: '表格数据',
+    icon: <Table size={14} />,
+    color: 'blue',
+    filterKeys: [
+      '{{DATA:investment_estimate}}',
+      '{{DATA:depreciation_amortization}}',
+      '{{DATA:revenue_tax}}',
+      '{{DATA:raw_materials}}',
+      '{{DATA:fuel_power}}',
+      '{{DATA:profit_distribution}}',
+      '{{DATA:project_cash_flow}}',
+      '{{DATA:financial_indicators}}',
+      '{{DATA:loan_repayment}}',
+      '{{DATA:financial_summary}}'
+    ]
   },
   {
     label: '表格资源',
@@ -77,6 +94,17 @@ const variableDetails: Record<string, { label: string; description: string }> = 
   '{{CHART:cost_trend}}': { label: '成本趋势图', description: '展示成本变化趋势的图表' },
   '{{CHART:cash_flow_trend}}': { label: '现金流趋势图', description: '展示现金流变化的图表' },
   '{{CHART:profit_analysis}}': { label: '利润分析图', description: '展示利润分析的图表' },
+  // 表格数据（JSON格式，用于LLM提示词）
+  '{{DATA:investment_estimate}}': { label: '投资估算简表JSON', description: '投资估算简表的完整JSON数据' },
+  '{{DATA:depreciation_amortization}}': { label: '折旧与摊销估算表JSON', description: '折旧与摊销估算表的完整JSON数据' },
+  '{{DATA:revenue_tax}}': { label: '营业收入税金及附加估算表JSON', description: '营业收入、营业税金及附加和增值税估算表的JSON数据' },
+  '{{DATA:raw_materials}}': { label: '外购原材料费估算表JSON', description: '外购原材料费估算表的完整JSON数据' },
+  '{{DATA:fuel_power}}': { label: '外购燃料和动力费估算表JSON', description: '外购燃料和动力费估算表的完整JSON数据' },
+  '{{DATA:profit_distribution}}': { label: '利润与利润分配表JSON', description: '利润与利润分配表的完整JSON数据' },
+  '{{DATA:project_cash_flow}}': { label: '项目投资现金流量表JSON', description: '项目投资现金流量表的完整JSON数据' },
+  '{{DATA:financial_indicators}}': { label: '财务计算指标表JSON', description: '财务计算指标表的完整JSON数据' },
+  '{{DATA:loan_repayment}}': { label: '借款还本付息计划表JSON', description: '借款还本付息计划表的完整JSON数据' },
+  '{{DATA:financial_summary}}': { label: '财务评价指标汇总表JSON', description: '财务评价指标汇总表的完整JSON数据' },
 }
 
 export function VariableMenu({ editor, position, onClose }: VariableMenuProps) {

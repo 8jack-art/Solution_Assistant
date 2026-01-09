@@ -8,6 +8,7 @@ import { VariablePicker } from '../components/report/VariablePicker'
 import { TemplateSelector } from '../components/report/TemplateSelector'
 import { Header } from '../components/common/Header'
 import { StyleSettingsPanel } from '../components/report/StyleSettingsPanel'
+import { WordStyleSettingsPanel } from '../components/report/WordStyleSettingsPanel'
 import { SectionConfigPanel } from '../components/report/SectionConfigPanel'
 import { llmConfigApi } from '@/lib/api'
 
@@ -16,6 +17,7 @@ export function ReportGeneration() {
   const store = useReportStore()
   const [currentLLMConfig, setCurrentLLMConfig] = useState<any>(null)
   const [showStylePanel, setShowStylePanel] = useState(false)
+  const [showWordStylePanel, setShowWordStylePanel] = useState(false)
   const [showSectionPanel, setShowSectionPanel] = useState(false)
 
   // 加载当前LLM配置
@@ -40,7 +42,8 @@ export function ReportGeneration() {
       store.loadProjectData()
     }
     // 初始化时加载用户保存的样式配置
-    store._init()
+    // @ts-ignore - _init 是内部方法
+    store._init?.()
     
     return () => {
       store.resetReport()
@@ -124,13 +127,26 @@ export function ReportGeneration() {
                   <Text fw={500}>报告配置</Text>
                 </Group>
                 <Group>
+                  {/* 预览样式设置按钮 - 蓝色 */}
                   <Button 
                     variant="light"
+                    color="blue"
                     onClick={() => setShowStylePanel(true)}
                     size="sm"
                   >
-                    样式设置
+                    预览样式设置
                   </Button>
+                  {/* Word样式设置按钮 - 绿色 */}
+                  <Button 
+                    variant="filled"
+                    color="green"
+                    onClick={() => setShowWordStylePanel(true)}
+                    size="sm"
+                  >
+                    Word样式设置
+                  </Button>
+                </Group>
+                <Group>
                   <Button 
                     variant="light"
                     onClick={() => setShowSectionPanel(true)}
@@ -174,6 +190,7 @@ export function ReportGeneration() {
                   onClick={handleExport}
                   disabled={!store.reportId}
                   variant="light"
+                  color="green"
                 >
                   导出Word
                 </Button>
@@ -199,25 +216,35 @@ export function ReportGeneration() {
       </Grid>
      </Container>
 
-     {/* 样式设置弹窗 */}
-     <Modal
-       opened={showStylePanel}
-       onClose={() => setShowStylePanel(false)}
-       title="样式设置"
-       size="lg"
-     >
-       <StyleSettingsPanel onClose={() => setShowStylePanel(false)} />
-     </Modal>
+      {/* 预览样式设置弹窗 */}
+      <Modal
+        opened={showStylePanel}
+        onClose={() => setShowStylePanel(false)}
+        title="预览样式设置"
+        size="lg"
+      >
+        <StyleSettingsPanel onClose={() => setShowStylePanel(false)} />
+      </Modal>
 
-     {/* 章节配置弹窗 */}
-     <Modal
-       opened={showSectionPanel}
-       onClose={() => setShowSectionPanel(false)}
-       title="章节配置"
-       size="lg"
-     >
-       <SectionConfigPanel onClose={() => setShowSectionPanel(false)} />
-     </Modal>
+      {/* Word样式设置弹窗 */}
+      <Modal
+        opened={showWordStylePanel}
+        onClose={() => setShowWordStylePanel(false)}
+        title="Word样式设置"
+        size="lg"
+      >
+        <WordStyleSettingsPanel onClose={() => setShowWordStylePanel(false)} />
+      </Modal>
+
+      {/* 章节配置弹窗 */}
+      <Modal
+        opened={showSectionPanel}
+        onClose={() => setShowSectionPanel(false)}
+        title="章节配置"
+        size="lg"
+      >
+        <SectionConfigPanel onClose={() => setShowSectionPanel(false)} />
+      </Modal>
     </div>
   )
 }
