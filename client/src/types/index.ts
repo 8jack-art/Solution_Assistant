@@ -11,6 +11,7 @@ export interface User {
 export interface InvestmentProject {
   id: string
   user_id: string
+  user_name?: string  // 创建项目的用户名称
   project_name: string
   total_investment: number
   project_info?: string

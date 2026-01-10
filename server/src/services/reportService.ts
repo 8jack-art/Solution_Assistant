@@ -1,6 +1,7 @@
 import { pool } from '../db/config.js'
 import { LLMService, LLMMessage } from '../lib/llm.js'
 import { sseManager } from './sseManager.js'
+import { buildAllTableDataJSON } from '../utils/tableDataBuilder.js'
 // @ts-ignore
 import {
   Document,
@@ -268,17 +269,35 @@ export class ReportService {
         console.warn('未找到投资估算数据')
       }
 
-      let revenueCostModelData = {}
+      let revenueCostModelData: any = {}
       if (revenueCostData.length > 0) {
         const estimate = revenueCostData[0]
         console.log('收入成本原始数据键:', Object.keys(estimate))
         
-        if (estimate.model_data && typeof estimate.model_data === 'string') {
-          try {
-            revenueCostModelData = JSON.parse(estimate.model_data)
-            console.log('收入成本数据解析成功，键:', Object.keys(revenueCostModelData))
-          } catch (e) {
-            console.warn('解析收入成本数据失败:', e)
+        // 解析 model_data（兼容字符串和已解析的对象）
+        if (estimate.model_data) {
+          if (typeof estimate.model_data === 'string') {
+            try {
+              revenueCostModelData = JSON.parse(estimate.model_data)
+              console.log('收入成本数据解析成功，键:', Object.keys(revenueCostModelData))
+            } catch (e) {
+              console.warn('解析收入成本数据失败:', e)
+            }
+          } else {
+            // 已经是解析后的对象
+            revenueCostModelData = estimate.model_data
+            console.log('收入成本数据已是对象格式，键:', Object.keys(revenueCostModelData))
+          }
+          
+          // 打印 depreciationAmortization 数据（如果存在）
+          if (revenueCostModelData.depreciationAmortization) {
+            console.log('✅ 找到 depreciationAmortization 数据:', {
+              有A数据: !!(revenueCostModelData.depreciationAmortization.A_depreciation?.length > 0),
+              有D数据: !!(revenueCostModelData.depreciationAmortization.D_depreciation?.length > 0),
+              有E数据: !!(revenueCostModelData.depreciationAmortization.E_amortization?.length > 0)
+            })
+          } else {
+            console.warn('⚠️ revenueCostModelData 中没有 depreciationAmortization 字段')
           }
         } else {
           console.warn('收入成本数据字段不存在或格式不正确')
@@ -309,6 +328,25 @@ export class ReportService {
         console.warn('查询项目概况数据失败:', e)
       }
 
+      // 构建表格数据JSON（用于 {{DATA:xxx}} 变量替换）
+      const tableDataJSON = buildAllTableDataJSON({
+        project: {
+          id: project.id,
+          name: project.project_name,
+          description: project.project_info || '',
+          constructionUnit: project.construction_unit || '',
+          totalInvestment: project.total_investment,
+          constructionYears: project.construction_years,
+          operationYears: project.operation_years,
+          projectType: project.project_type || project.industry || '',
+          location: project.location || ''
+        },
+        investment: investmentData,
+        revenueCost: revenueCostModelData,
+        financialIndicators
+      })
+      console.log('表格数据JSON keys:', Object.keys(tableDataJSON))
+      
       const result = {
         project: {
           id: project.id,
@@ -324,7 +362,8 @@ export class ReportService {
         investment: investmentData,
         revenueCost: revenueCostModelData,
         financialIndicators,
-        projectOverview
+        projectOverview,
+        tableDataJSON
       }
       
       console.log('项目数据收集完成')

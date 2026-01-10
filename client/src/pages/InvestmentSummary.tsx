@@ -30,6 +30,7 @@ import ConstructionInterestModal from '@/components/revenue-cost/ConstructionInt
 import LoanRepaymentScheduleTable from '@/components/revenue-cost/LoanRepaymentScheduleTable'
 import { Header } from '@/components/common/Header'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
+import { setProjectUpdateTime } from '@/lib/projectUpdateTime'
 
 // 投资估算数据结构
 interface InvestmentItem {
@@ -2418,6 +2419,11 @@ const InvestmentSummary: React.FC = () => {
       console.log('估算数据包含partG:', !!estimateData?.partG)
       console.log('三级子项数据:', estimateData.thirdLevelItems)
       console.log('项目类型:', projectType)
+      
+      // 更新项目修改时间（用于Dashboard显示）
+      if (id) {
+        setProjectUpdateTime(id)
+      }
       
       // 确保数据结构完整 - 如果不完整，从原始数据构建
       let finalEstimateData = estimateData

@@ -13,6 +13,7 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { formatCurrency, formatNumber } from '@/lib/utils'
+import { setProjectUpdateTime } from '@/lib/projectUpdateTime'
 import { CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table'
@@ -95,6 +96,10 @@ const InvestmentCalculator: React.FC = () => {
       const response = await investmentApi.calculate(formData)
       if (response.success && response.data) {
         setCalculationResult(response.data.estimate)
+        // 设置修改时间
+        if (id) {
+          setProjectUpdateTime(id)
+        }
         notifications.show({
           title: '✅ 计算完成',
           message: '投资估算已计算完成',

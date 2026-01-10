@@ -34,6 +34,7 @@ import { projectApi, investmentApi, revenueCostApi } from '@/lib/api'
 import * as XLSX from 'xlsx'
 import { useRevenueCostStore } from '@/stores/revenueCostStore'
 import { InvestmentEstimate } from '@/types'
+import { setProjectUpdateTime } from '@/lib/projectUpdateTime'
 import AIRevenueStructure from '@/components/revenue-cost/AIRevenueStructure'
 import DynamicRevenueTable from '@/components/revenue-cost/DynamicRevenueTable'
 import DynamicCostTable from '@/components/revenue-cost/DynamicCostTable'
@@ -657,6 +658,7 @@ const RevenueCostModeling: React.FC = () => {
 
   /**
    * 计算折旧摊销表（直线法）
+   * 同时生成 depreciationAmortization 数据供报告生成使用
    */
   useEffect(() => {
     if (!project || !investmentEstimate) return
@@ -768,8 +770,55 @@ const RevenueCostModeling: React.FC = () => {
       '表格数据行数': data.length,
       '表格数据': data
     })
+    
     setDepreciationData(data)
     console.log('✅ 折旧摊销数据已设置，depreciationData.length:', data.length)
+    
+    // 从 depreciationData 中提取 A、D、E 行的分年数据，用于保存到数据库
+    const aRow = data.find(row => row.序号 === 'A')
+    const dRow = data.find(row => row.序号 === 'D')
+    const eRow = data.find(row => row.序号 === 'E')
+    
+    // 构建 depreciationAmortization 数据（用于报告生成）
+    // 包含：分年数据 + 折旧参数
+    const depreciationAmortization = {
+      // 分年数据
+      A_depreciation: aRow?.分年数据 || [],
+      D_depreciation: dRow?.分年数据 || [],
+      E_amortization: eRow?.分年数据 || [],
+      // 折旧参数
+      A: {
+        原值: constructionOriginalValue,
+        年折旧额: aRow?.分年数据?.[0] || 0, // 第1年折旧额
+        折旧年限: constructionDepreciationYears,
+        残值率: constructionResidualRate
+      },
+      D: {
+        原值: equipmentOriginalValue,
+        年折旧额: dRow?.分年数据?.[0] || 0, // 第1年折旧额
+        折旧年限: equipmentDepreciationYears,
+        残值率: equipmentResidualRate
+      },
+      E: {
+        原值: landCost, // 土地费用即为无形资产原值
+        年摊销额: eRow?.分年数据?.[0] || 0, // 第1年摊销额
+        摊销年限: intangibleAmortizationYears,
+        残值率: intangibleResidualRate
+      }
+    }
+    
+    console.log('💾 准备保存的 depreciationAmortization 数据:', depreciationAmortization)
+    
+    // 更新 store 的 context 中的 depreciationAmortization
+    const { setContext } = useRevenueCostStore.getState()
+    const currentContext = useRevenueCostStore.getState().context
+    if (currentContext) {
+      setContext({
+        ...currentContext,
+        depreciationAmortization
+      })
+      console.log('✅ depreciationAmortization 已保存到 store context')
+    }
   }, [
     project,
     investmentEstimate,
@@ -1015,6 +1064,10 @@ const RevenueCostModeling: React.FC = () => {
       const response = await investmentApi.save(requestData);
 
       if (response.success) {
+        // 设置修改时间
+        if (id) {
+          setProjectUpdateTime(id)
+        }
         notifications.show({
           title: '✅ 保存成功',
           message: '还本付息计划简表已保存到数据库',

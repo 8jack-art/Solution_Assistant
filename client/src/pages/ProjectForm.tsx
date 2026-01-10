@@ -19,6 +19,7 @@ import {
 import { notifications } from '@mantine/notifications'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import { Header } from '@/components/common/Header'
+import { setProjectUpdateTime } from '@/lib/projectUpdateTime'
 
 const ProjectForm: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -226,7 +227,9 @@ const ProjectForm: React.FC = () => {
         })
 
         if (isEdit && id) {
-          // 更新成功后重新加载项目数据，保持在当前页面
+          // 更新成功后设置修改时间
+          setProjectUpdateTime(id)
+          // 重新加载项目数据，保持在当前页面
           loadProject()
         } else {
           const createdProjectId = response.data?.project?.id

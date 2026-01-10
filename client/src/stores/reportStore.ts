@@ -17,7 +17,7 @@ import {
   ChartResource,
   validateAndCompleteStyleConfig
 } from '../types/report'
-import { buildAllTableResources } from '../utils/tableResourceBuilder'
+import { buildAllTableResources, buildAllTableDataJSON } from '../utils/tableResourceBuilder'
 import { buildHtmlTemplate } from '../utils/htmlTemplateBuilder'
 import { marked } from 'marked'
 
@@ -491,6 +491,10 @@ export const useReportStore = create<ReportState>((set, get) => ({
       const projectData = data.data || data
       console.log('[ReportStore] project data:', JSON.stringify(projectData, null, 2))
       
+      // 构建所有表格数据的JSON（用于LLM提示词）
+      const tableDataJSON = buildAllTableDataJSON(projectData)
+      console.log('[ReportStore] tableDataJSON keys:', Object.keys(tableDataJSON))
+      
       const variables: ReportVariable[] = [
         { key: '{{project_name}}', label: '项目名称', value: projectData.project?.name || '' },
         { key: '{{construction_unit}}', label: '建设单位', value: projectData.project?.constructionUnit || '' },
@@ -504,16 +508,16 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{irr}}', label: '内部收益率', value: projectData.financialIndicators?.irr || 0 },
         { key: '{{npv}}', label: '净现值', value: projectData.financialIndicators?.npv || 0 },
         // 表格数据（JSON格式，用于LLM提示词）
-        { key: '{{DATA:investment_estimate}}', label: '投资估算简表JSON', category: 'tableData' },
-        { key: '{{DATA:depreciation_amortization}}', label: '折旧与摊销估算表JSON', category: 'tableData' },
-        { key: '{{DATA:revenue_tax}}', label: '营业收入税金及附加估算表JSON', category: 'tableData' },
-        { key: '{{DATA:raw_materials}}', label: '外购原材料费估算表JSON', category: 'tableData' },
-        { key: '{{DATA:fuel_power}}', label: '外购燃料和动力费估算表JSON', category: 'tableData' },
-        { key: '{{DATA:profit_distribution}}', label: '利润与利润分配表JSON', category: 'tableData' },
-        { key: '{{DATA:project_cash_flow}}', label: '项目投资现金流量表JSON', category: 'tableData' },
-        { key: '{{DATA:financial_indicators}}', label: '财务计算指标表JSON', category: 'tableData' },
-        { key: '{{DATA:loan_repayment}}', label: '借款还本付息计划表JSON', category: 'tableData' },
-        { key: '{{DATA:financial_summary}}', label: '财务评价指标汇总表JSON', category: 'tableData' },
+        { key: '{{DATA:investment_estimate}}', label: '投资估算简表JSON', category: 'tableData', value: tableDataJSON['DATA:investment_estimate'] || '{}' },
+        { key: '{{DATA:depreciation_amortization}}', label: '折旧与摊销估算表JSON', category: 'tableData', value: tableDataJSON['DATA:depreciation_amortization'] || '{}' },
+        { key: '{{DATA:revenue_tax}}', label: '营业收入税金及附加估算表JSON', category: 'tableData', value: tableDataJSON['DATA:revenue_tax'] || '{}' },
+        { key: '{{DATA:raw_materials}}', label: '外购原材料费估算表JSON', category: 'tableData', value: tableDataJSON['DATA:raw_materials'] || '{}' },
+        { key: '{{DATA:fuel_power}}', label: '外购燃料和动力费估算表JSON', category: 'tableData', value: tableDataJSON['DATA:fuel_power'] || '{}' },
+        { key: '{{DATA:profit_distribution}}', label: '利润与利润分配表JSON', category: 'tableData', value: tableDataJSON['DATA:profit_distribution'] || '{}' },
+        { key: '{{DATA:project_cash_flow}}', label: '项目投资现金流量表JSON', category: 'tableData', value: tableDataJSON['DATA:project_cash_flow'] || '{}' },
+        { key: '{{DATA:financial_indicators}}', label: '财务计算指标表JSON', category: 'tableData', value: tableDataJSON['DATA:financial_indicators'] || '{}' },
+        { key: '{{DATA:loan_repayment}}', label: '借款还本付息计划表JSON', category: 'tableData', value: tableDataJSON['DATA:loan_repayment'] || '{}' },
+        { key: '{{DATA:financial_summary}}', label: '财务评价指标汇总表JSON', category: 'tableData', value: tableDataJSON['DATA:financial_summary'] || '{}' },
         // 表格资源（渲染HTML）
         { key: '{{TABLE:investment_estimate}}', label: '投资估算简表', category: 'table' },
         { key: '{{TABLE:revenue_cost_detail}}', label: '收入成本明细表', category: 'table' },

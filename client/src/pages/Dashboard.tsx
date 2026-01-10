@@ -26,6 +26,7 @@ import { notifications } from '@mantine/notifications'
 import { Trash } from 'lucide-react'
 import { projectApi, InvestmentProject } from '@/lib/api'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
+import { getProjectUpdateTime } from '@/lib/projectUpdateTime'
 import UserProfile from '@/components/UserProfile'
 import { Header } from '@/components/common/Header'
 
@@ -149,27 +150,6 @@ const Dashboard: React.FC = () => {
         showBackButton={false}
         rightContent={
           <Group gap="md">
-            <Button
-              variant="light"
-              onClick={() => navigate('/llm-configs')}
-              style={{
-                height: '36px',
-                borderRadius: '6px',
-                color: '#1D2129',
-                fontSize: '14px',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#E7F5FF'
-                e.currentTarget.style.color = '#1E6FFF'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.color = '#1D2129'
-              }}
-            >
-              🤖 LLM配置
-            </Button>
             {user && <UserProfile user={user} />}
           </Group>
         }
@@ -291,47 +271,26 @@ const Dashboard: React.FC = () => {
           </SimpleGrid>
 
           <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB', backgroundColor: '#FFFFFF' }}>
-            <Group justify="space-between">
-              <div>
-                <Title order={4} c="#1D2129" style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>快速操作</Title>
-                <Text size="xs" c="#86909C" style={{ fontSize: '12px' }}>常用功能入口</Text>
-              </div>
-              <Group gap="sm">
-                <Button 
-                  onClick={() => navigate('/project/new')} 
-                  leftSection={<Box style={{ fontSize: '16px' }}>➕</Box>}
-                  style={{ 
-                    height: '40px', 
-                    backgroundColor: '#1E6FFF', 
-                    color: '#FFFFFF',
-                    borderRadius: '6px',
-                    padding: '0 24px',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-1px)'
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(30, 111, 255, 0.3)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.boxShadow = 'none'
-                  }}
-                >
-                  新建项目
-                </Button>
-              </Group>
-            </Group>
-          </Card>
-
-          <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB', backgroundColor: '#FFFFFF' }}>
             <Stack gap="md">
               <Group justify="space-between">
                 <div>
                   <Title order={4} c="#1D2129" style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>项目列表</Title>
                   <Text size="xs" c="#86909C" style={{ fontSize: '12px' }}>共 {projects.length} 个项目</Text>
                 </div>
+                <Button 
+                  onClick={() => navigate('/project/new')} 
+                  style={{ 
+                    height: '32px', 
+                    backgroundColor: '#1E6FFF', 
+                    color: '#FFFFFF',
+                    borderRadius: '4px',
+                    padding: '0 16px',
+                    fontSize: '14px',
+                    fontFamily: 'SimHei, sans-serif',
+                  }}
+                >
+                  新建项目
+                </Button>
               </Group>
 
               {projects.length === 0 ? (
@@ -369,10 +328,10 @@ const Dashboard: React.FC = () => {
                       <Table.Thead style={{ backgroundColor: '#F5F7FA' }}>
                         <Table.Tr>
                           <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px' }}>项目名称</Table.Th>
-                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px' }}>总投资</Table.Th>
-                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px' }}>用地模式</Table.Th>
-                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px' }}>状态</Table.Th>
-                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px' }}>创建时间</Table.Th>
+                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px', textAlign: 'center' }}>总投资（万元）</Table.Th>
+                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px', textAlign: 'center' }}>编制</Table.Th>
+                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px', textAlign: 'center' }}>创建时间</Table.Th>
+                          <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px', textAlign: 'center' }}>修改时间</Table.Th>
                           <Table.Th style={{ color: '#1D2129', fontWeight: 600, fontSize: '14px', padding: '16px', textAlign: 'center' }}>操作</Table.Th>
                         </Table.Tr>
                       </Table.Thead>
@@ -386,32 +345,17 @@ const Dashboard: React.FC = () => {
                             <Table.Td style={{ fontWeight: 500, color: '#1D2129', fontSize: '14px', padding: '16px' }}>
                               {project.project_name}
                             </Table.Td>
-                            <Table.Td style={{ color: '#1E6FFF', fontWeight: 600, fontSize: '14px', padding: '16px' }}>
-                              {formatCurrency(project.total_investment)}
+                            <Table.Td style={{ color: '#1E6FFF', fontWeight: 600, fontSize: '14px', padding: '16px', textAlign: 'center' }}>
+                              {project.total_investment?.toLocaleString() || '0'}
                             </Table.Td>
-                            <Table.Td style={{ padding: '16px' }}>
-                              <Badge size="sm" radius="sm" color="gray" variant="light">
-                                {project.land_mode === 'A' ? '一次性征地' : 
-                                 project.land_mode === 'B' ? '长期租赁' :
-                                 project.land_mode === 'C' ? '无土地需求' : '混合用地'}
-                              </Badge>
+                            <Table.Td style={{ color: '#1D2129', fontSize: '14px', padding: '16px', textAlign: 'center' }}>
+                              {project.user_name || '-'}
                             </Table.Td>
-                            <Table.Td style={{ padding: '16px' }}>
-                              <Group gap="xs">
-                                <Badge
-                                  color={project.status === 'completed' ? '#00C48C' : '#FFA940'}
-                                  size="sm"
-                                  radius="sm"
-                                >
-                                  {project.status === 'completed' ? '✓ 已完成' : '📝 草稿'}
-                                </Badge>
-                                {project.is_locked && (
-                                  <Badge color="#F5455C" size="sm" radius="sm">🔒 已锁定</Badge>
-                                )}
-                              </Group>
-                            </Table.Td>
-                            <Table.Td style={{ color: '#86909C', fontSize: '13px', padding: '16px' }}>
+                            <Table.Td style={{ color: '#86909C', fontSize: '13px', padding: '16px', textAlign: 'center' }}>
                               {formatDateTime(project.created_at)}
+                            </Table.Td>
+                            <Table.Td style={{ color: '#a67fe9ff', fontWeight: 600, fontSize: '13px', padding: '16px', textAlign: 'center' }}>
+                              {formatDateTime(getProjectUpdateTime(project.id) || project.updated_at)}
                             </Table.Td>
                             <Table.Td style={{ padding: '16px' }} onClick={(e) => e.stopPropagation()}>
                               <Group gap="xs" justify="center">

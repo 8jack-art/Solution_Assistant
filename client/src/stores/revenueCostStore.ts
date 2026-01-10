@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { revenueCostApi } from '@/lib/api'
 import { notifications } from '@mantine/notifications'
+import { setProjectUpdateTime } from '@/lib/projectUpdateTime'
 
 // 默认成本配置
 const getDefaultCostConfig = (): CostConfig => ({
@@ -302,6 +303,25 @@ export interface DepreciationAmortizationData {
   A_depreciation: number[] // A行 折旧费各年数据
   D_depreciation: number[] // D行 折旧费各年数据
   E_amortization: number[]  // E行 摊销费各年数据
+  // 折旧参数
+  A?: {
+    原值: number
+    年折旧额: number  // 第1年折旧额
+    折旧年限: number
+    残值率: number
+  }
+  D?: {
+    原值: number
+    年折旧额: number  // 第1年折旧额
+    折旧年限: number
+    残值率: number
+  }
+  E?: {
+    原值: number
+    年摊销额: number  // 第1年摊销额
+    摊销年限: number
+    残值率: number
+  }
 }
 
 /**
@@ -1374,7 +1394,9 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             revenueTableData: state.revenueTableData,
             costTableData: state.costTableData,
             profitDistributionTableData: state.profitDistributionTableData,
-            loanRepaymentTableData: state.loanRepaymentTableData
+            loanRepaymentTableData: state.loanRepaymentTableData,
+            // 添加折旧与摊销数据
+            depreciationAmortization: state.context?.depreciationAmortization || null
           };
           
           const response = await revenueCostApi.save({
@@ -1382,6 +1404,11 @@ export const useRevenueCostStore = create<RevenueCostState>()(
             model_data: modelData,
             workflow_step: state.currentStep
           })
+          
+          // 更新项目修改时间
+          if (response.success) {
+            setProjectUpdateTime(state.context.projectId)
+          }
           
           set({ isSaving: false })
           return response.success
@@ -1413,7 +1440,43 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               modelData = estimate.model_data
             }
             
-            // 更新状态
+            // 获取 depreciationAmortization 数据
+            const depreciationAmortization = modelData?.depreciationAmortization || null
+            console.log('📊 从数据库加载的 depreciationAmortization:', depreciationAmortization)
+            console.log('📊 modelData 包含的 depreciationAmortization:', modelData?.depreciationAmortization ? '存在' : '不存在')
+            console.log('📊 modelData 的所有keys:', modelData ? Object.keys(modelData) : 'null')
+            
+            // 获取当前状态中的 context
+            const currentContext = useRevenueCostStore.getState().context
+            console.log('📊 当前 context:', currentContext)
+            console.log('📊 当前 context.depreciationAmortization:', currentContext?.depreciationAmortization)
+            
+            // 合并所有状态更新（包括 context）
+            let newDepreciationAmortization = null
+            if (depreciationAmortization && Object.keys(depreciationAmortization).length > 0) {
+              newDepreciationAmortization = depreciationAmortization
+              console.log('✅ 使用从数据库加载的 depreciationAmortization')
+            } else if (currentContext?.depreciationAmortization) {
+              newDepreciationAmortization = currentContext.depreciationAmortization
+              console.log('✅ 使用当前 context 中的 depreciationAmortization')
+            } else {
+              newDepreciationAmortization = {
+                A_depreciation: [],
+                D_depreciation: [],
+                E_amortization: []
+              }
+              console.log('⚠️ 使用默认空的 depreciationAmortization')
+            }
+            
+            const newContext = currentContext 
+              ? {
+                  ...currentContext,
+                  depreciationAmortization: newDepreciationAmortization
+                }
+              : null
+            
+            console.log('📊 最终设置的 context.depreciationAmortization:', newContext?.depreciationAmortization)
+            
             set({
               revenueItems: modelData?.revenueItems || [],
               costItems: modelData?.costItems || [],
@@ -1425,9 +1488,11 @@ export const useRevenueCostStore = create<RevenueCostState>()(
               profitDistributionTableData: modelData?.profitDistributionTableData || null,
               loanRepaymentTableData: modelData?.loanRepaymentTableData || null,
               loanConfig: modelData?.loanConfig || getDefaultLoanConfig(),
-              currentStep: estimate.workflow_step || 'period'
+              currentStep: estimate.workflow_step || 'period',
+              context: newContext
             })
-          } else {
+            
+            console.log('✅ 状态更新完成，context:', useRevenueCostStore.getState().context)
           }
           
           set({ isSubmitting: false })
