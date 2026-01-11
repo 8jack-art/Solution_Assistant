@@ -97,7 +97,7 @@ export function VariablePicker() {
               </Badge>
             </Tooltip>
             
-            {/* 建设单位 */}
+            {/* 其他基本信息 */}
             <Badge
               variant="light"
               color="blue"
@@ -107,27 +107,32 @@ export function VariablePicker() {
             >
               建设单位
             </Badge>
-            
-            {/* 运营负荷 - 从达产率配置获取 */}
             <Badge
               variant="light"
               color="blue"
               style={{ cursor: 'pointer' }}
-              onClick={() => handleCopyVariable('{{operation_load}}')}
+              onClick={() => handleCopyVariable('{{total_investment}}')}
               title="点击复制"
             >
-              运营负荷
+              总投资额
             </Badge>
-            
-            {/* 土地流转 */}
             <Badge
               variant="light"
               color="blue"
               style={{ cursor: 'pointer' }}
-              onClick={() => handleCopyVariable('{{land_transfer}}')}
+              onClick={() => handleCopyVariable('{{construction_years}}')}
               title="点击复制"
             >
-              土地流转
+              建设期
+            </Badge>
+            <Badge
+              variant="light"
+              color="blue"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{operation_years}}')}
+              title="点击复制"
+            >
+              运营期
             </Badge>
           </Group>
         </div>
@@ -187,15 +192,6 @@ export function VariablePicker() {
               title="点击复制"
             >
               净现值
-            </Badge>
-            <Badge
-              variant="light"
-              color="green"
-              style={{ cursor: 'pointer' }}
-              onClick={() => handleCopyVariable('{{repair_rate}}')}
-              title="点击复制"
-            >
-              修理费率
             </Badge>
           </Group>
         </div>

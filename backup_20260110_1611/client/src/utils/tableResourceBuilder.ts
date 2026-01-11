@@ -290,76 +290,6 @@ export function buildInvestmentEstimateTable(estimateData: any, thirdLevelItems:
 }
 
 /**
- * 构建营业收入、营业税金及附加和增值税估算表
- * 返回 TableResource 格式，包含 parameters 和 rows 两个部分
- */
-export function buildRevenueTaxTable(revenueCostData: any): TableResource | null {
-  if (!revenueCostData) return null
-
-  // 辅助函数：安全解析JSON
-  const safeParseJSON = (data: any): any => {
-    if (!data) return null
-    if (typeof data === 'string') {
-      try {
-        return JSON.parse(data)
-      } catch (e) {
-        return null
-      }
-    }
-    return data
-  }
-
-  // 获取运营期年份数
-  const operationYears = 10 // 默认10年
-  const years = Array.from({ length: operationYears }, (_, i) => i + 1)
-
-  // 解析渲染后的表格数据
-  const revenueTableData = safeParseJSON(revenueCostData.revenueTableData)
-  const rows = revenueTableData?.rows || []
-
-  // 构建表格数据
-  const tableData: Record<string, any>[] = rows.map((row: any) => {
-    const rowData: Record<string, any> = {
-      序号: row.序号 || '',
-    }
-    
-    // 添加合计列
-    if (row.合计 !== undefined) {
-      rowData.合计 = formatNumber2(row.合计)
-    }
-    
-    // 添加运营期各年数据
-    if (row.运营期 && Array.isArray(row.运营期)) {
-      row.运营期.forEach((value: number, idx: number) => {
-        if (idx < years.length) {
-          rowData[years[idx].toString()] = formatNumber2(value)
-        }
-      })
-    }
-    
-    return rowData
-  })
-
-  // 构建列名
-  const columns: string[] = ['序号', '合计']
-  years.forEach((year) => {
-    columns.push(year.toString())
-  })
-
-  return {
-    id: 'revenue_tax',
-    title: '营业收入、营业税金及附加和增值税估算表',
-    columns: columns,
-    data: tableData,
-    style: {
-      headerBg: 'F7F8FA',
-      stripe: true,
-      align: 'center'
-    }
-  }
-}
-
-/**
  * 构建收入成本明细表
  */
 export function buildRevenueCostTable(revenueCostData: any): TableResource | null {
@@ -915,12 +845,6 @@ export function buildAllTableResources(projectData: any): Record<string, TableRe
     tables[investmentTable.id] = investmentTable
   }
 
-  // 营业收入、营业税金及附加和增值税估算表
-  const revenueTaxTable = buildRevenueTaxTable(projectData.revenueCost)
-  if (revenueTaxTable) {
-    tables[revenueTaxTable.id] = revenueTaxTable
-  }
-
   // 收入成本表格
   const revenueCostTable = buildRevenueCostTable(projectData.revenueCost)
   if (revenueCostTable) {
@@ -1052,122 +976,76 @@ export function buildDepreciationAmortizationJSON(depreciationData: any, context
 
 /**
  * 构建营业收入、税金及附加估算表JSON数据（用于LLM提示词）
- * 
- * 返回结构包含：
- * - parameters: 营业收入配置表格数据（序号、收入项名称、模板、参数值）
- * - rows: 渲染后的表格数据（序号、合计、运营期）
  */
 export function buildRevenueTaxJSON(revenueTaxData: any, context?: any): string {
   if (!revenueTaxData) return '{}'
   
   const jsonData: any = {
     title: '营业收入、营业税金及附加和增值税估算表',
-    urbanTaxRate: revenueTaxData.urbanTaxRate || 0.07,
-    parameters: [],
-    rows: [],
-    updatedAt: revenueTaxData.updatedAt || new Date().toISOString()
-  }
-  
-  // 辅助函数：安全解析JSON
-  const safeParseJSON = (data: any): any => {
-    if (!data) return null
-    if (typeof data === 'string') {
-      try {
-        return JSON.parse(data)
-      } catch (e) {
-        return null
-      }
-    }
-    return data
-  }
-  
-  // 模板名称映射
-  const TEMPLATE_LABELS: Record<string, string> = {
-    'quantity-price': '数量 × 单价',
-    'area-yield-price': '面积 × 亩产量 × 单价',
-    'capacity-utilization': '产能 × 利用率 × 单价',
-    'subscription': '订阅数 × 单价',
-    'direct-amount': '直接金额',
-  }
-  
-  // 辅助函数：根据单价阈值动态格式化价格显示（与 DynamicRevenueTable.renderFieldValue 保持一致）
-  const formatPriceWithUnit = (price: number | undefined, unit: string = '万元'): string => {
-    if (price === undefined || price === null) return `0${unit}`
-    // 单价 < 0.1万元（1000元）时显示为元
-    if (price < 0.1) {
-      const priceInYuan = price * 10000
-      const displayPrice = parseFloat(priceInYuan.toFixed(2)).toString()
-      // 如果单位是万元（无后缀），只显示"元"
-      // 如果单位是万元/xxx，显示为"元/xxx"
-      if (unit === '万元') {
-        return `${displayPrice}元`
-      }
-      return `${displayPrice}${unit.replace('万元', '元')}`
-    }
-    // 保留2位小数，使用 parseFloat 去掉末尾的0
-    const displayPrice = parseFloat(price.toFixed(2)).toString()
-    return `${displayPrice}${unit}`
-  }
-  
-  // 大数值简化函数 - 将大数字转换为万、千万、亿单位
-  const formatLargeNumber = (value: number): string => {
-    if (value >= 100000000) {
-      return `${(value / 100000000).toFixed(2).replace(/\.?0+$/, '')}亿`
-    } else if (value >= 10000000) {
-      return `${(value / 10000000).toFixed(2).replace(/\.?0+$/, '')}千万`
-    } else if (value >= 10000) {
-      return `${(value / 10000).toFixed(2).replace(/\.?0+$/, '')}万`
-    }
-    return value.toString()
-  }
-  
-  // 格式化参数值（与 DynamicRevenueTable.renderFieldValue 保持一致）
-  const formatParamValue = (item: any): string => {
-    switch (item.fieldTemplate) {
-      case 'quantity-price':
-        return `${formatLargeNumber(item.quantity || 0)}${item.unit || ''} × ${formatPriceWithUnit(item.unitPrice, item.unit ? `万元/${item.unit}` : '万元')}`
-      case 'area-yield-price':
-        return `${formatLargeNumber(item.area || 0)}亩 × ${formatLargeNumber(item.yieldPerArea || 0)}${item.yieldPerAreaUnit || ''} × ${formatPriceWithUnit(item.unitPrice, item.yieldPerAreaUnit ? `万元/${item.yieldPerAreaUnit}` : '万元')}`
-      case 'capacity-utilization':
-        return `${formatLargeNumber(item.capacity || 0)}${item.capacityUnit || ''} × ${((item.utilizationRate || 0) * 100).toFixed(0)}% × ${formatPriceWithUnit(item.unitPrice)}`
-      case 'subscription':
-        return `${formatLargeNumber(item.subscriptions || 0)} × ${formatPriceWithUnit(item.unitPrice)}`
-      case 'direct-amount':
-        // 直接金额模板：显示数量 × 单价格式（如果有数量和单价信息）
-        if (item.quantity && item.quantity > 0 && item.unitPrice && item.unitPrice > 0) {
-          return `${formatLargeNumber(item.quantity)}${item.unit || ''} × ${formatPriceWithUnit(item.unitPrice, item.unit ? `万元/${item.unit}` : '万元')}`
-        }
-        return `${parseFloat((item.directAmount || 0).toFixed(4)).toString()}万元/年`
-      default:
-        return ''
+    revenueItems: [],
+    taxItems: [],
+    summary: {
+      totalRevenue: 0,
+      totalTax: 0,
+      totalVAT: 0
     }
   }
   
-  // 1. 构建 parameters - 只包含序号为1.1-1.10的收入项
-  const revenueItems = safeParseJSON(revenueTaxData.revenueItems)
-  if (revenueItems && Array.isArray(revenueItems)) {
-    revenueItems.forEach((item: any, idx: number) => {
-      if (idx < 10) { // 只保留 1.1-1.10
-        jsonData.parameters.push({
-          序号: `1.${idx + 1}`,
-          收入项目: item.name || '',
-          模板: TEMPLATE_LABELS[item.fieldTemplate] || '',
-          parametervalue: formatParamValue(item)
-        })
-      }
-    })
-  }
-  
-  // 2. 构建 rows - 渲染后的表格数据
-  const revenueTableData = safeParseJSON(revenueTaxData.revenueTableData)
-  if (revenueTableData && revenueTableData.rows && Array.isArray(revenueTableData.rows)) {
-    jsonData.rows = revenueTableData.rows.map((row: any) => ({
-      序号: row.序号,
-      合计: Number(row.合计) > 0 ? Number(row.合计).toFixed(2) : row.合计,
-      运营期: (row.运营期 || []).map((val: number) => (val > 0 ? Number(val).toFixed(2) : val))
+  // 收入项目
+  if (revenueTaxData.revenueItems) {
+    const items = typeof revenueTaxData.revenueItems === 'string' 
+      ? JSON.parse(revenueTaxData.revenueItems) 
+      : revenueTaxData.revenueItems
+    
+    jsonData.revenueItems = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      项目名称: item.name || item.项目名称 || '',
+      产品名称: item.productName || item.product_name || '',
+      单位: item.unit || item.单位 || '',
+      单价: item.price || item.单价 || 0,
+      销量: item.quantity || item.销量 || 0,
+      年营业收入: item.annualRevenue || item.年营业收入 || 0
     }))
-    // 保留城市维护税率
-    jsonData.urbanTaxRate = revenueTableData.urbanTaxRate || jsonData.urbanTaxRate
+    
+    jsonData.summary.totalRevenue = jsonData.revenueItems.reduce(
+      (sum: number, item: any) => sum + (item.年营业收入 || 0), 0
+    )
+  }
+  
+  // 税金项目
+  if (revenueTaxData.taxItems) {
+    const items = typeof revenueTaxData.taxItems === 'string'
+      ? JSON.parse(revenueTaxData.taxItems)
+      : revenueTaxData.taxItems
+    
+    jsonData.taxItems = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      项目名称: item.name || item.项目名称 || '',
+      税率: item.taxRate || item.税率 || 0,
+      年税金: item.annualTax || item.年税金 || 0
+    }))
+    
+    jsonData.summary.totalTax = jsonData.taxItems.reduce(
+      (sum: number, item: any) => sum + (item.年税金 || 0), 0
+    )
+  }
+  
+  // 增值税
+  if (revenueTaxData.vatItems) {
+    const items = typeof revenueTaxData.vatItems === 'string'
+      ? JSON.parse(revenueTaxData.vatItems)
+      : revenueTaxData.vatItems
+    
+    jsonData.vatItems = (Array.isArray(items) ? items : []).map((item: any) => ({
+      序号: item.序号 || item.index,
+      项目名称: item.name || item.项目名称 || '',
+      税率: item.vatRate || item.税率 || 0,
+      年增值税: item.annualVAT || item.年增值税 || 0
+    }))
+    
+    jsonData.summary.totalVAT = jsonData.vatItems.reduce(
+      (sum: number, item: any) => sum + (item.年增值税 || 0), 0
+    )
   }
   
   return JSON.stringify(jsonData, null, 2)
@@ -1175,33 +1053,27 @@ export function buildRevenueTaxJSON(revenueTaxData: any, context?: any): string 
 
 /**
  * 构建外购原材料费估算表JSON数据（用于LLM提示词）
- * 返回结构与 buildRevenueTaxJSON 一致：包含 parameters（参数配置）和 rows（渲染数据）
  */
 export function buildRawMaterialsJSON(rawMaterialsData: any, context?: any): string {
   if (!rawMaterialsData) return '{}'
   
   const jsonData: any = {
     title: '外购原材料费估算表',
-    parameters: [],
-    rows: [],
+    items: [],
     summary: {
       totalCost: 0
-    },
-    updatedAt: new Date().toISOString()
+    }
   }
   
-  // 1. 构建 parameters - 从原始配置获取材料参数
   if (rawMaterialsData.raw_materials) {
     let items = rawMaterialsData.raw_materials
     if (typeof items === 'string') {
       try {
         items = JSON.parse(items)
-      } catch (e) {
-        items = []
-      }
+      } catch (e) {}
     }
     
-    jsonData.parameters = (Array.isArray(items) ? items : []).map((item: any) => ({
+    jsonData.items = (Array.isArray(items) ? items : []).map((item: any) => ({
       序号: item.序号 || item.index,
       材料名称: item.name || item.材料名称 || '',
       单位: item.unit || item.单位 || '',
@@ -1209,37 +1081,10 @@ export function buildRawMaterialsJSON(rawMaterialsData: any, context?: any): str
       年用量: item.annualQuantity || item.年用量 || 0,
       年费用: item.annualCost || item.年费用 || 0
     }))
-  }
-  
-  // 2. 构建 rows - 从 costTableData 获取渲染后的表格数据
-  const costTableData = rawMaterialsData.costTableData
-  if (costTableData) {
-    let tableData = costTableData
-    if (typeof costTableData === 'string') {
-      try {
-        tableData = JSON.parse(costTableData)
-      } catch (e) {
-        tableData = null
-      }
-    }
     
-    if (tableData?.rows && Array.isArray(tableData.rows)) {
-      // 查找"外购原材料费"行
-      const rawMaterialsRow = tableData.rows.find(
-        (r: any) => r.成本项目?.includes('外购原材料费')
-      )
-      if (rawMaterialsRow) {
-        jsonData.rows = [{
-          序号: rawMaterialsRow.序号,
-          成本项目: rawMaterialsRow.成本项目,
-          合计: Number(rawMaterialsRow.合计) > 0 ? Number(rawMaterialsRow.合计).toFixed(2) : rawMaterialsRow.合计,
-          运营期: (rawMaterialsRow.运营期 || []).map((val: number) => 
-            Number(val) > 0 ? Number(val).toFixed(2) : val
-          )
-        }]
-        jsonData.summary.totalCost = Number(rawMaterialsRow.合计) || 0
-      }
-    }
+    jsonData.summary.totalCost = jsonData.items.reduce(
+      (sum: number, item: any) => sum + (item.年费用 || 0), 0
+    )
   }
   
   return JSON.stringify(jsonData, null, 2)
@@ -1247,33 +1092,27 @@ export function buildRawMaterialsJSON(rawMaterialsData: any, context?: any): str
 
 /**
  * 构建外购燃料和动力费估算表JSON数据（用于LLM提示词）
- * 返回结构与 buildRevenueTaxJSON 一致：包含 parameters（参数配置）和 rows（渲染数据）
  */
 export function buildFuelPowerJSON(fuelPowerData: any, context?: any): string {
   if (!fuelPowerData) return '{}'
   
   const jsonData: any = {
     title: '外购燃料和动力费估算表',
-    parameters: [],
-    rows: [],
+    items: [],
     summary: {
       totalCost: 0
-    },
-    updatedAt: new Date().toISOString()
+    }
   }
   
-  // 1. 构建 parameters - 从原始配置获取燃料动力参数
   if (fuelPowerData.fuel_power) {
     let items = fuelPowerData.fuel_power
     if (typeof items === 'string') {
       try {
         items = JSON.parse(items)
-      } catch (e) {
-        items = []
-      }
+      } catch (e) {}
     }
     
-    jsonData.parameters = (Array.isArray(items) ? items : []).map((item: any) => ({
+    jsonData.items = (Array.isArray(items) ? items : []).map((item: any) => ({
       序号: item.序号 || item.index,
       名称: item.name || item.名称 || item.fuelType || '',
       单位: item.unit || item.单位 || '',
@@ -1281,37 +1120,10 @@ export function buildFuelPowerJSON(fuelPowerData: any, context?: any): string {
       年用量: item.annualQuantity || item.年用量 || 0,
       年费用: item.annualCost || item.年费用 || 0
     }))
-  }
-  
-  // 2. 构建 rows - 从 costTableData 获取渲染后的表格数据
-  const costTableData = fuelPowerData.costTableData
-  if (costTableData) {
-    let tableData = costTableData
-    if (typeof costTableData === 'string') {
-      try {
-        tableData = JSON.parse(costTableData)
-      } catch (e) {
-        tableData = null
-      }
-    }
     
-    if (tableData?.rows && Array.isArray(tableData.rows)) {
-      // 查找"外购燃料和动力费"行
-      const fuelPowerRow = tableData.rows.find(
-        (r: any) => r.成本项目?.includes('外购燃料和动力费')
-      )
-      if (fuelPowerRow) {
-        jsonData.rows = [{
-          序号: fuelPowerRow.序号,
-          成本项目: fuelPowerRow.成本项目,
-          合计: Number(fuelPowerRow.合计) > 0 ? Number(fuelPowerRow.合计).toFixed(2) : fuelPowerRow.合计,
-          运营期: (fuelPowerRow.运营期 || []).map((val: number) => 
-            Number(val) > 0 ? Number(val).toFixed(2) : val
-          )
-        }]
-        jsonData.summary.totalCost = Number(fuelPowerRow.合计) || 0
-      }
-    }
+    jsonData.summary.totalCost = jsonData.items.reduce(
+      (sum: number, item: any) => sum + (item.年费用 || 0), 0
+    )
   }
   
   return JSON.stringify(jsonData, null, 2)

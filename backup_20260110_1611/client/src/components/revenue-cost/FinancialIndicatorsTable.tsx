@@ -354,7 +354,16 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   
   // 强制触发cachedTaxAndSurcharges计算的useEffect
   useEffect(() => {
-    // 数据变化时自动重新计算，不需要调试日志
+    if (revenueTableData) {
+      console.log('[DEBUG] 所有行序号:', JSON.stringify(revenueTableData.rows?.map(r => r.序号)));
+      
+      // 打印序号3的数据详情
+      const row3 = revenueTableData.rows?.find(r => r.序号 === '3');
+      if (row3) {
+        console.log('  运营期:', JSON.stringify(row3.运营期));
+      } else {
+      }
+    }
   }, [context, revenueTableData]);
   
   // 保存设置到localStorage
@@ -1004,35 +1013,9 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     return yearInputTax;
   };
 
-  // 计算总进项税额（外购原材料费 + 外购燃料及动力费 + 其他费用）
+  // 计算总进项税额（外购原材料费 + 外购燃料及动力费）
   const calculateTotalInputTaxForYear = (year: number): number => {
-    // 1. 外购原材料费进项税额
-    const rawMaterialsInputTax = calculateRawMaterialsInputTaxForYear(year);
-    
-    // 2. 外购燃料及动力费进项税额
-    const fuelPowerInputTax = calculateFuelPowerInputTaxForYear(year);
-    
-    // 3. 其他费用（1.5）进项税额
-    const productionRate = costConfig.otherExpenses.applyProductionRate
-      ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
-      : 1;
-    
-    let otherExpensesInputTax = 0;
-    if (costConfig.otherExpenses.type === 'percentage') {
-      const revenueBase = revenueItems.reduce((sum, revItem) => {
-        const productionRate = getProductionRateForYear(productionRates, year);
-        return sum + calculateYearlyRevenue(revItem, year, productionRate);
-      }, 0);
-      const amount = revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
-      const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
-      otherExpensesInputTax = amount * taxRate / (1 + taxRate);
-    } else {
-      const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
-      const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
-      otherExpensesInputTax = directAmount * taxRate / (1 + taxRate);
-    }
-    
-    return rawMaterialsInputTax + fuelPowerInputTax + otherExpensesInputTax;
+    return calculateRawMaterialsInputTaxForYear(year) + calculateFuelPowerInputTaxForYear(year);
   };
 
   // 计算指定年份的增值税额
@@ -1192,20 +1175,30 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       return 0;
     }
     
+    // 打印所有行序号，用于调试
+    const rowNumbers = revenueTableData.rows?.map(r => r.序号) || [];
+    console.log(`[DEBUG VAT传递] 所有行序号: [${rowNumbers.join(', ')}]`);
+    
     if (year !== undefined) {
       // 纯参数传递：只从 revenueTableData 中获取"营业税金及附加"（序号3）的运营期列数据
       const row = revenueTableData.rows.find(r => r.序号 === '3');
       
-      if (!row || !row.运营期) {
+      if (!row) {
+        return 0;
+      }
+      
+      if (!row.运营期) {
         return 0;
       }
       
       if (year < 1 || year > row.运营期.length) {
+        console.warn(`[WARNING VAT传递] 第${year}年: 年份${year}超出范围(1-${row.运营期.length})，返回0`);
         return 0;
       }
       
       const value = row.运营期[year - 1];
       if (value === undefined || value === null || isNaN(value)) {
+        console.warn(`[WARNING VAT传递] 第${year}年: 值无效(${value})，返回0`);
         return 0;
       }
       
@@ -1219,6 +1212,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       }
       
       if (row.合计 === undefined || row.合计 === null || isNaN(row.合计)) {
+        console.warn(`[WARNING VAT传递] 合计: 值无效(${row.合计})，返回0`);
         return 0;
       }
       
@@ -1646,7 +1640,31 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     const byYear: number[] = [];
     let totalSum = 0;
     
+    // 调试日志：显示revenueTableData状态
+    
+    // 打印revenueTableData的完整结构
+    if (revenueTableData) {
+      console.log('[DEBUG cachedTaxAndSurcharges] revenueTableData:', JSON.stringify({
+        urbanTaxRate: revenueTableData.urbanTaxRate,
+        rowsCount: revenueTableData.rows?.length,
+        updatedAt: revenueTableData.updatedAt
+      }));
+      
+      // 打印所有行的序号和收入项目
+      if (revenueTableData.rows && revenueTableData.rows.length > 0) {
+        revenueTableData.rows.forEach((row, idx) => {
+          console.log(`  [${idx}] 序号=${row.序号}, 收入项目=${row.收入项目}, 合计=${row.合计}, 运营期=[${row.运营期?.join(', ')}]`);
+        });
+      } else {
+      }
+    } else {
+    }
+    
     const rows = revenueTableData?.rows;
+    
+    // 打印所有行序号，用于调试
+    const rowNumbers = rows?.map(r => r.序号) || [];
+    console.log('[DEBUG cachedTaxAndSurcharges] 所有行序号:', JSON.stringify(rowNumbers));
     
     years.forEach((year) => {
       // 纯参数传递：只从 revenueTableData 中获取"营业税金及附加"（序号3）的运营期列数据
@@ -1655,6 +1673,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         
         if (row) {
           const value = row.运营期?.[year - 1];
+          console.log(`[DEBUG cachedTaxAndSurcharges] 第${year}年: 找到序号3行, row.运营期=${JSON.stringify(row.运营期)}, 值=${value}`);
           if (value !== undefined) {
             byYear.push(value);
             totalSum += value;
@@ -1662,6 +1681,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             byYear.push(0);
           }
         } else {
+          // 如果没有找到序号3的行，打印所有序号
+          console.warn(`[DEBUG cachedTaxAndSurcharges] 第${year}年: 未找到序号3的行，现有序号: [${rowNumbers.join(', ')}]`);
           byYear.push(0);
         }
       } else {
@@ -1669,6 +1690,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
         byYear.push(0);
       }
     });
+    
+    console.log(`[DEBUG cachedTaxAndSurcharges] 合计: totalSum=${totalSum}, byYear=[${byYear.join(', ')}]`);
     
     return { byYear, total: totalSum };
   }, [context, revenueTableData]); // 只依赖context和revenueTableData，实现纯参数传递
@@ -1869,8 +1892,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     return cumulativeLoss;
   };
 
-  // 计算应纳税所得额（按年份）
-  const calculateYearlyTaxableIncome = (year?: number): number => {
+  // 计算应纳税所得额
+  const calculateTaxableIncome = (year?: number): number => {
     if (year !== undefined) {
       const profit = calculateTotalProfit(year);
       const cumulativeLoss = calculateCumulativeLoss(year);
@@ -1879,8 +1902,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       if (!context) return 0;
       const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
       let totalSum = 0;
-      years.forEach((y) => {
-        totalSum += calculateYearlyTaxableIncome(y);
+      years.forEach((year) => {
+        totalSum += calculateTaxableIncome(year);
       });
       return totalSum;
     }
@@ -1889,13 +1912,13 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
   // 计算所得税（使用设置的税率）
   const calculateIncomeTax = (year?: number): number => {
     if (year !== undefined) {
-      return calculateYearlyTaxableIncome(year) * (incomeTaxRate / 100);
+      return calculateTaxableIncome(year) * (incomeTaxRate / 100);
     } else {
       if (!context) return 0;
       const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
       let totalSum = 0;
-      years.forEach((y) => {
-        totalSum += calculateIncomeTax(y);
+      years.forEach((year) => {
+        totalSum += calculateIncomeTax(year);
       });
       return totalSum;
     }
@@ -2111,7 +2134,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
       { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
-      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateYearlyTaxableIncome(y) },
+      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateTaxableIncome(y) },
       { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
       { id: '10', name: '期初未分配利润', calc: (y?: number) => y !== undefined ? calculateInitialUndistributedProfit(y) : 0 },
@@ -2196,7 +2219,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
       { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
-      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateYearlyTaxableIncome(y) },
+      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateTaxableIncome(y) },
       { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
       { id: '10', name: '期初未分配利润', calc: (y?: number) => y !== undefined ? calculateInitialUndistributedProfit(y) : 0 },
@@ -2259,7 +2282,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
       { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
-      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateYearlyTaxableIncome(y) },
+      { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateTaxableIncome(y) },
       { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
       { id: '10', name: '期初未分配利润', calc: (y?: number) => y !== undefined ? calculateInitialUndistributedProfit(y) : 0 },

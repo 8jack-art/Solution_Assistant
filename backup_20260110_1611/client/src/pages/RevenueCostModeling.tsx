@@ -66,10 +66,9 @@ const RevenueCostModeling: React.FC = () => {
     revenueStructureLocked,
     setAiAnalysisResult,
     setRevenueStructureLocked,
-    clearAllRevenueItems,
-    reset,
-    aiAnalysisResult,
-    revenueItems  // 从store获取收入项
+    revenueItems,  // 添加这一行
+    productionRates,  // 添加这一行
+    aiAnalysisResult  // 添加这一行
   } = useRevenueCostStore()
 
   // 状态管理

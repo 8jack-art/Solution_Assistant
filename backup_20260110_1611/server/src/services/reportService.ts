@@ -291,17 +291,17 @@ export class ReportService {
           
           // 打印 depreciationAmortization 数据（如果存在）
           if (revenueCostModelData.depreciationAmortization) {
-            console.log('找到 depreciationAmortization 数据')
+            console.log('✅ 找到 depreciationAmortization 数据:', {
+              有A数据: !!(revenueCostModelData.depreciationAmortization.A_depreciation?.length > 0),
+              有D数据: !!(revenueCostModelData.depreciationAmortization.D_depreciation?.length > 0),
+              有E数据: !!(revenueCostModelData.depreciationAmortization.E_amortization?.length > 0)
+            })
           } else {
-            console.warn('revenueCostModelData 中没有 depreciationAmortization 字段')
+            console.warn('⚠️ revenueCostModelData 中没有 depreciationAmortization 字段')
           }
         } else {
           console.warn('收入成本数据字段不存在或格式不正确')
         }
-        
-        // 打印 revenueCostModelData 的所有 keys
-        console.log('collectProjectData: revenueCostModelData keys:', Object.keys(revenueCostModelData))
-        console.log('collectProjectData: productionRates 存在:', !!revenueCostModelData.productionRates)
       } else {
         console.warn('未找到收入成本数据')
       }
@@ -393,90 +393,6 @@ export class ReportService {
   static buildDataAwarePrompt(basePrompt: string, projectData: any): string {
     const { project, investment, revenueCost, financialIndicators, projectOverview, tableDataJSON } = projectData
     
-    // 计算运营负荷数据（所有模式都需要）
-    const productionRates = revenueCost?.productionRates || []
-    const operationLoadJson = JSON.stringify(
-      productionRates.map((p: any) => ({
-        year: p.yearIndex,
-        rate: `${(p.rate * 100).toFixed(0)}%`
-      })),
-      null,
-      2
-    )
-    
-    // 获取修理费配置（包含费用类型、比率、金额）
-    const repairConfig = revenueCost?.costConfig?.repair || {}
-    
-    // 根据下拉列表的值确定费用类型显示
-    const repairTypeValue = repairConfig.type || 'directAmount'
-    const repairType = repairTypeValue === 'percentage' ? '按固定资产投资的百分比' : '直接金额'
-    const repairPercentage = repairTypeValue === 'percentage' 
-      ? `${repairConfig.percentageOfFixedAssets || 0}%` 
-      : '-'
-    
-    // 计算修理费金额（根据费用类型下拉列表的值来获取对应数据）
-    // 注意：必须与前端 DynamicCostTable.tsx 中的计算逻辑保持一致
-    let repairAmount = 0
-    if (repairTypeValue === 'percentage') {
-      // 获取折旧与摊销数据
-      const depAmortData = revenueCost?.depreciationAmortization || {}
-      
-      // 提取 A（建筑）和 D（设备）的原值
-      const depreciationA = depAmortData.A || {}
-      const depreciationD = depAmortData.D || {}
-      
-      const valueA = depreciationA.原值 || depreciationA.originalValue || 0
-      const valueD = depreciationD.原值 || depreciationD.originalValue || 0
-      
-      console.log('repair_amount: 折旧A原值:', valueA, '折旧D原值:', valueD)
-      
-      // 固定资产原值合计 = A原值 + D原值
-      const fixedAssetsOriginalValue = valueA + valueD
-      
-      // 建设期利息：从投资估算数据中获取
-      let constructionInterest = 0
-      if (investment?.partF?.construction_interest !== undefined) {
-        constructionInterest = investment.partF.construction_interest
-      } else if (investment?.partF?.合计 !== undefined) {
-        // 如果找不到专门的利息字段，使用 partF.合计（建设期利息合计）
-        constructionInterest = investment.partF.合计
-      }
-      console.log('repair_amount: 建设期利息:', constructionInterest)
-      
-      // 固定资产投资 = 固定资产原值 - 建设期利息
-      const fixedAssetsInvestment = fixedAssetsOriginalValue - constructionInterest
-      console.log('repair_amount: 固定资产投资:', fixedAssetsInvestment, '百分比:', repairConfig.percentageOfFixedAssets)
-      
-      repairAmount = fixedAssetsInvestment * (repairConfig.percentageOfFixedAssets || 0) / 100
-      console.log('repair_amount: 修理费金额:', repairAmount)
-    } else {
-      // 直接金额模式下，使用用户填写的金额
-      repairAmount = repairConfig.directAmount || 0
-    }
-    
-    // 组合修理费详细信息为JSON格式
-    const repairRateJson = JSON.stringify({
-      费用类型: repairType,
-      费用类型值: repairTypeValue,  // 原始值：percentage 或 directAmount
-      比率: repairPercentage,
-      金额: `${repairAmount.toFixed(2)}万元`
-    }, null, 2)
-    
-    // 获取其他费用配置（包含土地流转信息）
-    const otherExpenses = revenueCost?.costConfig?.otherExpenses || {}
-    
-    // 检测费用名称是否包含"土地"或"流转"
-    const hasLandTransfer = (otherExpenses.name || '').includes('土地') || 
-                            (otherExpenses.name || '').includes('流转')
-    
-    // 构建土地流转JSON
-    const landTransferJson = hasLandTransfer 
-      ? JSON.stringify({
-          name: otherExpenses.name,
-          remark: otherExpenses.remark || ''
-        }, null, 2)
-      : 'null'
-    
     // 检查是否使用简化的数据标记
     const hasProjectMarker = basePrompt.includes('{{PROJECT}}')
     const hasInvestmentMarker = basePrompt.includes('{{INVESTMENT}}')
@@ -494,27 +410,6 @@ export class ReportService {
       // 检查是否包含旧版变量（如 {{project_name}} 等），如果有则进行变量替换
       let processedPrompt = basePrompt
       
-      // 获取运营负荷数据（从达产率配置productionRates）
-      const productionRates = revenueCost?.productionRates || []
-      
-      // [DEBUG] 打印 productionRates 数据来源
-      console.log('📊 [operation_load] 调试信息:')
-      console.log('  revenueCost 存在:', !!revenueCost)
-      console.log('  revenueCost.productionRates 存在:', !!(revenueCost?.productionRates))
-      console.log('  productionRates 长度:', productionRates.length)
-      console.log('  productionRates 数据:', JSON.stringify(productionRates))
-      
-      const operationLoadJson = JSON.stringify(
-        productionRates.map((p: any) => ({
-          year: p.yearIndex,
-          rate: `${(p.rate * 100).toFixed(0)}%`
-        })),
-        null,
-        2
-      )
-      
-      console.log('  operationLoadJson:', operationLoadJson)
-
       // 替换单个变量
       processedPrompt = processedPrompt
         .replace(/\{\{project_name\}\}/g, project.name || '')
@@ -530,9 +425,6 @@ export class ReportService {
         .replace(/\{\{npv\}\}/g, String(financialIndicators?.npv || 0))
         .replace(/\{\{current_date\}\}/g, new Date().toLocaleDateString('zh-CN'))
         .replace(/\{\{project_overview\}\}/g, projectOverview || '')
-        .replace(/\{\{operation_load\}\}/g, operationLoadJson || '[]')
-        .replace(/\{\{repair_rate\}\}/g, repairRateJson || '{}')
-        .replace(/\{\{land_transfer\}\}/g, landTransferJson || 'null')
       
       // 注意：表格变量 {{TABLE:xxx}} 和图表变量 {{CHART:xxx}} 保持不变
       // 让 LLM 生成的报告中保留这些标记，导出 Word 时会自动解析并插入实际表格
@@ -610,9 +502,6 @@ ${JSON.stringify(financialIndicators, null, 2)}
       .replace(/\{\{REVENUE_COST\}\}/g, injectedData.includes('收入成本数据') ? this.summarizeRevenueCostData(revenueCost) : '')
       .replace(/\{\{FINANCIAL\}\}/g, injectedData.includes('关键财务指标') ? JSON.stringify(financialIndicators, null, 2) : '')
       .replace(/\{\{ALL_DATA\}\}/g, injectedData.trim())
-      // 统一替换项目概况和运营负荷变量（所有模式都需要）
-      .replace(/\{\{project_overview\}\}/g, projectOverview || '')
-      .replace(/\{\{operation_load\}\}/g, operationLoadJson || '[]')
     
     return processedPrompt
   }

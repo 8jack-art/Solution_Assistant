@@ -28,7 +28,8 @@ import {
   IconEdit,
   IconTrash,
   IconClearAll,
-  IconDownload
+  IconDownload,
+  IconX
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, calculateTaxableIncome, calculateNonTaxIncome, type RevenueItem, type FuelPowerItem, type CostConfig } from '@/stores/revenueCostStore'
@@ -305,8 +306,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     // 其他费用配置
     otherExpenses: {
       type: 'directAmount', // percentage, directAmount
+      name: '其他费用', // 费用名称
       directAmount: 0, // 直接金额
+      taxRate: 9, // 费用税率（默认9%）
       applyProductionRate: false, // 默认关闭
+      remark: '', // 备注字段
     },
     // 折旧费配置
     depreciation: {
@@ -819,12 +823,6 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   
   // 计算工资及福利费合计的函数（需要放在totalCostTableData之前）
   const calculateWagesTotal = useCallback((targetYear?: number, yearsArray?: number[]) => {
-    console.log('[DEBUG] calculateWagesTotal 调用:', {
-      targetYear,
-      yearsArray: yearsArray ? yearsArray.length : 'undefined',
-      productionRates: productionRates?.map(p => ({ year: p.yearIndex, rate: p.rate })) || 'undefined',
-      costConfigWages: costConfig.wages
-    });
     
     if (targetYear !== undefined) {
       // 计算指定年份的工资及福利费
@@ -854,12 +852,6 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         yearWages = costConfig.wages.directAmount || 0;
       }
       
-      console.log('[DEBUG] calculateWagesTotal 单年结果:', {
-        targetYear,
-        yearWages,
-        hasItems: (costConfig.wages.items?.length ?? 0) > 0
-      });
-      
       return yearWages;
     } else {
       // 计算所有年份的工资及福利费合计
@@ -867,11 +859,6 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       let totalSum = 0;
       yearsArray.forEach((year: number) => {
         totalSum += calculateWagesTotal(year, yearsArray);
-      });
-      
-      console.log('[DEBUG] calculateWagesTotal 总计结果:', {
-        totalSum,
-        yearsCount: yearsArray.length
       });
       
       return totalSum;
@@ -957,7 +944,15 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         );
         return revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
       }
-      return (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+      
+      // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+      // 其他费用金额是含税金额，需要计算除税金额
+      const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+      const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+      // 进项税额 = 含税金额 / (1 + 税率) × 税率
+      const inputTax = directAmount * taxRate / (1 + taxRate);
+      // 其他费用（除税）= 含税金额 - 进项税额
+      return directAmount - inputTax;
     };
     
     // 计算营业成本
@@ -1245,6 +1240,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             ]}
             value={currentRawMaterial.sourceType}
             onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, sourceType: value})}
+            allowDeselect={false}
           />
           
           {currentRawMaterial.sourceType === 'percentage' && (
@@ -1263,6 +1259,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 placeholder="请选择收入项目"
                 value={currentRawMaterial.linkedRevenueId || 'total'}
                 onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, linkedRevenueId: value || undefined})}
+                allowDeselect={false}
               />
               <NumberInput
                 label="占收入的百分比 (%)"
@@ -1277,21 +1274,27 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           )}
           
           {currentRawMaterial.sourceType === 'quantityPrice' && (
-            <>
+            <SimpleGrid cols={3}>
               <NumberInput
                 label="数量"
                 value={currentRawMaterial.quantity}
                 onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, quantity: Number(value)})}
                 min={0}
               />
+              <TextInput
+                label="单位"
+                value={currentRawMaterial.unit || '吨'}
+                onChange={(e) => setCurrentRawMaterial({...currentRawMaterial, unit: e.target.value})}
+                placeholder="如：吨、件、kg等"
+              />
               <NumberInput
-                label="单价"
+                label="单价（万元）"
                 value={currentRawMaterial.unitPrice}
                 onChange={(value) => setCurrentRawMaterial({...currentRawMaterial, unitPrice: Number(value)})}
                 min={0}
-                decimalScale={2}
+                decimalScale={4}
               />
-            </>
+            </SimpleGrid>
           )}
           
           {currentRawMaterial.sourceType === 'directAmount' && (
@@ -1354,22 +1357,22 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                   金额：
                   {(() => {
                     // 计算总收入
-                    let totalRevenue = 0;
+                    let revenueBase = 0;
                     let unit = '万元';
                     if (currentRawMaterial.linkedRevenueId === 'total') {
-                      // 整个项目收入
-                      totalRevenue = totalRevenue;
+                      // 整个项目收入 - 使用外层计算好的 totalRevenue 变量
+                      revenueBase = totalRevenue;
                     } else {
                       // 特定收入项
                       const selectedItem = (revenueItems || []).find((item: RevenueItem) => item.id === currentRawMaterial.linkedRevenueId);
                       if (selectedItem) {
-                        totalRevenue = calculateTaxableIncome(selectedItem);
+                        revenueBase = calculateTaxableIncome(selectedItem);
                         unit = '万元';
                       }
                     }
                     
-                    // 应用百分比和达产率
-                    const amount = totalRevenue * currentRawMaterial.percentage / 100;
+                    // 应用百分比
+                    const amount = revenueBase * currentRawMaterial.percentage / 100;
                     return `${amount.toFixed(2)}${unit}`;
                   })()}
                 </Text>
@@ -1894,69 +1897,41 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       </Modal>
   );
   // 计算固定资产投资金额：折旧与摊销估算表中A与D原值的合减去投资估算简表中"建设期利息"的数值
-  const calculateFixedAssetsInvestment = async () => {
+  const calculateFixedAssetsInvestment = async (): Promise<number> => {
+    let fixedAssetsValue = 0;
+    
+    // 获取折旧与摊销估算表中A和D的原值
+    if (depreciationData.length > 0) {
+      const rowA = depreciationData.find(row => row.序号 === 'A');
+      const rowD = depreciationData.find(row => row.序号 === 'D');
       
-      let fixedAssetsValue = 0;
-      
-      // 获取折旧与摊销估算表中A和D的原值
-      if (depreciationData.length > 0) {
-        const rowA = depreciationData.find(row => row.序号 === 'A');
-        const rowD = depreciationData.find(row => row.序号 === 'D');
-        
-        
-        if (rowA && rowD) {
-          // 使用原值字段计算固定资产投资
-          fixedAssetsValue = (rowA.原值 || 0) + (rowD.原值 || 0);
-        } else {
-        }
-      } else {
+      if (rowA && rowD) {
+        // 使用原值字段计算固定资产投资
+        fixedAssetsValue = (rowA.原值 || 0) + (rowD.原值 || 0);
       }
-      
-      // 减去建设期利息
-      // 尝试从投资估算数据中获取建设期利息
-      let constructionInterest = 0;
-      let interestSource = "未找到";
-      
-      // 尝试从投资估算API获取建设期利息
-      try {
-        if (context?.projectId) {
-          const investmentResponse = await investmentApi.getByProjectId(context.projectId);
-          
-          if (investmentResponse.success) {
-            
-            // 根据用户提供的数据结构，construction_interest在data.estimate层级
-            if (investmentResponse.data?.estimate?.construction_interest !== undefined) {
-              constructionInterest = parseFloat(investmentResponse.data.estimate.construction_interest);
-              interestSource = "投资估算数据(data.estimate.construction_interest)";
-            } else {
-              console.log('📋 data.estimate的可用字段:', Object.keys(investmentResponse.data?.estimate || {}));
-            }
-          } else {
+    }
+    
+    // 减去建设期利息
+    let constructionInterest = 0;
+    
+    // 尝试从投资估算API获取建设期利息
+    try {
+      if (context?.projectId) {
+        const investmentResponse = await investmentApi.getByProjectId(context.projectId);
+        
+        if (investmentResponse.success) {
+          // 根据用户提供的数据结构，construction_interest在data.estimate层级
+          if (investmentResponse.data?.estimate?.construction_interest !== undefined) {
+            constructionInterest = parseFloat(investmentResponse.data.estimate.construction_interest);
           }
-        } else {
         }
-      } catch (error) {
       }
-      
-      // 如果投资估算数据中没有找到，设置默认值为0
-      if (constructionInterest === 0) {
-        interestSource = "未找到建设期利息数据";
-      }
-      
-      // 调试日志
-      const finalInvestment = fixedAssetsValue - constructionInterest;
-      console.log('📋 固定资产投资计算调试信息:', {
-        折旧A原值: depreciationData.find(row => row.序号 === 'A')?.原值 || 0,
-        折旧D原值: depreciationData.find(row => row.序号 === 'D')?.原值 || 0,
-        固定资产原值合计: fixedAssetsValue,
-        建设期利息: constructionInterest,
-        建设期利息来源: interestSource,
-        最终固定资产投资: finalInvestment
-      });
-      
-      
-      return finalInvestment;
-    };
+    } catch {
+      // 静默处理错误
+    }
+    
+    return fixedAssetsValue - constructionInterest;
+  };
     
     // 渲染修理费配置弹窗
     const renderRepairModal = () => {
@@ -2049,10 +2024,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                 />
                 
                 <NumberInput
-                  label="金额："
+                  label="修理费金额（万元）"
                   value={calculateRepairAmount()}
                   disabled
-                  description={`通过计算所得到的最终修理费（万元）`}
+                  description="自动计算：固定资产投资 × 百分比"
                   decimalScale={2}
                   styles={{
                     input: { backgroundColor: '#f8f9fa' }
@@ -2103,12 +2078,6 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
    * 生成总成本费用表数据
    */
   const generateCostTableData = () => {
-    console.log('[DEBUG] generateCostTableData 开始生成数据:', {
-      context: !!context,
-      productionRates: productionRates?.map(p => ({ year: p.yearIndex, rate: p.rate })) || 'undefined',
-      costConfig: costConfig
-    });
-    
     if (!context) {
       return null;
     }
@@ -2147,15 +2116,19 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         yearTotal += costConfig.repair.directAmount || 0;
       }
       
-      // 1.5 其他费用
+      // 1.5 其他费用（统一使用函数计算，自动应用税率）
       const productionRate = costConfig.otherExpenses.applyProductionRate
         ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
         : 1;
       if (costConfig.otherExpenses.type === 'percentage') {
         const revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-        yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+        yearTotal += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
       } else {
-        yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+        // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+        const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+        const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+        const inputTax = directAmount * taxRate / (1 + taxRate);
+        yearTotal += directAmount - inputTax;
       }
       
       row1.运营期.push(yearTotal);
@@ -2204,7 +2177,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     });
     rows.push(row1_4);
     
-    // 1.5 其他费用
+    // 1.5 其他费用（统一使用函数计算，自动应用税率）
     const row1_5 = { 序号: '1.5', 成本项目: '其他费用', 合计: 0, 运营期: [] as number[] };
     years.forEach((year) => {
       const productionRate = costConfig.otherExpenses.applyProductionRate
@@ -2213,9 +2186,13 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       let yearTotal = 0;
       if (costConfig.otherExpenses.type === 'percentage') {
         const revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
-        yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+        yearTotal += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
       } else {
-        yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+        // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+        const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+        const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+        const inputTax = directAmount * taxRate / (1 + taxRate);
+        yearTotal += directAmount - inputTax;
       }
       row1_5.运营期.push(yearTotal);
       row1_5.合计 += yearTotal;
@@ -2306,11 +2283,6 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       updatedAt: new Date().toISOString()
     };
     
-    console.log('[DEBUG] generateCostTableData 完成:', {
-      totalRows: rows.length,
-      totalRevenue: result.rows.find(r => r.序号 === '1')?.合计 || 0
-    });
-    
     return result;
   };
 
@@ -2349,8 +2321,6 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
 
   // 导出总成本费用估算表为Excel
   const handleExportCostTable = () => {
-    console.log('[DEBUG] 当前达产率配置:', productionRates?.map(p => ({ year: p.yearIndex, rate: p.rate })) || 'undefined');
-    
       if (!context) {
         notifications.show({
           title: '导出失败',
@@ -2413,15 +2383,20 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
           : 1;
           
+        // 1.5 其他费用（统一使用函数计算，自动应用税率）
         let yearTotal = 0;
         if (costConfig.otherExpenses.type === 'percentage') {
           const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
             const income = calculateTaxableIncome(revItem);
             return sum + income;
           }, 0);
-          yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+          yearTotal += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
         } else {
-          yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+          const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+          const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+          const inputTax = directAmount * taxRate / (1 + taxRate);
+          yearTotal += directAmount - inputTax;
         }
         otherExpensesTotal += yearTotal;
       });
@@ -2459,15 +2434,20 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         const productionRate = costConfig.otherExpenses.applyProductionRate
           ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
           : 1;
+        // 1.5 其他费用（统一使用函数计算，自动应用税率）
         let yearOtherExpenses = 0;
         if (costConfig.otherExpenses.type === 'percentage') {
           const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
             const income = calculateTaxableIncome(revItem);
             return sum + income;
           }, 0);
-          yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+          yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
         } else {
-          yearOtherExpenses += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+          const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+          const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+          const inputTax = directAmount * taxRate / (1 + taxRate);
+          yearOtherExpenses += directAmount - inputTax;
         }
         total += yearOtherExpenses;
         
@@ -2535,15 +2515,20 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
           ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
           : 1;
         
+        // 1.5 其他费用（统一使用函数计算，自动应用税率）
         let yearTotal = 0;
         if (costConfig.otherExpenses.type === 'percentage') {
           const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
             const income = calculateTaxableIncome(revItem);
             return sum + income;
           }, 0);
-          yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+          yearTotal += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
         } else {
-          yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+          const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+          const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+          const inputTax = directAmount * taxRate / (1 + taxRate);
+          yearTotal += directAmount - inputTax;
         }
         row1_5[year.toString()] = yearTotal;
         totalRow1_5 += yearTotal;
@@ -2686,15 +2671,20 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         const productionRate = costConfig.otherExpenses.applyProductionRate
           ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
           : 1;
+        // 1.5 其他费用（统一使用函数计算，自动应用税率）
         let yearOtherExpenses = 0;
         if (costConfig.otherExpenses.type === 'percentage') {
           const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
             const income = calculateTaxableIncome(revItem);
             return sum + income;
           }, 0);
-          yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+          yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
         } else {
-          yearOtherExpenses += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+          const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+          const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+          const inputTax = directAmount * taxRate / (1 + taxRate);
+          yearOtherExpenses += directAmount - inputTax;
         }
         yearRow1 += yearOtherExpenses;
         
@@ -3295,21 +3285,45 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     </Modal>
   );
 
+  // 检测费用名称是否需要备注（包含"土地"或"流转"）
+  const needsRemark = (name: string): boolean => {
+    const normalizedName = name || '';
+    return normalizedName.includes('土地') || normalizedName.includes('流转');
+  };
+
   // 渲染其他费用配置弹窗
   const renderOtherModal = () => {
     // 初始化临时配置（当弹窗打开时）
     React.useEffect(() => {
-      if (showOtherModal && !tempOtherConfig) {
-        setTempOtherConfig({...costConfig.otherExpenses});
+      if (showOtherModal) {
+        if (!tempOtherConfig) {
+          // 首次打开弹窗
+          const newConfig = {...costConfig.otherExpenses};
+          // 检测是否需要显示备注字段（名称包含"土地"或"流转"）且remark为空
+          if (needsRemark(newConfig.name || '') && !newConfig.remark) {
+            // 默认填充模板文本
+            newConfig.remark = '项目流转xxx亩土地，土地租赁单价按xxx元/亩·年估算。\n则运营期土地成本合计为xxx.xx万元。';
+          }
+          setTempOtherConfig(newConfig);
+        } else if (needsRemark(tempOtherConfig.name || '') && !tempOtherConfig.remark) {
+          // 当用户修改名称后，如果需要备注且remark为空，自动填充
+          setTempOtherConfig({
+            ...tempOtherConfig,
+            remark: '项目流转xxx亩土地，土地租赁单价按xxx元/亩·年估算。\n则运营期土地成本合计为xxx.xx万元。'
+          });
+        }
       }
-    }, [showOtherModal, costConfig.otherExpenses, tempOtherConfig]);
+    }, [showOtherModal, tempOtherConfig]);
     
-    // 保存其他费用配置
+    // 保存配置
     const handleSaveOtherConfig = () => {
       if (tempOtherConfig) {
-        // 将临时配置更新到全局状态
+        // 将临时配置更新到全局状态，如果名称为空则使用默认值"其他费用"
         updateCostConfig({
-          otherExpenses: tempOtherConfig
+          otherExpenses: {
+            ...tempOtherConfig,
+            name: tempOtherConfig.name?.trim() || '其他费用'
+          }
         });
         
         // 清除临时配置
@@ -3319,9 +3333,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         setShowOtherModal(false);
         
         // 显示成功通知
+        const savedName = tempOtherConfig.name?.trim() || '其他费用';
         notifications.show({
           title: '保存成功',
-          message: '其他费用配置已保存',
+          message: `其他费用配置已保存（${savedName}）`,
           color: 'green',
         });
       }
@@ -3337,6 +3352,9 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     
     const currentConfig = tempOtherConfig || costConfig.otherExpenses;
     
+    // 检测是否显示备注输入框
+    const showRemarkField = needsRemark(currentConfig.name || '');
+    
     return (
       <Modal
         opened={showOtherModal}
@@ -3345,25 +3363,94 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         size="md"
       >
         <Stack gap="md">
-          <TextInput
-            label="费用类型"
-            value="直接填金额"
-            disabled
-            styles={{
-              input: { backgroundColor: '#f8f9fa' }
-            }}
-          />
+          <SimpleGrid cols={2}>
+            <TextInput
+              label="费用名称"
+              value={currentConfig.name ?? '其他费用'}
+              onChange={(e) => setTempOtherConfig({
+                ...currentConfig,
+                name: e.target.value
+              })}
+              placeholder="请输入费用名称"
+              rightSection={
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setTempOtherConfig({
+                    ...currentConfig,
+                    name: ''
+                  })}
+                  title="清除"
+                  style={{ marginLeft: '-3px' }}
+                >
+                  <IconX size={14} />
+                </ActionIcon>
+              }
+            />
+            
+            <TextInput
+              label="费用类型"
+              value="直接填金额"
+              disabled
+              styles={{
+                input: { backgroundColor: '#f8f9fa' }
+              }}
+            />
+          </SimpleGrid>
           
-          <NumberInput
-            label="直接金额（万元）"
-            value={currentConfig.directAmount || 0}
-            onChange={(value) => setTempOtherConfig({
-              ...currentConfig,
-              directAmount: Number(value)
-            })}
-            min={0}
-            decimalScale={2}
-          />
+          <SimpleGrid cols={2}>
+            <NumberInput
+              label="直接金额（万元）"
+              value={currentConfig.directAmount || 0}
+              onChange={(value) => setTempOtherConfig({
+                ...currentConfig,
+                directAmount: Number(value)
+              })}
+              min={0}
+              decimalScale={2}
+              rightSection={
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setTempOtherConfig({
+                    ...currentConfig,
+                    directAmount: 0
+                  })}
+                  title="清除"
+                  style={{ marginLeft: '-3px' }}
+                >
+                  <IconX size={14} />
+                </ActionIcon>
+              }
+            />
+            
+            <NumberInput
+              label="费用税率 (%)"
+              value={currentConfig.taxRate ?? 9}
+              onChange={(value) => setTempOtherConfig({
+                ...currentConfig,
+                taxRate: Number(value)
+              })}
+              min={0}
+              max={100}
+              decimalScale={2}
+              allowNegative={false}
+              rightSection={
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setTempOtherConfig({
+                    ...currentConfig,
+                    taxRate: 0
+                  })}
+                  title="清除"
+                  style={{ marginLeft: '-3px' }}
+                >
+                  <IconX size={14} />
+                </ActionIcon>
+              }
+            />
+          </SimpleGrid>
           
           <Checkbox
             label="应用达产率"
@@ -3373,6 +3460,28 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
               applyProductionRate: event.currentTarget.checked
             })}
           />
+          
+          {/* 备注输入框 - 仅当费用名称包含"土地"或"流转"时显示 */}
+          {showRemarkField && (
+            <TextInput
+              label="备注"
+              value={currentConfig.remark || ''}
+              onChange={(e) => setTempOtherConfig({
+                ...currentConfig,
+                remark: e.target.value
+              })}
+              placeholder="请输入备注信息"
+              description={(() => {
+                const name = (currentConfig.name || '').toLowerCase();
+                if (name.includes('土地')) {
+                  return '💡 请填写土地面积或详细说明';
+                } else if (name.includes('流转')) {
+                  return '💡 请填写流转期限或相关说明';
+                }
+                return undefined;
+              })()}
+            />
+          )}
           
           <Group justify="flex-end" mt="xl">
             <Button variant="default" onClick={handleCancelOtherConfig}>
@@ -3599,22 +3708,16 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             }, 0);
                             yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
                           } else {
-                            yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+                            // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                            const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                            const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                            const inputTax = directAmount * taxRate / (1 + taxRate);
+                            yearTotal += directAmount - inputTax;
                           }
                           otherExpensesTotal += yearTotal;
                         });
                         total += otherExpensesTotal;
                         
-                        
-                        // 调试：检查NaN值
-                        if (isNaN(total)) {
-                          console.log('营业成本 NaN detected:', {
-                            years,
-                            total,
-                            revenueItems,
-                            context
-                          });
-                        }
                         return formatNumber(total);
                       })()}
                     </Table.Td>
@@ -3657,7 +3760,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         }, 0);
                         yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
                       } else {
-                        yearOtherExpenses += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+                        // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                        const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                        const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                        const inputTax = directAmount * taxRate / (1 + taxRate);
+                        yearOtherExpenses += directAmount - inputTax;
                       }
                       total += yearOtherExpenses;
                       
@@ -3833,10 +3940,10 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     </Table.Td>
                   </Table.Tr>
                   
-                  {/* 1.5 其他费用 */}
+                  {/* 1.5 其他费用（使用自定义名称） */}
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>1.5</Table.Td>
-                    <Table.Td style={{ border: '1px solid #dee2e6' }}>其他费用</Table.Td>
+                    <Table.Td style={{ border: '1px solid #dee2e6' }}>{costConfig.otherExpenses.name || '其他费用'}</Table.Td>
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
                       {(() => {
                         // 其他费用合计列 = 运营期各年数值的总和
@@ -3854,7 +3961,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             }, 0);
                             yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
                           } else {
-                            yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+                            // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                            const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                            const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                            const inputTax = directAmount * taxRate / (1 + taxRate);
+                            yearTotal += directAmount - inputTax;
                           }
                           total += yearTotal;
                         });
@@ -3874,7 +3985,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                         }, 0);
                         yearTotal += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
                       } else {
-                        yearTotal += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+                        // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                        const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                        const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                        const inputTax = directAmount * taxRate / (1 + taxRate);
+                        yearTotal += directAmount - inputTax;
                       }
                       
                       return (
@@ -4078,7 +4193,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                             }, 0);
                             yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
                           } else {
-                            yearOtherExpenses += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+                            // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                            const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                            const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                            const inputTax = directAmount * taxRate / (1 + taxRate);
+                            yearOtherExpenses += directAmount - inputTax;
                           }
                           yearRow1 += yearOtherExpenses;
                           
@@ -4156,7 +4275,11 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                               }, 0);
                               yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
                             } else {
-                              yearOtherExpenses += (costConfig.otherExpenses.directAmount || 0) * productionRate;
+                              // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                              const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                              const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                              const inputTax = directAmount * taxRate / (1 + taxRate);
+                              yearOtherExpenses += directAmount - inputTax;
                             }
                             yearRow1 += yearOtherExpenses;
                             

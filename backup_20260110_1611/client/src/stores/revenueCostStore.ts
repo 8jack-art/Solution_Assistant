@@ -9,9 +9,9 @@ const getDefaultCostConfig = (): CostConfig => ({
   rawMaterials: {
     applyProductionRate: true,
     items: [
-      { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentage: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13, unit: '吨' },
-      { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentage: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13, unit: '吨' },
-      { id: 3, name: '原材料3', sourceType: 'directAmount', percentage: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13, unit: '吨' },
+      { id: 1, name: '原材料1', sourceType: 'percentage', linkedRevenueId: 'total', percentage: 2, quantity: 0, unitPrice: 0, directAmount: 0, taxRate: 13 },
+      { id: 2, name: '原材料2', sourceType: 'quantityPrice', percentage: 0, quantity: 100, unitPrice: 0.5, directAmount: 0, taxRate: 13 },
+      { id: 3, name: '原材料3', sourceType: 'directAmount', percentage: 0, quantity: 0, unitPrice: 0, directAmount: 50, taxRate: 13 },
     ]
   },
   auxiliaryMaterials: {
@@ -129,12 +129,10 @@ export interface CostConfig {
   };
   otherExpenses: {
     type: 'percentage' | 'directAmount';
-    name?: string;
     percentage?: number;
     directAmount?: number;
     taxRate?: number;
     applyProductionRate: boolean;
-    remark?: string;
   };
   depreciation: {
     type: 'percentage' | 'directAmount';
@@ -244,7 +242,6 @@ export interface RevenueItem {
   unitPrice?: number        // 单价
   area?: number            // 面积（亩）
   yieldPerArea?: number    // 亩产量
-  yieldPerAreaUnit?: string    // 亩产量单位（如：公斤、斤、吨等）
   capacity?: number        // 产能
   utilizationRate?: number // 利用率
   subscriptions?: number   // 订阅数

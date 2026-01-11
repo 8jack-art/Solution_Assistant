@@ -184,7 +184,7 @@ const buildFullEstimateStructure = (estimateData: any, projectData: any): Invest
     贷款总额: estimateData.loanAmount || 0,
     年利率: projectData?.loan_interest_rate || 0.049,
     建设期年限: projectData?.construction_years || 3,
-    贷款期限: projectData?.operation_years || 17,
+    贷款期限: projectData?.operation_years || 17, // 添加贷款期限字段，默认运营期年限
     分年利息: estimateData.construction_interest_details?.分年数据 || [],
     合计: constructionInterest,
     占总投资比例: totalInvestment > 0 ? constructionInterest / totalInvestment : 0
@@ -222,6 +222,7 @@ const buildFullEstimateStructure = (estimateData: any, projectData: any): Invest
     partG,
     iterationCount: estimateData.iterationCount || 8,
     gapRate: estimateData.gapRate || 0,
+    // 保留建设期利息详情和还本付息计划数据
     construction_interest_details: estimateData.construction_interest_details,
     loan_repayment_schedule_simple: estimateData.loan_repayment_schedule_simple,
     loan_repayment_schedule_detailed: estimateData.loan_repayment_schedule_detailed
@@ -235,6 +236,7 @@ const InvestmentSummary: React.FC = () => {
   const locationState = (location.state as { autoGenerate?: boolean } | null) || null
   const autoGenerateRequested = Boolean(locationState?.autoGenerate)
   const [autoGenerateHandled, setAutoGenerateHandled] = useState(false)
+  // 禁用响应式布局，使用固定尺寸
   
   // 请求取消控制器
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -284,6 +286,7 @@ const InvestmentSummary: React.FC = () => {
   
   // 项目类型变更时重新计算投资估算
   const handleProjectTypeChange = async (newType: 'agriculture' | 'construction') => {
+    // 标记用户已手动切换过项目类型
     userHasManuallySwitched.current = true
     setProjectType(newType)
     
@@ -296,8 +299,9 @@ const InvestmentSummary: React.FC = () => {
         }
       }
       await investmentApi.save(saveData)
+      console.log(`[handleProjectTypeChange] 已保存项目类型到数据库: ${newType}`)
     } catch (error) {
-      // 保存失败时静默处理
+      console.error('保存项目类型失败:', error)
     }
     
     // 如果有估算数据，则重新计算
@@ -327,7 +331,7 @@ const InvestmentSummary: React.FC = () => {
           })
         }
       } catch (error: any) {
-        // 切换失败时静默处理
+        console.error('切换项目类型失败:', error)
       } finally {
         setGenerating(false)
       }
@@ -426,6 +430,7 @@ const InvestmentSummary: React.FC = () => {
       
       // 安全检查：确保索引在有效范围内
       if (parentIndex < 0 || parentIndex >= partAChildren.length) {
+        console.warn(`跳过索引 ${parentIndex}: 超出二级子项数组范围 (0-${partAChildren.length - 1})`)
         recalculated[parentIndex] = thirdItems
         return
       }
@@ -438,12 +443,14 @@ const InvestmentSummary: React.FC = () => {
       }
 
       if (!currentSecondItem) {
+        console.warn(`跳过索引 ${parentIndex}: 对应的二级子项不存在`)
         recalculated[parentIndex] = thirdItems
         return
       }
 
       // 安全检查：确保二级子项有合计属性
       if (typeof currentSecondItem.合计 !== 'number') {
+        console.warn(`跳过索引 ${parentIndex}: 二级子项缺少有效的合计属性`)
         recalculated[parentIndex] = thirdItems
         return
       }
@@ -464,6 +471,8 @@ const InvestmentSummary: React.FC = () => {
 
       // 计算调整比例
       const ratio = currentTotal / savedTotal
+
+      console.log(`重算三级子项[${parentIndex}]: 保存总额=${savedTotal.toFixed(2)}, 当前总额=${currentTotal.toFixed(2)}, 比例=${ratio.toFixed(4)}`)
 
       // 按比例调整每个三级子项的单价
       const adjustedThirdItems = thirdItems.map((subItem: any) => {
@@ -490,6 +499,7 @@ const InvestmentSummary: React.FC = () => {
   }
   
   const extractCurrentTableItems = () => {
+
     if (!estimate?.partA?.children || estimate.partA.children.length === 0) {
       return undefined
     }
@@ -538,6 +548,7 @@ const InvestmentSummary: React.FC = () => {
           if (Object.keys(savedThirdLevelItems).length > 0) {
             const recalculatedItems = recalculateThirdLevelItems(savedThirdLevelItems)
             setThirdLevelItems(recalculatedItems)
+            console.log('重新生成后已重算三级子项:', recalculatedItems)
             
             // 保存到数据库（包含重算后的三级子项数据，同时保存当前项目类型）
             const estimateWithThirdLevel = {
@@ -571,6 +582,7 @@ const InvestmentSummary: React.FC = () => {
       }
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || '生成投资估算失败'
+      console.error('生成投资估算失败:', error)
       
       notifications.show({
         title: '❌ 生成失败',
@@ -587,6 +599,10 @@ const InvestmentSummary: React.FC = () => {
   const handleRegenerate = async () => {
     if (!project) return
     
+    // 确定使用的项目类型：
+    // 1. 如果当前状态不是默认值（用户已手动切换过），直接使用当前状态
+    // 2. 如果当前状态是默认值，尝试从数据库加载之前保存的类型
+    // 3. 数据库也没有保存的，使用默认值
     let effectiveProjectType = projectType
     
     // 如果当前使用的是默认值且用户从未手动切换过，才尝试从数据库加载之前保存的类型
@@ -598,10 +614,11 @@ const InvestmentSummary: React.FC = () => {
           if (estimateData?.projectType) {
             effectiveProjectType = estimateData.projectType
             setProjectType(effectiveProjectType)
+            console.log(`[handleRegenerate] 从数据库加载项目类型: ${effectiveProjectType}`)
           }
         }
       } catch (error) {
-        // 加载失败时静默处理
+        console.error('加载项目类型失败:', error)
       }
     }
     
@@ -627,6 +644,7 @@ const InvestmentSummary: React.FC = () => {
                 if (Object.keys(savedThirdLevelItems).length > 0) {
                   const recalculatedItems = recalculateThirdLevelItems(savedThirdLevelItems)
                   setThirdLevelItems(recalculatedItems)
+                  console.log('刷新后已重算三级子项:', recalculatedItems)
                   
                   // 保留重算后的三级子项数据，同时保存当前的项目类型
                   const estimateWithThirdLevel = {
@@ -644,6 +662,7 @@ const InvestmentSummary: React.FC = () => {
                 saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
               }
             } catch (e) {
+              console.error('加载三级子项失败:', e)
               // 出错时直接保存当前数据
               saveEstimateToDatabase({ ...newEstimateData, projectType: effectiveProjectType })
             }
@@ -659,6 +678,7 @@ const InvestmentSummary: React.FC = () => {
         })
       }
     } catch (error: any) {
+      console.error('刷新失败:', error)
       notifications.show({
         title: '❌ 刷新失败',
         message: error.response?.data?.error || '请稍后重试',
@@ -712,6 +732,7 @@ const InvestmentSummary: React.FC = () => {
       }
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || '生成投资估算失败'
+      console.error('生成投资估算失败:', error)
       
       notifications.show({
         title: '❌ 生成失败',
@@ -1043,6 +1064,11 @@ const InvestmentSummary: React.FC = () => {
       
       for (let R = 3; R <= range.e.r; ++R) {
         const rowIndex = R - 3 // 数据从第4行开始，对应data数组的索引
+        const isAMain = rowIndex === 0
+        const isAChild = rowIndex > 0 && rowIndex <= aChildCount
+        const isBMain = rowIndex === aChildCount + 1
+        const isBChild = rowIndex > aChildCount + 1 && rowIndex <= aChildCount + 1 + bChildCount
+        const isMainRow = rowIndex > aChildCount + 1 + bChildCount // C/D/E/F/G都是主项
         
         // 通过序号判断是否为标题行：A-G 及 一/二/三 视为标题
         const serialCell = ws[XLSX.utils.encode_cell({ r: R, c: 0 })]
@@ -1155,6 +1181,7 @@ const InvestmentSummary: React.FC = () => {
         autoClose: 3000,
       })
     } catch (error) {
+      console.error('导出失败:', error)
       notifications.show({
         title: '❌ 导出失败',
         message: '请稍后重试',
@@ -1164,7 +1191,7 @@ const InvestmentSummary: React.FC = () => {
     }
   }
 
-  // 加载计数器，用于防止重复加载
+  // 加载计数器，用于调试重复加载问题
   const loadCounterRef = useRef(0)
   // 加载状态锁，防止重复加载
   const isLoadingRef = useRef(false)
@@ -1175,9 +1202,11 @@ const InvestmentSummary: React.FC = () => {
     if (!id) return
     
     loadCounterRef.current += 1
+    console.log(`[数据加载] useEffect执行 #${loadCounterRef.current}, id=${id}`)
     
     // 防止重复加载：如果已经在加载中，且ID相同，则跳过
     if (isLoadingRef.current && currentLoadIdRef.current === id) {
+      console.log('[数据加载] 已在加载中，跳过重复请求')
       return
     }
     
@@ -1192,7 +1221,10 @@ const InvestmentSummary: React.FC = () => {
         const cachedData = dataCache.get(cacheKey)
         
         if (cachedData) {
+          console.log('[数据加载] 使用缓存数据')
+          
           // 缓存格式可能与数据库格式不符，需要兼容处理
+          // 缓存结构: { data: { estimate: { estimate_data: {...} } } }
           let estimateData = null
           let projectData = null
           
@@ -1225,6 +1257,7 @@ const InvestmentSummary: React.FC = () => {
               setEstimate(estimateData)
             } else {
               // 项目数据不在缓存中，需要单独加载
+              console.log('[数据加载] 缓存中没有项目信息，加载项目数据')
               const projectResponse = await projectApi.getById(id!)
               if (projectResponse.success && projectResponse.data?.project) {
                 setProject(projectResponse.data.project)
@@ -1235,12 +1268,15 @@ const InvestmentSummary: React.FC = () => {
               }
             }
           } else {
+            console.log('[数据加载] 缓存数据格式异常，从服务器加载')
             await loadProjectAndEstimate()
           }
         } else {
+          console.log('[数据加载] 缓存不存在，从服务器加载')
           await loadProjectAndEstimate()
         }
       } catch (error) {
+        console.error('[数据加载] 失败:', error)
         // 出错时回退到服务器加载
         await loadProjectAndEstimate()
       } finally {
@@ -1252,6 +1288,7 @@ const InvestmentSummary: React.FC = () => {
     
     // 组件卸载时取消所有请求
     return () => {
+      console.log(`[数据加载] useEffect清理 #${loadCounterRef.current}`)
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
@@ -1272,6 +1309,7 @@ const InvestmentSummary: React.FC = () => {
     abortControllerRef.current = new AbortController()
     
     setLoading(true)
+    console.log(`[数据加载] 开始加载项目${id}的投资估算数据`)
     
     try {
       // 加载项目信息
@@ -1279,15 +1317,21 @@ const InvestmentSummary: React.FC = () => {
       if (projectResponse.success && projectResponse.data?.project) {
         const projectData = projectResponse.data.project
         setProject(projectData)
+        console.log(`[数据加载] 项目信息加载成功:`, projectData.project_name)
         
         // 先检查是否已有投资估算（无论是否autoGenerateRequested，都需要先加载已有数据）
+        console.log(`[数据加载] 开始加载投资估算数据...`)
         const estimateResponse = await investmentApi.getByProjectId(id!, {
           signal: abortControllerRef.current.signal,
           useCache: false // 禁用缓存，直接从服务器获取
         })
         
+        // 添加调试日志
+        console.log(`[数据加载] API响应:`, JSON.stringify(estimateResponse, null, 2))
+        
         // 检查是否有数据库连接错误
         if (!estimateResponse.success && estimateResponse.error && estimateResponse.error.includes('数据库')) {
+          console.error('[数据加载] 数据库连接错误:', estimateResponse.error)
           notifications.show({
             title: '❌ 数据库连接错误',
             message: '无法连接到数据库，请稍后重试',
@@ -1300,8 +1344,22 @@ const InvestmentSummary: React.FC = () => {
         let existingThirdLevelItems: Record<number, any[]> = {}
         
         if (estimateResponse.success && estimateResponse.data?.estimate) {
+          console.log(`[数据加载] 找到投资估算数据`)
           // 使用estimate_data字段作为详细数据，兼容不同的数据结构
           let estimateData = estimateResponse.data.estimate.estimate_data
+          
+          console.log(`[数据加载] estimateData:`, estimateData ? '存在' : '不存在')
+          console.log(`[数据加载] estimateData.partA:`, estimateData?.partA ? '存在' : '不存在')
+          console.log(`[数据加载] estimateData.partG:`, estimateData?.partG ? '存在' : '不存在')
+          
+          // 调试：打印estimateData的所有key
+          if (estimateData) {
+            console.log(`[数据加载] estimateData的顶层keys:`, Object.keys(estimateData))
+            // 如果estimateData是嵌套结构，也检查constructionCost等简化字段
+            console.log(`[数据加载] estimateData.constructionCost:`, estimateData.constructionCost)
+            console.log(`[数据加载] estimateData.partA?.children?.length:`, estimateData?.partA?.children?.length)
+            console.log(`[数据加载] estimateData.partG?.合计:`, estimateData?.partG?.合计)
+          }
           
           // 如果estimate_data不存在，尝试直接使用estimate
           if (!estimateData) {
@@ -1313,19 +1371,29 @@ const InvestmentSummary: React.FC = () => {
                                      estimateData?.partG?.合计 > 0
           
           if (!estimateData || !isCompleteStructure) {
+            console.log('[数据加载] 投资估算数据为空或不完整，将自动生成完整结构')
             // 从简化的estimate_data构建完整的表格数据结构
             estimateData = buildFullEstimateStructure(estimateData || {}, projectData)
+            console.log('[数据加载] 已构建完整结构，partA.children长度:', estimateData?.partA?.children?.length)
+          } else {
+            console.log('[数据加载] 投资估算数据完整')
           }
+          
+          console.log(`[数据加载] 投资估算数据加载成功，迭代次数: ${estimateData?.iterationCount || '未知'}`)
           
           // 恢复三级子项数据（如果存在）- 先保存到局部变量
           if (estimateData.thirdLevelItems) {
             existingThirdLevelItems = estimateData.thirdLevelItems
             setThirdLevelItems(existingThirdLevelItems)
+            console.log(`[数据加载] 已恢复${Object.keys(existingThirdLevelItems).length}个三级子项数据`)
           }
           
           // 恢复项目类型（如果存在）- 优先使用数据库中的值
           if (estimateData.projectType) {
             setProjectType(estimateData.projectType)
+            console.log(`[数据加载] 已恢复项目类型: ${estimateData.projectType}`)
+          } else {
+            console.log(`[数据加载] 未找到保存的项目类型，使用默认值: agriculture`)
           }
 
           
@@ -1336,6 +1404,7 @@ const InvestmentSummary: React.FC = () => {
           
           if (shouldAutoGenerate) {
             setAutoGenerateHandled(true)
+            console.log(`[数据加载] 确实没有估算数据，开始自动生成投资估算（保留三级子项）`)
             // 直接在这里实现生成逻辑（保留三级子项）
             setGenerating(true)
             try {
@@ -1365,10 +1434,12 @@ const InvestmentSummary: React.FC = () => {
                   project_id: id!,
                   estimate_data: estimateWithThirdLevel
                 })
+                console.log(`[数据加载] 自动生成完成，已保存三级子项`)
               }
             } catch (e: any) {
               // 忽略被取消的请求
               if (e.name !== 'AbortError') {
+                console.error('[数据加载] 生成估算失败:', e)
                 notifications.show({
                   title: '❌ 生成失败',
                   message: '自动生成投资估算失败，请稍后重试',
@@ -1381,6 +1452,7 @@ const InvestmentSummary: React.FC = () => {
             }
             return
           } else if (autoGenerateRequested && !autoGenerateHandled) {
+            console.log(`[数据加载] 已有完整估算数据，跳过自动生成`)
             setAutoGenerateHandled(true)
           }
           
@@ -1390,11 +1462,16 @@ const InvestmentSummary: React.FC = () => {
             estimateData.construction_interest_details = estimateResponse.data.estimate.construction_interest_details;
             estimateData.loan_repayment_schedule_simple = estimateResponse.data.estimate.loan_repayment_schedule_simple;
             estimateData.loan_repayment_schedule_detailed = estimateResponse.data.estimate.loan_repayment_schedule_detailed;
+            
+            // 添加调试日志
+          } else {
           }
           
           // 使用 setTimeout 确保状态更新触发渲染
           setTimeout(() => setEstimate(estimateData), 0)
+          console.log(`[数据加载] 投资估算数据已设置到组件状态`)
         } else {
+          console.log(`[数据加载] 未找到投资估算数据，${autoGenerateRequested ? '将自动生成' : '显示空状态'}`)
           // 没有估算，自动生成（传递项目数据）
           if (autoGenerateRequested && !autoGenerateHandled) {
             setAutoGenerateHandled(true)
@@ -1403,6 +1480,7 @@ const InvestmentSummary: React.FC = () => {
         }
       } else {
         const errorMsg = projectResponse.error || '加载项目失败'
+        console.error(`[数据加载] 项目信息加载失败:`, errorMsg)
         notifications.show({
           title: '❌ 加载失败',
           message: errorMsg,
@@ -1414,12 +1492,14 @@ const InvestmentSummary: React.FC = () => {
       // 忽略被取消的请求
       if (error.name !== 'AbortError') {
         const errorMsg = error.response?.data?.error || error.message || '加载项目失败'
+        console.error(`[数据加载] 数据加载异常:`, error)
         
         // 尝试从缓存恢复数据（降级策略）
         const cacheKey = `investment:${id}`
         const cachedData = (window as any).dataCache?.get?.(cacheKey)
         
         if (cachedData) {
+          console.log(`[数据加载] 从缓存恢复数据成功`)
           notifications.show({
             title: '⚠️ 使用缓存数据',
             message: '网络异常，已从缓存恢复数据',
@@ -1457,6 +1537,7 @@ const InvestmentSummary: React.FC = () => {
       }
     } finally {
       setLoading(false)
+      console.log(`[数据加载] 数据加载流程完成`)
     }
   }
 
@@ -1475,6 +1556,7 @@ const InvestmentSummary: React.FC = () => {
         setAiItems(aiResponse.data.items)
         setShowAIPreview(true) // 自动打开预览
         
+        console.log('AI分析工程子项成功:', aiResponse.data.items)
         notifications.show({
           title: '✨ AI分析完成',
           message: `已生成${aiResponse.data.items.length}个工程子项建议`,
@@ -1492,6 +1574,7 @@ const InvestmentSummary: React.FC = () => {
         })
       }
     } catch (aiError: any) {
+      console.error('AI分析失败:', aiError)
       notifications.show({
         title: '❌ AI分析失败',
         message: aiError.response?.data?.error || aiError.message || '请检查LLM配置',
@@ -1547,6 +1630,7 @@ const InvestmentSummary: React.FC = () => {
       }
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || '应用AI子项失败'
+      console.error('应用AI子项失败:', error)
 
       notifications.show({
         title: '❌ 应用失败',
@@ -1775,6 +1859,11 @@ const InvestmentSummary: React.FC = () => {
     const n = subItems.length
     if (n === 0) return subItems
 
+    console.log('=== 三级子项验证和调整算法 ===')
+    console.log('输入：二级子项总价S =', targetTotal, '万元')
+    console.log('输入：目标四类费用:', targetConstruction.toFixed(2), targetEquipment.toFixed(2), 
+                targetInstallation.toFixed(2), targetOther.toFixed(2))
+
     // 定义需要取整的单位
     const integerUnits = ['个', '根', '套', '组', '樘', '块', '台', '件', '点位', '节点']
 
@@ -1790,14 +1879,20 @@ const InvestmentSummary: React.FC = () => {
       }
     })
 
+    console.log('步骤1：初始总价合计 =', initialTotalSum.toFixed(2), '万元')
+
     // 步骤2：按目标总价调整各子项，保持相对比例
-    adjustedItems.forEach((item) => {
+    adjustedItems.forEach((item, i) => {
+      // 计算该子项应占的比例
       const ratio = initialTotalSum > 0 ? item.initialTotal / initialTotalSum : 1 / n
+      // 按比例分配目标总价
       item.targetTotal = targetTotal * ratio
+      console.log(`  子项${i + 1}: 初始=${item.initialTotal.toFixed(2)}, 目标=${item.targetTotal.toFixed(2)} 万元`)
     })
 
     // 步骤3：计算各三级子项的四类费用（使用目标总价）
-    adjustedItems.forEach((item) => {
+    adjustedItems.forEach((item, i) => {
+      // 使用各子项自身的费用占比
       const totalRatioSum = item.construction_ratio + item.equipment_ratio + 
                            item.installation_ratio + item.other_ratio
       
@@ -1819,6 +1914,8 @@ const InvestmentSummary: React.FC = () => {
       item.equipment = item.targetTotal * normalizedEquipment
       item.installation = item.targetTotal * normalizedInstallation
       item.other = item.targetTotal * normalizedOther
+
+      console.log(`  子项${i + 1} 费用: 建设=${item.construction.toFixed(2)}, 设备=${item.equipment.toFixed(2)}, 安装=${item.installation.toFixed(2)}, 其它=${item.other.toFixed(2)}`)
     })
 
     // 步骤4：计算当前四类费用总和
@@ -1830,29 +1927,40 @@ const InvestmentSummary: React.FC = () => {
       currentOther += item.other
     })
 
+    console.log('步骤4：当前四类费用合计:', currentConstruction.toFixed(2), currentEquipment.toFixed(2), 
+                currentInstallation.toFixed(2), currentOther.toFixed(2))
+    console.log('步骤4：目标四类费用:', targetConstruction.toFixed(2), targetEquipment.toFixed(2), 
+                targetInstallation.toFixed(2), targetOther.toFixed(2))
+
     // 步骤5：按比例微调四类费用使其匹配目标值
     const delta1 = targetConstruction - currentConstruction
     const delta2 = targetEquipment - currentEquipment
     const delta3 = targetInstallation - currentInstallation
     const delta4 = targetOther - currentOther
 
+    console.log('步骤5：费用差额:', delta1.toFixed(2), delta2.toFixed(2), delta3.toFixed(2), delta4.toFixed(2))
+
     // 判断是否需要调整
     const needsAdjustment = Math.abs(delta1) > 0.01 || Math.abs(delta2) > 0.01 || 
                            Math.abs(delta3) > 0.01 || Math.abs(delta4) > 0.01
 
     if (needsAdjustment) {
+      console.log('步骤5：需要微调')
+      
       // 按比例分配差额到各子项
-      adjustedItems.forEach((item) => {
+      adjustedItems.forEach((item, i) => {
         const itemRatio = item.targetTotal / targetTotal
         item.construction += delta1 * itemRatio
         item.equipment += delta2 * itemRatio
         item.installation += delta3 * itemRatio
         item.other += delta4 * itemRatio
+
+        console.log(`  子项${i + 1} 调整后: 建设=${item.construction.toFixed(2)}, 设备=${item.equipment.toFixed(2)}, 安装=${item.installation.toFixed(2)}, 其它=${item.other.toFixed(2)}`)
       })
     }
 
     // 输出：重新计算工程量，保持单价不变
-    const finalItems = adjustedItems.map((item) => {
+    const finalItems = adjustedItems.map((item, i) => {
       // 最终总价 = 四项费用之和
       const finalTotal = item.construction + item.equipment + item.installation + item.other
       
@@ -1867,6 +1975,7 @@ const InvestmentSummary: React.FC = () => {
           // 重新计算单价以保持总价不变
           finalUnitPrice = (finalTotal * 10000) / roundedQuantity
           newQuantity = roundedQuantity
+          console.log(`  子项${i + 1} 取整: ${item.unit} 数量${item.quantity.toFixed(2)}→${roundedQuantity}, 单价${item.unit_price.toFixed(2)}→${finalUnitPrice.toFixed(2)}`)
         }
       }
       
@@ -1893,7 +2002,11 @@ const InvestmentSummary: React.FC = () => {
         else if (ratios[0].name === 'equip') newEquipRatio += adjustment
         else if (ratios[0].name === 'inst') newInstRatio += adjustment
         else newOtherRatio += adjustment
+        
+        console.log(`  子项${i + 1} 归一化: 原总和=${ratioSum.toFixed(4)}, 调整=${adjustment.toFixed(4)}`)
       }
+
+      console.log(`输出 子项${i + 1}: 总价=${finalTotal.toFixed(2)}万元, 工程量=${newQuantity.toFixed(2)}, 单价=${finalUnitPrice.toFixed(2)}元, 占比总和=${(newConstRatio + newEquipRatio + newInstRatio + newOtherRatio).toFixed(4)}`)
 
       return {
         name: item.name,
@@ -1907,6 +2020,15 @@ const InvestmentSummary: React.FC = () => {
       }
     })
 
+    // 验证最终结果
+    let finalTotalSum = 0
+    finalItems.forEach(item => {
+      const itemTotal = (item.quantity * item.unit_price) / 10000
+      finalTotalSum += itemTotal
+    })
+    console.log('验证：最终总价合计 =', finalTotalSum.toFixed(2), '万元，目标 =', targetTotal.toFixed(2), '万元')
+    console.log('=== 验证和调整完成 ===')
+    
     return finalItems
   }
 
@@ -1948,7 +2070,7 @@ const InvestmentSummary: React.FC = () => {
             updateParentItemFromThirdItems(index, adjustedSubItems)
           }
         } catch (error) {
-          // 静默处理单个子项失败
+          console.error(`细分子项${index}失败:`, error)
         }
       }
       
@@ -1993,6 +2115,8 @@ const InvestmentSummary: React.FC = () => {
       if (aiResponse.success && aiResponse.data?.subItems) {
         const rawSubItems = aiResponse.data.subItems
         
+        console.log('AI原始返回数据:', rawSubItems)
+        
         // 调用验证和调整算法
         const adjustedSubItems = validateAndAdjustThirdLevelItems(
           rawSubItems,
@@ -2009,6 +2133,8 @@ const InvestmentSummary: React.FC = () => {
           [index]: adjustedSubItems
         }))
         updateParentItemFromThirdItems(index, adjustedSubItems)
+        
+        console.log('AI细分结果(调整后):', adjustedSubItems)
         
         notifications.show({
           title: '✨ AI细分完成',
@@ -2027,6 +2153,7 @@ const InvestmentSummary: React.FC = () => {
         })
       }
     } catch (error: any) {
+      console.error('AI细分失败:', error)
       notifications.show({
         title: '❌ AI细分失败',
         message: error.response?.data?.error || error.message || '请检查LLM配置',
@@ -2272,10 +2399,11 @@ const InvestmentSummary: React.FC = () => {
           // 重算三级子项，使其与当前二级子项金额匹配
           const recalculatedItems = recalculateThirdLevelItems(savedThirdLevelItems)
           setThirdLevelItems(recalculatedItems)
+          console.log('已重算三级子项以匹配当前二级子项:', recalculatedItems)
         }
       }
     } catch (error) {
-      // 静默处理
+      console.error('加载三级子项失败:', error)
     }
     
     // 打开弹窗
@@ -2285,6 +2413,13 @@ const InvestmentSummary: React.FC = () => {
   // 保存估算数据到数据库（包含projectType）
   const saveEstimateToDatabase = async (estimateData: any) => {
     try {
+      console.log('=== 开始保存估算数据到数据库 ===')
+      console.log('项目ID:', id)
+      console.log('估算数据包含partA:', !!estimateData?.partA)
+      console.log('估算数据包含partG:', !!estimateData?.partG)
+      console.log('三级子项数据:', estimateData.thirdLevelItems)
+      console.log('项目类型:', projectType)
+      
       // 更新项目修改时间（用于Dashboard显示）
       if (id) {
         setProjectUpdateTime(id)
@@ -2296,7 +2431,9 @@ const InvestmentSummary: React.FC = () => {
                                    estimateData?.partG?.合计 > 0
       
       if (!isCompleteStructure && project) {
+        console.log('⚠️ 估算数据结构不完整，将使用buildFullEstimateStructure构建完整结构')
         finalEstimateData = buildFullEstimateStructure(estimateData || {}, project)
+        console.log('已构建完整结构，partA.children长度:', finalEstimateData?.partA?.children?.length)
       }
       
       // 确保数据结构正确，并包含projectType
@@ -2308,13 +2445,25 @@ const InvestmentSummary: React.FC = () => {
         }
       }
       
+      console.log('保存到数据库的数据结构 - partA存在:', !!saveData.estimate_data.partA)
+      console.log('保存到数据库的数据结构 - partG.合计:', saveData.estimate_data.partG?.合计)
+      
       // 使用正确的API调用格式
       const response = await investmentApi.save(saveData)
       
       if (!response.success) {
+        console.error('保存估算数据失败:', response.error)
         throw new Error(response.error || '保存失败')
+      } else {
+        console.log('✅ 估算数据已保存到数据库')
+        console.log('保存的数据包含三级子项:', !!estimateData.thirdLevelItems)
+        console.log('保存的项目类型:', projectType)
+        if (estimateData.thirdLevelItems) {
+          console.log('三级子项条目数:', Object.keys(estimateData.thirdLevelItems).length)
+        }
       }
     } catch (error) {
+      console.error('❌ 保存估算数据失败:', error)
       throw error
     }
   }
@@ -2329,13 +2478,14 @@ const InvestmentSummary: React.FC = () => {
     // partB包含：土地费用、建设单位管理费等
     const otherCost = est.partB?.合计 || 0
     
-    // 查找基本预备费
+    // 🔍 查找基本预备费 - 由于后端数据结构问题，partD返回的是"基本预备费"
+    // 先检查partB.children中是否有"基本预备费"，如果没有则从partD.合计获取
     let basicReserve = est.partB?.children?.find(c => 
       c.工程或费用名称?.includes('基本预备费') || 
       c.工程或费用名称 === '基本预备费'
     )?.合计 || 0
     
-    // 如果partB.children中没有基本预备费，则从partD.合计获取
+    // 如果partB.children中没有基本预备费，则从partD.合计获取（后端数据结构异常时的处理）
     if (basicReserve === 0 && est.partD?.工程或费用名称 === '基本预备费') {
       basicReserve = est.partD?.合计 || 0
     }
@@ -2343,7 +2493,7 @@ const InvestmentSummary: React.FC = () => {
     // 工程建设其他费用 = partB合计（基本预备费在partD中）
     const otherExpenses = otherCost
     
-    // 建设期利息
+    // 💰 建设期利息 - 由于后端数据结构问题，partD返回的是"基本预备费"，所以从partF.合计获取
     const constructionInterest = est.partF?.合计 || 0
     
     return `总投资${totalInvestment.toFixed(2)}万元，其中：工程费用${constructionCost.toFixed(2)}万元，工程建设其他费用${otherExpenses.toFixed(2)}万元，基本预备费${basicReserve.toFixed(2)}万元，建设期利息${constructionInterest.toFixed(2)}万元。`
@@ -2362,22 +2512,31 @@ const InvestmentSummary: React.FC = () => {
     return `资金来源：申请银行贷款${loanAmount.toFixed(2)}万元，占投资估算总额的${loanRatio.toFixed(2)}%；业主多渠道筹集${selfFundedAmount.toFixed(2)}万元，占投资估算总额的${selfRatio.toFixed(2)}%。`
   }
 
-  // 生成建设规模信息文本（整合partA子项的备注，用于AI生成项目概况）
+  // [DEBUG] 生成建设规模信息文本（整合partA子项的备注，用于AI生成项目概况）
   const generateConstructionScaleText = (est: InvestmentEstimate | null): string => {
     if (!est?.partA?.children) {
+      console.log('[generateConstructionScaleText] partA.children为空，返回空字符串')
       return ''
     }
     
     const remarks = est.partA.children
-      .map((item) => item.备注 || '')
+      .map((item, index) => {
+        const remark = item.备注 || ''
+        console.log(`[generateConstructionScaleText] 子项${index + 1} "${item.工程或费用名称}" - 备注: "${remark}"`)
+        return remark
+      })
       .filter(r => r && r.trim() !== '')
     
-    return remarks.join('；')
+    const result = remarks.join('；')
+    console.log(`[generateConstructionScaleText] 整合后的建设规模提示词: "${result}"`)
+    
+    return result
   }
 
   // 保存项目概况信息到localStorage和数据库
   const saveProjectOverviewInfo = async (est: InvestmentEstimate | null, projId: string) => {
     if (!est) {
+      console.warn('[saveProjectOverviewInfo] estimate为空，跳过保存')
       return
     }
     
@@ -2386,33 +2545,45 @@ const InvestmentSummary: React.FC = () => {
     const fundingSource = generateFundingSourceText(est)
     const constructionScale = generateConstructionScaleText(est)
     
+    console.log('[saveProjectOverviewInfo] 生成项目概况信息:')
+    console.log('  信息1(投资构成):', investmentSummary)
+    console.log('  信息2(资金来源):', fundingSource)
+    console.log('  [DEBUG] 信息3(建设规模):', constructionScale)
+    
     // 1. 保存到localStorage（作为备用和快速访问）
     const overviewInfo = {
       investmentSummary,
       fundingSource,
-      constructionScale,
+      constructionScale,  // [DEBUG] 保存建设规模信息
       savedAt: new Date().toISOString(),
       projectId: projId
     }
     localStorage.setItem(`project_overview_${projId}`, JSON.stringify(overviewInfo))
+    console.log('[saveProjectOverviewInfo] 已保存到localStorage')
     
     // 2. 保存到数据库（持久化存储）
+    // 将investmentSummary和fundingSource保存到investments表的estimate_data字段
     try {
       const saveData = {
         project_id: projId,
         estimate_data: {
           investmentSummary,
           fundingSource,
-          constructionScale,
+          constructionScale,  // [DEBUG] 保存建设规模信息到数据库
         }
       }
-      await investmentApi.save(saveData)
+      const response = await investmentApi.save(saveData)
+      if (response.success) {
+        console.log('[saveProjectOverviewInfo] 已保存到数据库')
+      } else {
+        console.error('[saveProjectOverviewInfo] 保存到数据库失败:', response.error)
+      }
     } catch (error) {
-      // 静默处理
+      console.error('[saveProjectOverviewInfo] 保存到数据库异常:', error)
     }
   }
 
-  // 关闭并应用三级子项
+  // 关闭并应用三级子项// 关闭并应用三级子项
   const closeAndApplyThirdLevelItems = async () => {
     if (!estimate?.partA?.children || !project) {
       setShowSubdivideModal(false)
@@ -2507,6 +2678,8 @@ const InvestmentSummary: React.FC = () => {
 
       // 调用API重新计算
       const response = await investmentApi.generateSummary(id!, tableItems)
+      
+      console.log('应用三级子项API响应:', response)
 
       if (response.success && response.data) {
         const newEstimate = response.data.summary
@@ -2541,6 +2714,11 @@ const InvestmentSummary: React.FC = () => {
         
         // 如果有变化且有需要重新细分的项，则重新计算三级子项
         if (hasChanges && itemsNeedResubdivide.length > 0) {
+          console.log(`检测到${itemsNeedResubdivide.length}个二级子项发生变化，重新计算三级子项`)
+          console.log('变化的二级子项索引:', itemsNeedResubdivide)
+          console.log('旧的二级子项数据:', updatedChildren)
+          console.log('新的二级子项数据:', newEstimate.partA.children)
+          
           // 对每个变化的二级子项，按比例调整其三级子项
           const newThirdLevelItems = { ...thirdLevelItems }
           
@@ -2559,6 +2737,8 @@ const InvestmentSummary: React.FC = () => {
             
             const ratio = newTotal / oldTotal
             
+            console.log(`二级子项${index}：旧合计=${oldTotal}, 新合计=${newTotal}, 比例=${ratio}`)
+            
             // 按比例调整每个三级子项的单价
             const adjustedThirdItems = thirdItems.map((subItem: any) => {
               return {
@@ -2572,6 +2752,8 @@ const InvestmentSummary: React.FC = () => {
           
           // 更新三级子项
           setThirdLevelItems(newThirdLevelItems)
+          
+          console.log('三级子项已按比例调整，新的三级子项数据:', newThirdLevelItems)
           
           // 保存三级子项数据到数据库（包含当前项目类型）
           const estimateWithThirdLevel = {
@@ -2609,6 +2791,7 @@ const InvestmentSummary: React.FC = () => {
         throw new Error(response.error || '应用失败')
       }
     } catch (error: any) {
+      console.error('应用三级子项失败:', error)
       const errorMsg = error.response?.data?.error || error.message || '应用失败'
       notifications.show({
         title: '❌ 应用失败',
@@ -2711,6 +2894,8 @@ const InvestmentSummary: React.FC = () => {
       // 调用API重新计算，传递土地费用
       const tableItems = extractCurrentTableItems()
       const response = await investmentApi.generateSummary(id!, tableItems, undefined, editingLandCost.amount)
+      
+      console.log('应用修改土地费用API响应:', response)
 
       if (response.success && response.data) {
         setEstimate(response.data.summary)
@@ -2718,6 +2903,7 @@ const InvestmentSummary: React.FC = () => {
         throw new Error(response.error || '应用修改失败')
       }
     } catch (error: any) {
+      console.error('应用修改失败:', error)
       const errorMsg = error.response?.data?.error || error.message || '应用修改失败'
       notifications.show({
         title: '❌ 应用失败',
@@ -2742,6 +2928,7 @@ const InvestmentSummary: React.FC = () => {
       })
       return
     }
+    const buildingInvestment = estimate?.partE?.合计 || 0
     const currentLoan = estimate?.partF?.贷款总额 || 0
     const projectRatio = (project?.loan_ratio || 0) * 100
     
@@ -2792,6 +2979,8 @@ const InvestmentSummary: React.FC = () => {
       // 调用API重新计算，传递贷款额
       const tableItems = extractCurrentTableItems()
       const response = await investmentApi.generateSummary(id!, tableItems, finalLoanAmount, undefined)
+      
+      console.log('应用修改贷款额API响应:', response)
 
       if (response.success && response.data) {
         setEstimate(response.data.summary)
@@ -2799,6 +2988,7 @@ const InvestmentSummary: React.FC = () => {
         throw new Error(response.error || '应用修改失败')
       }
     } catch (error: any) {
+      console.error('应用修改失败:', error)
       const errorMsg = error.response?.data?.error || error.message || '应用修改失败'
       notifications.show({
         title: '❌ 应用失败',
@@ -2853,6 +3043,7 @@ const InvestmentSummary: React.FC = () => {
       
       // 调用API应用修改的子项
       const response = await investmentApi.generateSummary(id!, formattedItems)
+      console.log('应用修改子项API响应:', response)
 
       if (response.success && response.data) {
         setEstimate(response.data.summary)
@@ -2867,6 +3058,7 @@ const InvestmentSummary: React.FC = () => {
         throw new Error(response.error || '应用修改失败')
       }
     } catch (error: any) {
+      console.error('应用修改失败:', error)
       const errorMsg = error.response?.data?.error || error.message || '应用修改失败'
       notifications.show({
         title: '❌ 应用失败',
@@ -2917,12 +3109,12 @@ const InvestmentSummary: React.FC = () => {
         {estimate && (
           <div style={{
             position: 'fixed',
-            left: 'calc(50% - 740px)',
+            left: 'calc(50% - 740px)',  // 位于投资估算简表卡片左侧边缘位置
             top: '280px',
             zIndex: 100,
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px',
+            gap: '8px',  // 缩小间距至8px
             alignItems: 'center'
           }}>
           {/* AI分析子项 */}
@@ -2930,7 +3122,7 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={analyzeWithAI}
               disabled={analyzingAI || generating}
-              size={40}
+              size={40}  // 缩小20%：50→40
               radius={40}
               style={{ 
                 backgroundColor: analyzingAI ? '#C9CDD4' : '#FFFFFF',
@@ -2938,12 +3130,12 @@ const InvestmentSummary: React.FC = () => {
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '40px',
-                height: '40px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%'
               }}
             >
-              <Bot size={24} />
+              <Bot size={24} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
           
@@ -2952,7 +3144,7 @@ const InvestmentSummary: React.FC = () => {
               <ActionIcon
                 onClick={() => setShowAIPreview(true)}
                 disabled={generating}
-                size={40}
+                size={40}  // 缩小20%：50→40
                 radius={40}
                 style={{ 
                   backgroundColor: '#FFFFFF',
@@ -2960,12 +3152,12 @@ const InvestmentSummary: React.FC = () => {
                   border: '1px solid #E5E6EB',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                   transition: 'all 0.2s ease',
-                  width: '40px',
-                  height: '40px',
+                  width: '40px',  // 缩小20%：50→40
+                  height: '40px',  // 缩小20%：50→40
                   borderRadius: '50%'
                 }}
               >
-                <Clipboard size={24} />
+                <Clipboard size={24} />  {/* 缩小20%：30→24 */}
               </ActionIcon>
             </Tooltip>
           )}
@@ -2976,7 +3168,7 @@ const InvestmentSummary: React.FC = () => {
                 <ActionIcon
                   onClick={openEditSubItems}
                   disabled={generating}
-                  size={40}
+                  size={40}  // 缩小20%：50→40
                   radius={40}
                   style={{ 
                     backgroundColor: '#FFFFFF',
@@ -2984,12 +3176,12 @@ const InvestmentSummary: React.FC = () => {
                     border: '1px solid #E5E6EB',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                     transition: 'all 0.2s ease',
-                    width: '40px',
-                    height: '40px',
+                    width: '40px',  // 缩小20%：50→40
+                    height: '40px',  // 缩小20%：50→40
                     borderRadius: '50%'
                   }}
                 >
-                  <Pencil size={24} />
+                  <Pencil size={24} />  {/* 缩小20%：30→24 */}
                 </ActionIcon>
               </Tooltip>
               
@@ -2997,7 +3189,7 @@ const InvestmentSummary: React.FC = () => {
                 <ActionIcon
                   onClick={openEditLandCost}
                   disabled={generating}
-                  size={40}
+                  size={40}  // 缩小20%：50→40
                   radius={40}
                   style={{ 
                     backgroundColor: '#FFFFFF',
@@ -3005,12 +3197,12 @@ const InvestmentSummary: React.FC = () => {
                     border: '1px solid #E5E6EB',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                     transition: 'all 0.2s ease',
-                    width: '40px',
-                    height: '40px',
+                    width: '40px',  // 缩小20%：50→40
+                    height: '40px',  // 缩小20%：50→40
                     borderRadius: '50%'
                   }}
                 >
-                  <MapPin size={24} />
+                  <MapPin size={24} />  {/* 缩小20%：30→24 */}
                 </ActionIcon>
               </Tooltip>
               
@@ -3018,7 +3210,7 @@ const InvestmentSummary: React.FC = () => {
                 <ActionIcon
                   onClick={openEditLoan}
                   disabled={generating}
-                  size={40}
+                  size={40}  // 缩小20%：50→40
                   radius={40}
                   style={{ 
                     backgroundColor: '#FFFFFF',
@@ -3026,12 +3218,12 @@ const InvestmentSummary: React.FC = () => {
                     border: '1px solid #E5E6EB',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                     transition: 'all 0.2s ease',
-                    width: '40px',
-                    height: '40px',
+                    width: '40px',  // 缩小20%：50→40
+                    height: '40px',  // 缩小20%：50→40
                     borderRadius: '50%'
                   }}
                 >
-                  <IconCurrencyDollar size={24} stroke={1.5} />
+                  <IconCurrencyDollar size={24} stroke={1.5} />  {/* 缩小20%：30→24 */}
                 </ActionIcon>
               </Tooltip>
             </>
@@ -3043,7 +3235,7 @@ const InvestmentSummary: React.FC = () => {
               <ActionIcon
                 onClick={openSubdivideModal}
                 disabled={generating || analyzingSubItem}
-                size={40}
+                size={40}  // 缩小20%：50→40
                 radius={40}
                 style={{ 
                   backgroundColor: '#FFFFFF',
@@ -3051,22 +3243,22 @@ const InvestmentSummary: React.FC = () => {
                   border: '1px solid #E5E6EB',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                   transition: 'all 0.2s ease',
-                  width: '40px',
-                  height: '40px',
+                  width: '40px',  // 缩小20%：50→40
+                  height: '40px',  // 缩小20%：50→40
                   borderRadius: '50%'
                 }}
               >
-                <ZoomIn size={24} />
+                <ZoomIn size={24} />  {/* 缩小20%：30→24 */}
               </ActionIcon>
             </Tooltip>
           )}
           
           {/* 分割线 */}
           <div style={{ 
-            width: '24px',
+            width: '24px',  // 缩小20%：30→24
             height: '1px', 
             backgroundColor: '#E5E6EB',
-            margin: '6px 0'
+            margin: '6px 0'  // 稍微缩小
           }} />
           
           {/* 重新生成投资估算 */}
@@ -3074,7 +3266,7 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={handleRegenerate}
               disabled={generating}
-              size={40}
+              size={40}  // 缩小20%：50→40
               radius={40}
               style={{ 
                 backgroundColor: generating ? '#C9CDD4' : '#FFFFFF',
@@ -3082,12 +3274,12 @@ const InvestmentSummary: React.FC = () => {
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '40px',
-                height: '40px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%'
               }}
             >
-              <RotateCw size={24} />
+              <RotateCw size={24} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
           
@@ -3096,7 +3288,7 @@ const InvestmentSummary: React.FC = () => {
             <ActionIcon
               onClick={exportToExcel}
               disabled={!estimate}
-              size={40}
+              size={40}  // 缩小20%：50→40
               radius={40}
               style={{ 
                 backgroundColor: '#FFFFFF',
@@ -3104,12 +3296,12 @@ const InvestmentSummary: React.FC = () => {
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '40px',
-                height: '40px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%'
               }}
             >
-              <FileSpreadsheet size={24} />
+              <FileSpreadsheet size={24} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
           
@@ -3133,15 +3325,16 @@ const InvestmentSummary: React.FC = () => {
                       projectType: projectType
                     }
                     await saveEstimateToDatabase(estimateWithThirdLevel)
+                    console.log('[收入成本预测] 投资估算数据已保存到数据库')
                   } catch (error) {
-                    // 静默处理
+                    console.error('保存投资估算数据失败:', error)
                   }
                   // 跳转到收入成本预测页面
                   navigate(`/revenue-cost/${id}`)
                 }
               }}
               disabled={!estimate || Math.abs(estimate.gapRate) >= 1.5}
-              size={40}
+              size={40}  // 缩小20%：50→40
               radius={40}
               style={{ 
                 backgroundColor: (!estimate || Math.abs(estimate.gapRate) >= 1.5) ? '#F2F3F5' : '#FFFFFF',
@@ -3149,13 +3342,13 @@ const InvestmentSummary: React.FC = () => {
                 border: '1px solid #E5E6EB',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.2s ease',
-                width: '40px',
-                height: '40px',
+                width: '40px',  // 缩小20%：50→40
+                height: '40px',  // 缩小20%：50→40
                 borderRadius: '50%',
                 cursor: (!estimate || Math.abs(estimate.gapRate) >= 1.5) ? 'not-allowed' : 'pointer'
               }}
             >
-              <IconChartBar size={24} stroke={1.5} />
+              <IconChartBar size={24} stroke={1.5} />  {/* 缩小20%：30→24 */}
             </ActionIcon>
           </Tooltip>
         </div>
@@ -3202,6 +3395,8 @@ const InvestmentSummary: React.FC = () => {
   withBorder 
   style={{ borderColor: '#E5E6EB', width: '100%' }}
 >
+  {/* 关键修改：justify 从 center 改为 start（靠左对齐） */}
+  {/* 可选：加 ml="0" 或 style={{ marginLeft: 0 }} 消除默认左间距（按需） */}
   <Group gap="30px" align="center" justify="start" style={{ width: '100%' }}>
     <div style={{ textAlign: 'center' }}>
       <Text size="xs" c="#86909C" mb={4}>迭代次数</Text>
@@ -3283,6 +3478,10 @@ const InvestmentSummary: React.FC = () => {
 
               {/* 投资估算简表 - 完整表格 */}
               <Card shadow="sm" padding="lg" radius="md" withBorder style={{ borderColor: '#E5E6EB' }}>
+                {/* 
+  // 临时注释：隐藏投资估算简表标题
+  <Text size="sm" c="#1D2129" fw={600} mb="md">投资估算简表</Text>
+  */}
                 {estimate && estimate.partA && estimate.partB && estimate.partC && estimate.partD && estimate.partE && estimate.partG ? (
                   <Table withTableBorder withColumnBorders style={{ fontSize: '13px', tableLayout: 'fixed', width: '100%' }}>
                     <Table.Thead>
@@ -3783,6 +3982,7 @@ const InvestmentSummary: React.FC = () => {
               {editingSubItems.map((item, index) => {
                 const originalItem = originalSubItems[index]
                 const diff = (item['合计'] || 0) - (originalItem?.['合计'] || 0)
+                const isIncrease = diff > 0
                 const isDecrease = diff < 0
                 
                 return (
@@ -4153,7 +4353,7 @@ const InvestmentSummary: React.FC = () => {
         title="💰 修改贷款额度"
         size="md"
         centered
-        styles={{
+               styles={{
           title: { fontWeight: 600, fontSize: '16px', color: '#1D2129' }
         }}
       >
@@ -4285,14 +4485,14 @@ const InvestmentSummary: React.FC = () => {
               <Table.Tr style={{ backgroundColor: '#F7F8FA' }}>
                 <Table.Th style={{ textAlign: 'center', width: '60px', fontSize: '13px' }}>序号</Table.Th>
                 <Table.Th style={{ textAlign: 'center', width: '500px', fontSize: '13px' }}>工程或费用名称</Table.Th>
-                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>建设工程费<br /></Table.Th>
-                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>设备购置费<br /></Table.Th>
-                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>安装工程费<br /></Table.Th>
-                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>其它费用<br /></Table.Th>
-                <Table.Th style={{ textAlign: 'center', width: '96px', fontSize: '13px' }}>合计<br /></Table.Th>
+                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>建设工程费<br />(万元)</Table.Th>
+                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>设备购置费<br />(万元)</Table.Th>
+                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>安装工程费<br />(万元)</Table.Th>
+                <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>其它费用<br />(万元)</Table.Th>
+                <Table.Th style={{ textAlign: 'center', width: '96px', fontSize: '13px' }}>合计<br />(万元)</Table.Th>
                 <Table.Th style={{ textAlign: 'center', width: '40px', fontSize: '13px' }}>单位</Table.Th>
                 <Table.Th style={{ textAlign: 'center', width: '64px', fontSize: '13px' }}>数量</Table.Th>
-                <Table.Th style={{ textAlign: 'center', width: '96px', fontSize: '13px' }}>单位价值<br /></Table.Th>
+                <Table.Th style={{ textAlign: 'center', width: '96px', fontSize: '13px' }}>单位价值<br />(元)</Table.Th>
                 <Table.Th style={{ textAlign: 'center', width: '80px', fontSize: '13px' }}>操作</Table.Th>
               </Table.Tr>
             </Table.Thead>

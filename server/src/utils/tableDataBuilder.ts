@@ -162,131 +162,607 @@ export function buildDepreciationAmortizationJSON(depreciationData: any): string
 
 /**
  * 构建营业收入、税金及附加估算表 JSON 数据
+ * 
+ * 返回结构包含：
+ * - parameters: 营业收入配置表格数据（序号、收入项名称、模板、参数值）
+ * - rows: 渲染后的表格数据（序号、合计、运营期）
  */
 export function buildRevenueTaxJSON(revenueTaxData: any): string {
   if (!revenueTaxData) return '{}'
   
   const jsonData: any = {
     title: '营业收入、营业税金及附加和增值税估算表',
-    revenueItems: [],
-    taxItems: [],
-    vatItems: [],
-    summary: {
-      totalRevenue: 0,
-      totalTax: 0,
-      totalVAT: 0
+    urbanTaxRate: revenueTaxData.urbanTaxRate || 0.07,
+    parameters: [],
+    rows: [],
+    updatedAt: revenueTaxData.updatedAt || new Date().toISOString()
+  }
+  
+  // 模板名称映射
+  const TEMPLATE_LABELS: Record<string, string> = {
+    'quantity-price': '数量 × 单价',
+    'area-yield-price': '面积 × 亩产量 × 单价',
+    'capacity-utilization': '产能 × 利用率 × 单价',
+    'subscription': '订阅数 × 单价',
+    'direct-amount': '直接金额',
+  }
+  
+  // 辅助函数：根据单价阈值动态格式化价格显示（与 DynamicRevenueTable.renderFieldValue 保持一致）
+  const formatPriceWithUnit = (price: number | undefined, unit: string = '万元'): string => {
+    if (price === undefined || price === null) return `0${unit}`
+    // 单价 < 0.1万元（1000元）时显示为元
+    if (price < 0.1) {
+      const priceInYuan = price * 10000
+      const displayPrice = parseFloat(priceInYuan.toFixed(2)).toString()
+      // 如果单位是万元（无后缀），只显示"元"
+      // 如果单位是万元/xxx，显示为"元/xxx"
+      if (unit === '万元') {
+        return `${displayPrice}元`
+      }
+      return `${displayPrice}${unit.replace('万元', '元')}`
+    }
+    // 保留2位小数，使用 parseFloat 去掉末尾的0
+    const displayPrice = parseFloat(price.toFixed(2)).toString()
+    return `${displayPrice}${unit}`
+  }
+  
+  // 大数值简化函数 - 将大数字转换为万、千万、亿单位
+  const formatLargeNumber = (value: number): string => {
+    if (value >= 100000000) {
+      return `${(value / 100000000).toFixed(2).replace(/\.?0+$/, '')}亿`
+    } else if (value >= 10000000) {
+      return `${(value / 10000000).toFixed(2).replace(/\.?0+$/, '')}千万`
+    } else if (value >= 10000) {
+      return `${(value / 10000).toFixed(2).replace(/\.?0+$/, '')}万`
+    }
+    return value.toString()
+  }
+  
+  // 格式化参数值（与 DynamicRevenueTable.renderFieldValue 保持一致）
+  const formatParamValue = (item: any): string => {
+    switch (item.fieldTemplate) {
+      case 'quantity-price':
+        return `${formatLargeNumber(item.quantity || 0)}${item.unit || ''} × ${formatPriceWithUnit(item.unitPrice, item.unit ? `万元/${item.unit}` : '万元')}`
+      case 'area-yield-price':
+        return `${formatLargeNumber(item.area || 0)}亩 × ${formatLargeNumber(item.yieldPerArea || 0)}${item.yieldPerAreaUnit || ''} × ${formatPriceWithUnit(item.unitPrice, item.yieldPerAreaUnit ? `万元/${item.yieldPerAreaUnit}` : '万元')}`
+      case 'capacity-utilization':
+        return `${formatLargeNumber(item.capacity || 0)}${item.capacityUnit || ''} × ${((item.utilizationRate || 0) * 100).toFixed(0)}% × ${formatPriceWithUnit(item.unitPrice)}`
+      case 'subscription':
+        return `${formatLargeNumber(item.subscriptions || 0)} × ${formatPriceWithUnit(item.unitPrice)}`
+      case 'direct-amount':
+        // 直接金额模板：显示数量 × 单价格式（如果有数量和单价信息）
+        if (item.quantity && item.quantity > 0 && item.unitPrice && item.unitPrice > 0) {
+          return `${formatLargeNumber(item.quantity)}${item.unit || ''} × ${formatPriceWithUnit(item.unitPrice, item.unit ? `万元/${item.unit}` : '万元')}`
+        }
+        return `${parseFloat((item.directAmount || 0).toFixed(4)).toString()}万元/年`
+      default:
+        return ''
     }
   }
   
-  // 收入项目
+  // 1. 构建 parameters - 只包含序号为1.1-1.10的收入项
   const revenueItems = safeParseJSON(revenueTaxData.revenueItems)
   if (revenueItems && Array.isArray(revenueItems)) {
-    jsonData.revenueItems = revenueItems.map((item: any) => ({
-      序号: item.序号 || item.index,
-      项目名称: item.name || item.项目名称 || '',
-      产品名称: item.productName || item.product_name || '',
-      单位: item.unit || item.单位 || '',
-      单价: item.price || item.单价 || 0,
-      销量: item.quantity || item.销量 || 0,
-      年营业收入: item.annualRevenue || item.年营业收入 || 0
-    }))
-    
-    jsonData.summary.totalRevenue = jsonData.revenueItems.reduce(
-      (sum: number, item: any) => sum + (item.年营业收入 || 0), 0
-    )
+    revenueItems.forEach((item: any, idx: number) => {
+      if (idx < 10) { // 只保留 1.1-1.10
+        jsonData.parameters.push({
+          序号: `1.${idx + 1}`,
+          收入项目: item.name || '',
+          模板: TEMPLATE_LABELS[item.fieldTemplate] || '',
+          parametervalue: formatParamValue(item)
+        })
+      }
+    })
   }
   
-  // 税金项目
-  const taxItems = safeParseJSON(revenueTaxData.taxItems)
-  if (taxItems && Array.isArray(taxItems)) {
-    jsonData.taxItems = taxItems.map((item: any) => ({
-      序号: item.序号 || item.index,
-      项目名称: item.name || item.项目名称 || '',
-      税率: item.taxRate || item.税率 || 0,
-      年税金: item.annualTax || item.年税金 || 0
+  // 2. 构建 rows - 渲染后的表格数据
+  const revenueTableData = safeParseJSON(revenueTaxData.revenueTableData)
+  if (revenueTableData && revenueTableData.rows && Array.isArray(revenueTableData.rows)) {
+    jsonData.rows = revenueTableData.rows.map((row: any) => ({
+      序号: row.序号,
+      合计: Number(row.合计) > 0 ? Number(row.合计).toFixed(2) : row.合计,
+      运营期: (row.运营期 || []).map((val: number) => (val > 0 ? Number(val).toFixed(2) : val))
     }))
-    
-    jsonData.summary.totalTax = jsonData.taxItems.reduce(
-      (sum: number, item: any) => sum + (item.年税金 || 0), 0
-    )
+    // 保留城市维护税率
+    jsonData.urbanTaxRate = revenueTableData.urbanTaxRate || jsonData.urbanTaxRate
   }
   
-  // 增值税项目
-  const vatItems = safeParseJSON(revenueTaxData.vatItems)
-  if (vatItems && Array.isArray(vatItems)) {
-    jsonData.vatItems = vatItems.map((item: any) => ({
-      序号: item.序号 || item.index,
-      项目名称: item.name || item.项目名称 || '',
-      税率: item.vatRate || item.税率 || 0,
-      年增值税: item.annualVAT || item.年增值税 || 0
-    }))
-    
-    jsonData.summary.totalVAT = jsonData.vatItems.reduce(
-      (sum: number, item: any) => sum + (item.年增值税 || 0), 0
-    )
-  }
+  console.log('✅ buildRevenueTaxJSON 输出:', JSON.stringify(jsonData, null, 2))
   
   return JSON.stringify(jsonData, null, 2)
 }
 
 /**
  * 构建外购原材料费估算表 JSON 数据
+ * 返回结构与 buildRevenueTaxJSON 一致：包含 parameters（参数配置）和 rows（渲染数据）
+ * 
+ * 数据来源：projectData.revenueCost.costConfig.rawMaterials
+ * 优先使用前端渲染好的表格数据 rawMaterialsTableData 和 fuelPowerTableData
  */
 export function buildRawMaterialsJSON(rawMaterialsData: any): string {
   if (!rawMaterialsData) return '{}'
   
   const jsonData: any = {
     title: '外购原材料费估算表',
-    items: [],
-    summary: { totalCost: 0 }
+    parameters: [],
+    rows: [],
+    summary: { totalCost: 0 },
+    updatedAt: new Date().toISOString()
   }
   
-  const items = safeParseJSON(rawMaterialsData.raw_materials)
-  if (items && Array.isArray(items)) {
-    jsonData.items = items.map((item: any) => ({
-      序号: item.序号 || item.index,
-      材料名称: item.name || item.材料名称 || '',
-      单位: item.unit || item.单位 || '',
-      单价: item.unitPrice || item.单价 || 0,
-      年用量: item.annualQuantity || item.年用量 || 0,
-      年费用: item.annualCost || item.年费用 || 0
-    }))
-    
-    jsonData.summary.totalCost = jsonData.items.reduce(
-      (sum: number, item: any) => sum + (item.年费用 || 0), 0
-    )
+  // 优先从 rawMaterialsTableData 获取渲染后的表格数据和费用计算信息
+  let rawMaterialsTableData = null
+  
+  // 路径1: rawMaterialsData.revenueCost?.rawMaterialsTableData（前端渲染数据）
+  if (rawMaterialsData.revenueCost?.rawMaterialsTableData) {
+    rawMaterialsTableData = typeof rawMaterialsData.revenueCost.rawMaterialsTableData === 'string' 
+      ? safeParseJSON(rawMaterialsData.revenueCost.rawMaterialsTableData) 
+      : rawMaterialsData.revenueCost.rawMaterialsTableData
   }
+  // 路径2: rawMaterialsData.rawMaterialsTableData
+  else if (rawMaterialsData.rawMaterialsTableData) {
+    rawMaterialsTableData = typeof rawMaterialsData.rawMaterialsTableData === 'string'
+      ? safeParseJSON(rawMaterialsData.rawMaterialsTableData)
+      : rawMaterialsData.rawMaterialsTableData
+  }
+  
+  // 1. 构建 parameters - 从 rawMaterialsTableData.rows 获取渲染数据
+  if (rawMaterialsTableData?.rows && Array.isArray(rawMaterialsTableData.rows)) {
+    // 过滤出子项（序号为 1.1, 1.2, 1.3... 的行）
+    const itemRows = rawMaterialsTableData.rows.filter((row: any) => {
+      const serialNum = row.serialNumber || row.序号 || ''
+      return /^\d+\.\d+$/.test(serialNum.toString())
+    })
+    
+    // 获取原始配置项用于补充计算方式等信息
+    let configItems: any[] = []
+    const rawMaterialsConfig = rawMaterialsData.revenueCost?.costConfig?.rawMaterials || rawMaterialsData.costConfig?.rawMaterials
+    if (rawMaterialsConfig?.items && Array.isArray(rawMaterialsConfig.items)) {
+      configItems = rawMaterialsConfig.items
+    }
+    
+    if (itemRows.length > 0) {
+      // 获取收入项数据用于计算收入基数
+      let revenueItems: any[] = []
+      const rawMaterialsConfig = rawMaterialsData.revenueCost?.costConfig || rawMaterialsData.costConfig
+      if (rawMaterialsConfig?.revenueItems && Array.isArray(rawMaterialsConfig.revenueItems)) {
+        revenueItems = rawMaterialsConfig.revenueItems
+      } else {
+        const revenueItemsRaw = rawMaterialsData.revenueCost?.revenueItems || rawMaterialsData.revenueItems
+        if (revenueItemsRaw) {
+          revenueItems = typeof revenueItemsRaw === 'string' ? safeParseJSON(revenueItemsRaw) : revenueItemsRaw
+        }
+      }
+      
+      // 计算项目总收入（含税）
+      const calculateTotalRevenue = () => {
+        return revenueItems.reduce((sum: number, item: any) => {
+          let itemRevenue = 0
+          switch (item.fieldTemplate) {
+            case 'quantity-price':
+              itemRevenue = (item.quantity || 0) * (item.unitPrice || 0)
+              break
+            case 'area-yield-price':
+              itemRevenue = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0)
+              break
+            case 'capacity-utilization':
+              itemRevenue = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0)
+              break
+            case 'subscription':
+              itemRevenue = (item.subscriptions || 0) * (item.unitPrice || 0)
+              break
+            case 'direct-amount':
+              itemRevenue = item.directAmount || 0
+              break
+          }
+          return sum + itemRevenue
+        }, 0)
+      }
+      
+      const totalRevenue = calculateTotalRevenue()
+      
+      jsonData.parameters = itemRows.map((row: any, idx: number) => {
+        const configItem = configItems[idx]
+        const sourceType = configItem?.sourceType || 'unknown'
+        
+        // 计算方式描述
+        let 计算方式 = ''
+        let 单价 = 0
+        let 年用量 = 0
+        let 年费用: string | number = 0
+        let 百分比 = 0
+        let 收入基数: string = ''
+        let 收入基数金额: number = 0
+        
+        switch (sourceType) {
+          case 'percentage':
+            计算方式 = '按收入百分比'
+            百分比 = configItem?.percentage || 0
+            // 获取收入基数信息
+            if (configItem?.linkedRevenueId === 'total' || !configItem?.linkedRevenueId) {
+              收入基数 = '项目总收入'
+              收入基数金额 = totalRevenue
+            } else {
+              const linkedRevenue = revenueItems.find((r: any) => r.id === configItem.linkedRevenueId)
+              收入基数 = linkedRevenue?.name || '特定收入项'
+              // 计算该收入项的金额
+              if (linkedRevenue) {
+                let revAmount = 0
+                switch (linkedRevenue.fieldTemplate) {
+                  case 'quantity-price':
+                    revAmount = (linkedRevenue.quantity || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'area-yield-price':
+                    revAmount = (linkedRevenue.area || 0) * (linkedRevenue.yieldPerArea || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'capacity-utilization':
+                    revAmount = (linkedRevenue.capacity || 0) * (linkedRevenue.utilizationRate || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'subscription':
+                    revAmount = (linkedRevenue.subscriptions || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'direct-amount':
+                    revAmount = linkedRevenue.directAmount || 0
+                    break
+                }
+                收入基数金额 = revAmount
+              } else {
+                收入基数金额 = totalRevenue
+              }
+            }
+            // 年费用 = 收入基数 × 百分比
+            年费用 = 收入基数金额 * (百分比 / 100)
+            break
+          case 'quantityPrice':
+            计算方式 = '数量×单价'
+            单价 = configItem?.unitPrice || 0
+            年用量 = configItem?.quantity || 0
+            年费用 = 单价 * 年用量
+            break
+          case 'directAmount':
+            计算方式 = '直接金额'
+            年费用 = configItem?.directAmount || 0
+            break
+          default:
+            计算方式 = sourceType
+            年费用 = row.total || 0
+        }
+        
+        // 获取单位用于动态字段名
+        const 单位 = configItem?.unit || configItem?.单位 || ''
+        
+        return {
+          序号: row.serialNumber || row.序号 || `1.${idx + 1}`,
+          材料名称: row.name || configItem?.name || '',
+          ...(单位 ? { 单位 } : {}),
+          计算方式,
+          // 单价字段：根据计算方式决定单位
+          ...(计算方式 === '数量×单价' ? {
+            '单价（万元）': 单价 > 0 ? Number(单价).toFixed(4) : undefined
+          } : 计算方式 === '按收入百分比' ? {} : {
+            '单价（元）': 单价 > 0 ? Number(单价).toFixed(2) : undefined
+          }),
+          // 年用量字段：动态单位
+          ...(年用量 > 0 ? {
+            [单位 ? `年用量（${单位}）` : '年用量']: Number(年用量).toFixed(2)
+          } : {}),
+          '年费用（万元）': typeof 年费用 === 'number' ? (年费用 > 0 ? Number(年费用).toFixed(2) : '0.00') : 年费用,
+          ...(百分比 > 0 ? { '百分比（%）': `${百分比}%` } : {}),
+          ...(收入基数 ? { 收入基数, '收入基数金额（万元）': Number(收入基数金额).toFixed(2) } : {})
+        }
+      })
+    }
+    
+    // 2. 构建 rows - 直接使用 rawMaterialsTableData.rows 中的渲染数据
+    jsonData.rows = rawMaterialsTableData.rows
+      .filter((row: any) => {
+        const serialNum = row.serialNumber || row.序号 || ''
+        // 只保留主要行（序号为 1, 4, 5 等，不包含 1.1, 1.2 等子项）
+        return !/^\d+\.\d+$/.test(serialNum.toString())
+      })
+      .map((row: any) => ({
+        序号: row.serialNumber || row.序号,
+        成本项目: row.name || row.成本项目,
+        合计: Number(row.total) > 0 ? Number(row.total).toFixed(2) : row.total,
+        运营期: (row.years || row.运营期 || []).map((val: number) => 
+          Number(val) > 0 ? Number(val).toFixed(2) : val
+        )
+      }))
+    
+    // 计算合计金额（从 yearsData 或 rows 中获取）
+    if (rawMaterialsTableData.yearsData && Array.isArray(rawMaterialsTableData.yearsData)) {
+      jsonData.summary.totalCost = rawMaterialsTableData.yearsData.reduce(
+        (sum: number, item: any) => sum + (item.total || 0), 0
+      )
+    } else {
+      // 从 rows 中计算合计
+      const mainRow = rawMaterialsTableData.rows.find((row: any) => {
+        const serialNum = row.serialNumber || row.序号 || ''
+        return serialNum === '1' || serialNum === '5'
+      })
+      jsonData.summary.totalCost = Number(mainRow?.total) || 0
+    }
+  }
+  else {
+    // 降级方案：使用原始配置数据（原有逻辑）
+    let items: any[] = []
+    
+    const rawMaterialsConfig = rawMaterialsData.revenueCost?.costConfig?.rawMaterials
+    if (rawMaterialsConfig?.items && Array.isArray(rawMaterialsConfig.items)) {
+      items = rawMaterialsConfig.items
+    }
+    else if (rawMaterialsData.costConfig?.rawMaterials?.items && Array.isArray(rawMaterialsData.costConfig.rawMaterials.items)) {
+      items = rawMaterialsData.costConfig.rawMaterials.items
+    }
+    else {
+      const rawItems = safeParseJSON(rawMaterialsData.raw_materials)
+      if (rawItems && Array.isArray(rawItems)) {
+        items = rawItems
+      }
+    }
+    
+    if (items.length > 0) {
+      // 获取收入项数据用于计算收入基数
+      let revenueItems: any[] = []
+      const rawMaterialsConfig = rawMaterialsData.revenueCost?.costConfig || rawMaterialsData.costConfig
+      if (rawMaterialsConfig?.revenueItems && Array.isArray(rawMaterialsConfig.revenueItems)) {
+        revenueItems = rawMaterialsConfig.revenueItems
+      } else {
+        const revenueItemsRaw = rawMaterialsData.revenueCost?.revenueItems || rawMaterialsData.revenueItems
+        if (revenueItemsRaw) {
+          revenueItems = typeof revenueItemsRaw === 'string' ? safeParseJSON(revenueItemsRaw) : revenueItemsRaw
+        }
+      }
+      
+      // 计算项目总收入（含税）
+      const calculateTotalRevenue = () => {
+        return revenueItems.reduce((sum: number, item: any) => {
+          let itemRevenue = 0
+          switch (item.fieldTemplate) {
+            case 'quantity-price':
+              itemRevenue = (item.quantity || 0) * (item.unitPrice || 0)
+              break
+            case 'area-yield-price':
+              itemRevenue = (item.area || 0) * (item.yieldPerArea || 0) * (item.unitPrice || 0)
+              break
+            case 'capacity-utilization':
+              itemRevenue = (item.capacity || 0) * (item.utilizationRate || 0) * (item.unitPrice || 0)
+              break
+            case 'subscription':
+              itemRevenue = (item.subscriptions || 0) * (item.unitPrice || 0)
+              break
+            case 'direct-amount':
+              itemRevenue = item.directAmount || 0
+              break
+          }
+          return sum + itemRevenue
+        }, 0)
+      }
+      
+      const totalRevenue = calculateTotalRevenue()
+      
+      jsonData.parameters = items.map((item: any, idx: number) => {
+        const sourceType = item.sourceType || 'unknown'
+        let 计算方式 = ''
+        let 单价 = 0
+        let 年用量 = 0
+        let 年费用: string | number = 0
+        let 百分比 = 0
+        let 收入基数: string = ''
+        let 收入基数金额: number = 0
+        
+        switch (sourceType) {
+          case 'percentage':
+            计算方式 = '按收入百分比'
+            百分比 = item.percentage || 0
+            
+            // 获取收入基数信息
+            if (item.linkedRevenueId === 'total' || !item.linkedRevenueId) {
+              收入基数 = '项目总收入'
+              收入基数金额 = totalRevenue
+            } else {
+              const linkedRevenue = revenueItems.find((r: any) => r.id === item.linkedRevenueId)
+              if (linkedRevenue) {
+                收入基数 = linkedRevenue.name || '特定收入项'
+                // 计算该收入项的金额
+                let revAmount = 0
+                switch (linkedRevenue.fieldTemplate) {
+                  case 'quantity-price':
+                    revAmount = (linkedRevenue.quantity || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'area-yield-price':
+                    revAmount = (linkedRevenue.area || 0) * (linkedRevenue.yieldPerArea || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'capacity-utilization':
+                    revAmount = (linkedRevenue.capacity || 0) * (linkedRevenue.utilizationRate || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'subscription':
+                    revAmount = (linkedRevenue.subscriptions || 0) * (linkedRevenue.unitPrice || 0)
+                    break
+                  case 'direct-amount':
+                    revAmount = linkedRevenue.directAmount || 0
+                    break
+                }
+                收入基数金额 = revAmount
+              } else {
+                收入基数 = '项目总收入'
+                收入基数金额 = totalRevenue
+              }
+            }
+            
+            // 年费用 = 收入基数 × 百分比
+            年费用 = 收入基数金额 * (百分比 / 100)
+            break
+          case 'quantityPrice':
+            计算方式 = '数量×单价'
+            单价 = item.unitPrice || item.单价 || 0
+            年用量 = item.annualQuantity || item.年用量 || item.quantity || 0
+            年费用 = 单价 * 年用量
+            break
+          case 'directAmount':
+            计算方式 = '直接金额'
+            年费用 = item.directAmount || 0
+            break
+          default:
+            计算方式 = sourceType
+            年费用 = item.annualCost || item.年费用 || 0
+        }
+        
+        // 获取单位用于动态字段名
+        const 单位 = item.unit || item.单位 || ''
+        
+        return {
+          序号: item.序号 || (idx + 1),
+          材料名称: item.name || item.材料名称 || '',
+          单位: 单位,
+          计算方式,
+          // 单价字段：根据计算方式决定单位
+          ...(计算方式 === '数量×单价' ? {
+            '单价（万元）': 单价 > 0 ? Number(单价).toFixed(4) : undefined
+          } : 计算方式 === '按收入百分比' ? {} : {
+            '单价（元）': 单价 > 0 ? Number(单价).toFixed(2) : undefined
+          }),
+          // 年用量字段：动态单位
+          ...(年用量 > 0 ? {
+            [单位 ? `年用量（${单位}）` : '年用量']: Number(年用量).toFixed(2)
+          } : {}),
+          '年费用（万元）': typeof 年费用 === 'number' ? (年费用 > 0 ? Number(年费用).toFixed(2) : '0.00') : 年费用,
+          ...(百分比 > 0 ? { '百分比（%）': `${百分比}%` } : {}),
+          ...(收入基数 ? { 收入基数, '收入基数金额（万元）': Number(收入基数金额).toFixed(2) } : {})
+        }
+      })
+    }
+    
+    // 从 costTableData 获取 rows
+    let costTableData = rawMaterialsData.revenueCost?.costTableData
+    if (!costTableData && rawMaterialsData.costTableData) {
+      costTableData = rawMaterialsData.costTableData
+    }
+    
+    if (costTableData) {
+      const tableData = typeof costTableData === 'string' ? safeParseJSON(costTableData) : costTableData
+      if (tableData?.rows && Array.isArray(tableData.rows)) {
+        const rawMaterialsRow = tableData.rows.find(
+          (r: any) => r.成本项目?.includes('外购原材料费')
+        )
+        if (rawMaterialsRow) {
+          jsonData.rows = [{
+            序号: rawMaterialsRow.序号,
+            成本项目: rawMaterialsRow.成本项目,
+            合计: Number(rawMaterialsRow.合计) > 0 ? Number(rawMaterialsRow.合计).toFixed(2) : rawMaterialsRow.合计,
+            运营期: (rawMaterialsRow.运营期 || []).map((val: number) => 
+              Number(val) > 0 ? Number(val).toFixed(2) : val
+            )
+          }]
+          jsonData.summary.totalCost = Number(rawMaterialsRow.合计) || 0
+        }
+      }
+    }
+  }
+  
+  // 调试日志
+  console.log('🔍 [buildRawMaterialsJSON] 输出:', {
+    parameters数量: jsonData.parameters.length,
+    rows数量: jsonData.rows.length,
+    totalCost: jsonData.summary.totalCost
+  })
   
   return JSON.stringify(jsonData, null, 2)
 }
 
 /**
  * 构建外购燃料和动力费估算表 JSON 数据
+ * 返回结构与 buildRevenueTaxJSON 一致：包含 parameters（参数配置）和 rows（渲染数据）
+ * 
+ * 数据来源：projectData.revenueCost.costConfig.fuelPower
  */
 export function buildFuelPowerJSON(fuelPowerData: any): string {
   if (!fuelPowerData) return '{}'
   
   const jsonData: any = {
     title: '外购燃料和动力费估算表',
-    items: [],
-    summary: { totalCost: 0 }
+    parameters: [],
+    rows: [],
+    summary: { totalCost: 0 },
+    updatedAt: new Date().toISOString()
   }
   
-  const items = safeParseJSON(fuelPowerData.fuel_power)
-  if (items && Array.isArray(items)) {
-    jsonData.items = items.map((item: any) => ({
-      序号: item.序号 || item.index,
-      名称: item.name || item.名称 || item.fuelType || '',
-      单位: item.unit || item.单位 || '',
-      单价: item.unitPrice || item.单价 || 0,
-      年用量: item.annualQuantity || item.年用量 || 0,
-      年费用: item.annualCost || item.年费用 || 0
-    }))
-    
-    jsonData.summary.totalCost = jsonData.items.reduce(
-      (sum: number, item: any) => sum + (item.年费用 || 0), 0
-    )
+  // 1. 构建 parameters - 从 revenueCost.costConfig.fuelPower.items 获取燃料动力参数
+  // 兼容多种数据路径
+  let items: any[] = []
+  
+  // 路径1: fuelPowerData.revenueCost?.costConfig?.fuelPower?.items
+  const fuelPowerConfig1 = fuelPowerData.revenueCost?.costConfig?.fuelPower
+  if (fuelPowerConfig1?.items && Array.isArray(fuelPowerConfig1.items)) {
+    items = fuelPowerConfig1.items
   }
+  // 路径2: fuelPowerData.costConfig?.fuelPower?.items
+  else if (fuelPowerData.costConfig?.fuelPower?.items && Array.isArray(fuelPowerData.costConfig.fuelPower.items)) {
+    items = fuelPowerData.costConfig.fuelPower.items
+  }
+  // 路径3: fuelPowerData.fuel_power（原始格式）
+  else {
+    const rawItems = safeParseJSON(fuelPowerData.fuel_power)
+    if (rawItems && Array.isArray(rawItems)) {
+      items = rawItems
+    }
+  }
+  
+  if (items.length > 0) {
+    jsonData.parameters = items.map((item: any, idx: number) => {
+      // 计算年费用：单价 × 年用量（汽油/柴油需除以10000）
+      const 单价 = item.price || item.unitPrice || item.单价 || 0
+      const 年用量 = item.consumption || item.annualQuantity || item.年用量 || 0
+      const 年费用 = (['汽油', '柴油'].includes(item.name) 
+        ? 单价 * 年用量 / 10000 
+        : 单价 * 年用量)
+      
+      return {
+        序号: item.序号 || (idx + 1),
+        名称: item.name || item.名称 || item.fuelType || '',
+        单位: item.unit || item.单位 || '',
+        '单价（元）': 单价 > 0 ? Number(单价).toFixed(2) : undefined,
+        '年用量': 年用量 > 0 ? Number(年用量).toFixed(2) : undefined,
+        '年费用（万元）': 年费用 > 0 ? Number(年费用).toFixed(2) : undefined
+      }
+    })
+  }
+  
+  // 2. 构建 rows - 从 costTableData 获取渲染后的表格数据
+  // 路径1: fuelPowerData.revenueCost?.costTableData
+  let costTableData = fuelPowerData.revenueCost?.costTableData
+  // 路径2: fuelPowerData.costTableData
+  if (!costTableData && fuelPowerData.costTableData) {
+    costTableData = fuelPowerData.costTableData
+  }
+  
+  if (costTableData) {
+    const tableData = typeof costTableData === 'string' ? safeParseJSON(costTableData) : costTableData
+    if (tableData?.rows && Array.isArray(tableData.rows)) {
+      // 查找"外购燃料及动力费"行（与 DynamicCostTable.tsx 中的成本项目名称一致）
+      const fuelPowerRow = tableData.rows.find(
+        (r: any) => r.成本项目?.includes('外购燃料及动力费')
+      )
+      if (fuelPowerRow) {
+        jsonData.rows = [{
+          序号: fuelPowerRow.序号,
+          成本项目: fuelPowerRow.成本项目,
+          合计: Number(fuelPowerRow.合计) > 0 ? Number(fuelPowerRow.合计).toFixed(2) : fuelPowerRow.合计,
+          运营期: (fuelPowerRow.运营期 || []).map((val: number) => 
+            Number(val) > 0 ? Number(val).toFixed(2) : val
+          )
+        }]
+        jsonData.summary.totalCost = Number(fuelPowerRow.合计) || 0
+      }
+    }
+  }
+  
+  // 调试日志
+  console.log('🔍 [buildFuelPowerJSON] 输出:', {
+    parameters数量: jsonData.parameters.length,
+    rows数量: jsonData.rows.length,
+    totalCost: jsonData.summary.totalCost
+  })
   
   return JSON.stringify(jsonData, null, 2)
 }

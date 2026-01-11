@@ -163,68 +163,23 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     console.log('✅ [编辑] 表单设置完成:', formDataToSet)
   }
   /**
-   * 删除收入项
+   * 大数值简化函数 - 将大数字转换为万、亿单位
+   * @param value - 要简化的数值
+   * @returns 简化后的字符串
    */
-  const handleDelete = (item: RevenueItem) => {
-    modals.openConfirmModal({
-      title: '确认删除',
-      centered: true,
-      children: (
-        <Text size="sm">
-          确定要删除收入项“<Text component="span" fw={600} c="red">{item.name}</Text>”吗？
-        </Text>
-      ),
-      labels: { confirm: '确定删除', cancel: '取消' },
-      confirmProps: { color: 'red' },
-      onConfirm: () => {
-        deleteRevenueItem(item.id)
-        notifications.show({
-          title: '成功',
-          message: '收入项已删除',
-          color: 'green',
-        })
-      },
-    })
+  const formatLargeNumber = (value: number): string => {
+    if (value >= 100000000) {
+      return `${(value / 100000000).toFixed(2).replace(/\.?0+$/, '')}亿`
+    } else if (value >= 10000) {
+      return `${(value / 10000).toFixed(2).replace(/\.?0+$/, '')}万`
+    }
+    return value.toString()
   }
-
+  
   /**
-   * 删除全部收入项
-   */
-  const handleDeleteAll = () => {
-    modals.openConfirmModal({
-      title: '确认删除全部',
-      centered: true,
-      children: (
-        <Text size="sm">
-          确定要删除所有收入项吗？此操作不可恢复
-        </Text>
-      ),
-      labels: { confirm: '确定删除', cancel: '取消' },
-      confirmProps: { color: 'red' },
-      onConfirm: () => {
-        clearAllRevenueItems()
-        notifications.show({
-          title: '成功',
-          message: '所有收入项已删除',
-          color: 'green',
-        })
-      },
-    })
-  }
-
-  /**
-   * AI测算收入项
+   * AI估算收入项
    */
   const handleAiEstimate = async () => {
-    if (!formData.name || formData.name.trim() === '') {
-      notifications.show({
-        title: '错误',
-        message: '请先输入收入项名称',
-        color: 'red',
-      })
-      return
-    }
-
     if (!context?.projectId) {
       notifications.show({
         title: '错误',
@@ -236,7 +191,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
 
     setAiEstimating(true)
     try {
-      const response = await revenueCostApi.estimateItem(context.projectId, formData.name)
+      const response = await revenueCostApi.estimateItem(context.projectId, formData.name || '')
 
       if (response.success && response.data) {
         // 应用AI估算结果，包含remark备注
@@ -280,6 +235,54 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
   }
 
   /**
+   * 删除收入项
+   */
+  const handleDelete = (item: RevenueItem) => {
+    modals.openConfirmModal({
+      title: '确认删除',
+      children: (
+        <Text size="sm">
+          确定要删除收入项「{item.name}」吗？此操作不可撤销。
+        </Text>
+      ),
+      labels: { confirm: '确认删除', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        deleteRevenueItem(item.id)
+        notifications.show({
+          title: '已删除',
+          message: `收入项「${item.name}」已删除`,
+          color: 'green',
+        })
+      },
+    })
+  }
+
+  /**
+   * 删除全部收入项
+   */
+  const handleDeleteAll = () => {
+    modals.openConfirmModal({
+      title: '确认删除全部',
+      children: (
+        <Text size="sm">
+          确定要删除全部 {revenueItems.length} 个收入项吗？此操作不可撤销。
+        </Text>
+      ),
+      labels: { confirm: '确认删除', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        clearAllRevenueItems()
+        notifications.show({
+          title: '已删除',
+          message: '全部收入项已删除',
+          color: 'green',
+        })
+      },
+    })
+  }
+
+  /**
    * 保存收入项
    */
   const handleSave = async () => {
@@ -292,8 +295,12 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
       return
     }
 
-    // 直接保存，单位统一为万元
-    const dataToSave = { ...formData }
+    // 直接保存，确保包含所有字段
+    const dataToSave = { 
+      ...formData,
+      // 确保 area-yield-price 模板的亩产量单位字段被保存
+      yieldPerAreaUnit: formData.yieldPerAreaUnit || '',
+    }
     console.log('🔍 [保存] 保存前的formData:', formData)
     console.log('🔍 最终保存到数据库的数据(万元单位):', dataToSave)
 
@@ -644,10 +651,41 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
   };
 
   /**
-   * 计算总进项税额（外购原材料费 + 外购燃料及动力费）
+   * 计算总进项税额（外购原材料费 + 外购燃料及动力费 + 其他费用）
+   * 注意：需要包含总成本费用估算表中序号1.5其他费用的增值税
    */
   const calculateTotalInputTaxForYear = (year: number): number => {
-    return calculateRawMaterialsInputTaxForYear(year) + calculateFuelPowerInputTaxForYear(year);
+    // 1. 外购原材料费进项税额
+    const rawMaterialsInputTax = calculateRawMaterialsInputTaxForYear(year);
+    
+    // 2. 外购燃料及动力费进项税额
+    const fuelPowerInputTax = calculateFuelPowerInputTaxForYear(year);
+    
+    // 3. 其他费用（1.5）进项税额
+    // 从 costConfig.otherExpenses 获取其他费用的配置
+    const { costConfig, productionRates } = useRevenueCostStore.getState();
+    const productionRate = costConfig.otherExpenses.applyProductionRate
+      ? (productionRates?.find(p => p.yearIndex === year)?.rate || 1)
+      : 1;
+    
+    // 计算其他费用的进项税额
+    let otherExpensesInputTax = 0;
+    if (costConfig.otherExpenses.type === 'percentage') {
+      const revenueBase = (useRevenueCostStore.getState().revenueItems || []).reduce(
+        (sum, revItem) => sum + calculateTaxableIncome(revItem), 0
+      );
+      const amount = revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
+      const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+      otherExpensesInputTax = amount * taxRate / (1 + taxRate);
+    } else {
+      // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+      // 所以：进项税额 = 含税金额 - 不含税金额
+      const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+      const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+      otherExpensesInputTax = directAmount * taxRate / (1 + taxRate);
+    }
+    
+    return rawMaterialsInputTax + fuelPowerInputTax + otherExpensesInputTax;
   };
 
   /**
@@ -1074,28 +1112,41 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     });
   };
 
+
   /**
-   * 渲染字段值（统一以万元显示）
+   * 渲染字段值（根据单价阈值动态显示单位）
    */
   const renderFieldValue = (item: RevenueItem): string => {
-    // 辅助函数：统一格式化价格显示（万元）
-    const formatPriceInWanYuan = (price: number | undefined): string => {
-      if (price === undefined || price === null) return '0万元';
-      // 统一以万元显示，保留4位小数
-      return `${price.toFixed(4)}`;
+    // 辅助函数：根据单价阈值动态格式化价格显示
+    const formatPriceWithUnit = (price: number | undefined, unit: string = '万元'): string => {
+      if (price === undefined || price === null) return `0${unit}`;
+      
+      // 单价 < 0.1万元（1000元）时显示为元
+      if (price < 0.1) {
+        const priceInYuan = price * 10000;
+        const displayPrice = parseFloat(priceInYuan.toFixed(2)).toString();
+        if (unit === '万元') {
+          return `${displayPrice}元`;
+        }
+        return `${displayPrice}${unit.replace('万元', '元')}`;
+      }
+      const displayPrice = parseFloat(price.toFixed(2)).toString();
+      return `${displayPrice}${unit}`;
     };
     
     switch (item.fieldTemplate) {
       case 'quantity-price':
-        return `${item.quantity || 0} × ${formatPriceInWanYuan(item.unitPrice)}`
+        return `${formatLargeNumber(item.quantity || 0)}${item.unit || ''} × ${formatPriceWithUnit(item.unitPrice, item.unit ? `万元/${item.unit}` : '万元')}`
       case 'area-yield-price':
-        return `${item.area || 0}亩 × ${item.yieldPerArea || 0} × ${formatPriceInWanYuan(item.unitPrice)}`
+        return `${formatLargeNumber(item.area || 0)}亩 × ${formatLargeNumber(item.yieldPerArea || 0)}${item.yieldPerAreaUnit || ''} × ${formatPriceWithUnit(item.unitPrice, item.yieldPerAreaUnit ? `万元/${item.yieldPerAreaUnit}` : '万元')}`
       case 'capacity-utilization':
-        return `${item.capacity || 0} × ${((item.utilizationRate || 0) * 100).toFixed(0)}% × ${formatPriceInWanYuan(item.unitPrice)}`
+        return `${formatLargeNumber(item.capacity || 0)}${item.capacityUnit || ''} × ${((item.utilizationRate || 0) * 100).toFixed(0)}% × ${formatPriceWithUnit(item.unitPrice)}`
       case 'subscription':
-        return `${item.subscriptions || 0} × ${formatPriceInWanYuan(item.unitPrice)}`
+        return `${formatLargeNumber(item.subscriptions || 0)} × ${formatPriceWithUnit(item.unitPrice)}`
       case 'direct-amount':
-        return `${(item.directAmount || 0).toFixed(4)}万元`
+        // 直接金额模板：直接显示金额
+        const directAmountValue = parseFloat((item.directAmount || 0).toFixed(4)).toString();
+        return `${directAmountValue}万元/年`
       default:
         return '-'
     }
@@ -1105,7 +1156,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
    * 渲染编辑表单字段
    */
   const renderFormFields = () => {
-    const template = formData.fieldTemplate || 'quantity-price'
+    const template = formData.fieldTemplate ?? 'quantity-price'
     
     // 计算总价预览（统一以万元显示）
     const calculatePreviewTotal = () => {
@@ -1269,9 +1320,17 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                 />
               </Grid.Col>
               <Grid.Col span={3}>
+                <TextInput
+                  label="单位"
+                  placeholder="如：公斤、斤、吨"
+                  value={formData.yieldPerAreaUnit || ''}
+                  onChange={(e) => setFormData({ ...formData, yieldPerAreaUnit: e.target.value })}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
                 <div style={{ position: 'relative' }}>
                   <NumberInput
-                    label="单价(万元)"
+                    label={formData.yieldPerAreaUnit ? `单价(万元/${formData.yieldPerAreaUnit})` : '单价(万元)'}
                     placeholder="请输入单价"
                     value={formData.unitPrice || 0}
                     onChange={(value) => setFormData({ ...formData, unitPrice: value !== null && value !== undefined ? Number(value) : undefined })}
@@ -1295,7 +1354,6 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
                   )}
                 </div>
               </Grid.Col>
-
             </>
           )}
 
@@ -1399,17 +1457,18 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
 
           {template === 'direct-amount' && (
             <>
-              <Grid.Col span={3}>
+              <Grid.Col span={4}>
                 <NumberInput
-                  label="金额（万元）"
+                  label="金额（万元/年）"
                   placeholder="请输入金额"
                   value={formData.directAmount || 0}
                   onChange={(value) => setFormData({ ...formData, directAmount: Number(value) })}
                   min={0}
                   decimalScale={2}
+                  style={{ width: '200px' }}
                 />
               </Grid.Col>
-              <Grid.Col span={9}>
+              <Grid.Col span={8}>
                 {/* 占位符 */}
                 <div style={{ height: '36px' }}></div>
               </Grid.Col>
