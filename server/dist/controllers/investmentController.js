@@ -176,6 +176,8 @@ export class InvestmentController {
                     error: '保存投资估算失败'
                 });
             }
+            // 同时更新项目的 updated_at 时间戳
+            await InvestmentProjectModel.update(project_id, {});
             res.json({
                 success: true,
                 data: { estimate: savedEstimate }
@@ -435,6 +437,8 @@ export class InvestmentController {
                     });
                 }
                 console.log('[投资估算] 最终结果已保存到数据库');
+                // 同时更新项目的 updated_at 时间戳
+                await InvestmentProjectModel.update(projectId, {});
             }
             else {
                 console.log('[投资估算] 迭代完成，未保存（仅计算模式）');

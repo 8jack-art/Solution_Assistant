@@ -3,6 +3,7 @@ import { pool } from '../db/config.js'
 import { ReportService } from '../services/reportService.js'
 import { sseManager } from '../services/sseManager.js'
 import { v4 as uuidv4 } from 'uuid'
+import { buildAllTableDataJSON } from '../utils/tableDataBuilder.js'
 
 /**
  * 报告控制器
@@ -57,13 +58,14 @@ export class ReportController {
   static async generate(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
-      const { promptTemplate } = req.body
+      const { promptTemplate, tableDataJSON } = req.body
       const userId = ReportController.getUserId(req)
 
       console.log('='.repeat(60))
       console.log('启动报告生成')
       console.log('报告ID:', id)
       console.log('提示词长度:', promptTemplate?.length || 0)
+      console.log('表格数据JSON keys:', tableDataJSON ? Object.keys(tableDataJSON) : '无')
       console.log('用户ID:', userId)
 
       if (!userId) {
@@ -164,7 +166,7 @@ export class ReportController {
 
       // 启动流式生成
       console.log('开始调用 ReportService.generateReportStream...')
-      await ReportService.generateReportStream(id, llmConfig, promptTemplate, project)
+      await ReportService.generateReportStream(id, llmConfig, promptTemplate, project, tableDataJSON)
       
       console.log('流式生成调用完成')
     } catch (error) {
@@ -771,8 +773,13 @@ export class ReportController {
     try {
       const { projectId } = req.params
       const userId = ReportController.getUserId(req)
+      
+      // 获取前端传递的基准收益率参数
+      const preTaxRate = req.query.preTaxRate ? parseFloat(req.query.preTaxRate as string) : undefined
+      const postTaxRate = req.query.postTaxRate ? parseFloat(req.query.postTaxRate as string) : undefined
 
       console.log('getProjectSummary called, projectId:', projectId, 'userId:', userId)
+      console.log('discountRates from query params:', { preTaxRate, postTaxRate })
 
       // 验证用户ID
       if (!userId) {
@@ -795,6 +802,26 @@ export class ReportController {
 
       // 收集项目数据
       const projectData = await ReportService.collectProjectData(projectId)
+      
+      // 将基准收益率注入到 projectData 中，供 buildFinancialStaticDynamicJSON 使用
+      if (preTaxRate !== undefined || postTaxRate !== undefined) {
+        if (!projectData.revenueCost) {
+          projectData.revenueCost = {}
+        }
+        if (!projectData.revenueCost.financialIndicators) {
+          projectData.revenueCost.financialIndicators = {}
+        }
+        if (preTaxRate !== undefined) {
+          projectData.revenueCost.financialIndicators.preTaxRate = preTaxRate
+        }
+        if (postTaxRate !== undefined) {
+          projectData.revenueCost.financialIndicators.postTaxRate = postTaxRate
+        }
+        console.log('注入后的 financialIndicators:', projectData.revenueCost.financialIndicators)
+      }
+      
+      // 构建所有表格数据的 JSON（用于 LLM 提示词和小眼睛预览）
+      const tableDataJSON = buildAllTableDataJSON(projectData)
 
       res.json({ 
         success: true, 
@@ -812,7 +839,8 @@ export class ReportController {
           },
           investment: projectData.investment,
           revenueCost: projectData.revenueCost,
-          financialIndicators: projectData.financialIndicators
+          financialIndicators: projectData.financialIndicators,
+          tableDataJSON  // 新增：所有表格数据的 JSON（用于变量替换和小眼睛预览）
         }
       })
     } catch (error) {

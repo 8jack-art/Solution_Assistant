@@ -1,0 +1,74 @@
+/* CKEditor 5 基础样式 */
+.ck.ck-editor {
+  width: 100%;
+}
+
+.ck.ck-content {
+  min-height: 300px;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ck.ck-editor__editable {
+  border: 1px solid #E5E6EB;
+  border-radius: 6px;
+}
+
+.ck.ck-focused {
+  border-color: #165DFF;
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.1);
+}
+
+/* 工具栏样式 */
+.ck.ck-toolbar {
+  border: 1px solid #E5E6EB;
+  border-radius: 6px 6px 0 0;
+  background-color: #F9FAFB;
+}
+
+.ck.ck-toolbar__items {
+  padding: 8px 16px;
+}
+
+.ck.ck-button {
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.ck.ck-button:hover {
+  background-color: #F0F9FF;
+}
+
+.ck.ck-button.ck-on {
+  background-color: #E6F7FF;
+  color: #165DFF;
+}
+
+/* 编辑器容器 */
+.ck-editor__editable_inline {
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+}
+
+/* 占位符样式 */
+.ck.ck-placeholder::before {
+  color: #86909C;
+  opacity: 1;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .ck.ck-content {
+    min-height: 250px;
+    padding: 12px;
+  }
+  
+  .ck.ck-toolbar {
+    flex-wrap: wrap;
+  }
+  
+  .ck.ck-toolbar__items {
+    padding: 4px 8px;
+  }
+}

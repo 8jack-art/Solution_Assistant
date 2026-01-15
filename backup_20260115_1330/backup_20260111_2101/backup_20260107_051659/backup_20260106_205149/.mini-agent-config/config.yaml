@@ -1,0 +1,8 @@
+# MiniMax Agent 配置文件
+# 使用前请将此文件复制到 ~/.mini-agent/config/config.yaml
+
+api_key: "sk-cp-OfN7NNx7bjKIVvx3ybaR6ayKFu7cTSZ5fKRWEDEkmMxo3DJlRpnAaHReg_oHftkKwh7Q0H94Bry21pkx8kfNLPW_XnqkwFvq2ykHbYZhvUWlXOFz0jWvDd0"
+api_base: "https://api.minimaxi.com"
+model: "MiniMax-M2"
+max_steps: 100
+workspace_dir: "/opt/Solution_Assistant"

@@ -250,7 +250,7 @@ export class ReportService {
       const project = projects[0] || {}
       
       // 解析JSON字段
-      let investmentData = {}
+      let investmentData: any = {}
       if (investmentEstimates.length > 0) {
         const estimate = investmentEstimates[0]
         console.log('投资估算原始数据键:', Object.keys(estimate))
@@ -264,6 +264,19 @@ export class ReportService {
           }
         } else {
           console.warn('投资估算数据字段不存在或格式不正确')
+        }
+        
+        // 【修复】将顶层字段加入到 investmentData 中
+        // construction_interest 等字段是 investment_estimates 表的直接字段，不是 estimate_data 里面的
+        if (estimate.construction_interest !== undefined) {
+          investmentData.construction_interest = Number(estimate.construction_interest) || 0
+          console.log('添加 construction_interest 到 investmentData:', investmentData.construction_interest)
+        }
+        if (estimate.basic_reserve !== undefined) {
+          investmentData.basic_reserve = Number(estimate.basic_reserve) || 0
+        }
+        if (estimate.price_reserve !== undefined) {
+          investmentData.price_reserve = Number(estimate.price_reserve) || 0
         }
       } else {
         console.warn('未找到投资估算数据')
@@ -407,59 +420,52 @@ export class ReportService {
     // 获取修理费配置（包含费用类型、比率、金额）
     const repairConfig = revenueCost?.costConfig?.repair || {}
     
-    // 根据下拉列表的值确定费用类型显示
-    const repairTypeValue = repairConfig.type || 'directAmount'
-    const repairType = repairTypeValue === 'percentage' ? '按固定资产投资的百分比' : '直接金额'
-    const repairPercentage = repairTypeValue === 'percentage' 
-      ? `${repairConfig.percentageOfFixedAssets || 0}%` 
-      : '-'
+    // 获取折旧与摊销数据
+    const depAmortData = revenueCost?.depreciationAmortization || {}
+    const depreciationA = depAmortData.A || {}
+    const depreciationD = depAmortData.D || {}
     
-    // 计算修理费金额（根据费用类型下拉列表的值来获取对应数据）
-    // 注意：必须与前端 DynamicCostTable.tsx 中的计算逻辑保持一致
-    let repairAmount = 0
-    if (repairTypeValue === 'percentage') {
-      // 获取折旧与摊销数据
-      const depAmortData = revenueCost?.depreciationAmortization || {}
-      
-      // 提取 A（建筑）和 D（设备）的原值
-      const depreciationA = depAmortData.A || {}
-      const depreciationD = depAmortData.D || {}
-      
-      const valueA = depreciationA.原值 || depreciationA.originalValue || 0
-      const valueD = depreciationD.原值 || depreciationD.originalValue || 0
-      
-      console.log('repair_amount: 折旧A原值:', valueA, '折旧D原值:', valueD)
-      
-      // 固定资产原值合计 = A原值 + D原值
-      const fixedAssetsOriginalValue = valueA + valueD
-      
-      // 建设期利息：从投资估算数据中获取
-      let constructionInterest = 0
-      if (investment?.partF?.construction_interest !== undefined) {
-        constructionInterest = investment.partF.construction_interest
-      } else if (investment?.partF?.合计 !== undefined) {
-        // 如果找不到专门的利息字段，使用 partF.合计（建设期利息合计）
-        constructionInterest = investment.partF.合计
-      }
-      console.log('repair_amount: 建设期利息:', constructionInterest)
-      
-      // 固定资产投资 = 固定资产原值 - 建设期利息
-      const fixedAssetsInvestment = fixedAssetsOriginalValue - constructionInterest
-      console.log('repair_amount: 固定资产投资:', fixedAssetsInvestment, '百分比:', repairConfig.percentageOfFixedAssets)
-      
-      repairAmount = fixedAssetsInvestment * (repairConfig.percentageOfFixedAssets || 0) / 100
-      console.log('repair_amount: 修理费金额:', repairAmount)
-    } else {
-      // 直接金额模式下，使用用户填写的金额
-      repairAmount = repairConfig.directAmount || 0
-    }
+    // 提取 A（建筑）和 D（设备）的原值
+    const valueA = depreciationA.原值 || depreciationA.originalValue || 0
+    const valueD = depreciationD.原值 || depreciationD.originalValue || 0
     
-    // 组合修理费详细信息为JSON格式
+    // 建设期利息：从投资估算数据中获取
+    const constructionInterest = investment?.partF?.合计 || 0
+    
+    // 固定资产原值合计 = A原值 + D原值
+    const fixedAssetsOriginalValue = valueA + valueD
+    
+    // 固定资产投资 = 固定资产原值 - 建设期利息（不能为负数）
+    const fixedAssetsInvestment = Math.max(0, fixedAssetsOriginalValue - constructionInterest)
+    
+    // [DEBUG] 打印修理费计算日志
+    console.log('🔧 [repair_rate] 调试信息:')
+    console.log('  depAmort.A?.原值:', valueA)
+    console.log('  depAmort.D?.原值:', valueD)
+    console.log('  constructionInterest (建设期利息):', constructionInterest)
+    console.log('  fixedAssetsOriginalValue (原值合计):', fixedAssetsOriginalValue)
+    console.log('  fixedAssetsInvestment (固定资产投资):', fixedAssetsInvestment)
+    console.log('  repairConfig.type:', repairConfig.type)
+    console.log('  repairConfig.percentageOfFixedAssets:', repairConfig.percentageOfFixedAssets)
+    
+    // 年修理费
+    const annualRepairCost = repairConfig.type === 'percentage' 
+      ? fixedAssetsInvestment * (repairConfig.percentageOfFixedAssets || 0) / 100
+      : (repairConfig.directAmount || 0)
+    
+    console.log('  annualRepairCost (年修理费):', annualRepairCost)
+    
+    // 组合修理费详细信息为JSON格式（与 reportStore.ts 保持一致）
     const repairRateJson = JSON.stringify({
-      费用类型: repairType,
-      费用类型值: repairTypeValue,  // 原始值：percentage 或 directAmount
-      比率: repairPercentage,
-      金额: `${repairAmount.toFixed(2)}万元`
+      标题: '修理费估算表',
+      计算方式: repairConfig.type === 'percentage' ? '按固定资产投资百分比' : '固定金额',
+      '固定资产投资额（万元）': fixedAssetsInvestment,
+      '占固定资产投资百分比（%）': repairConfig.percentageOfFixedAssets || 0,
+      '固定金额（万元）': repairConfig.directAmount || 0,
+      '年修理费（万元）': annualRepairCost,
+      说明: repairConfig.type === 'percentage' 
+        ? `按固定资产投资额的${repairConfig.percentageOfFixedAssets || 0}%计算`
+        : `每年固定 ${repairConfig.directAmount || 0} 万元`
     }, null, 2)
     
     // 获取其他费用配置（包含土地流转信息）
@@ -710,30 +716,78 @@ ${JSON.stringify(summary, null, 2)}
    */
   static extractFinancialIndicators(revenueCostData: any): any {
     try {
+      console.log('extractFinancialIndicators 开始处理')
+      console.log('revenueCostData keys:', Object.keys(revenueCostData || {}))
+      
       const indicators: any = {}
       
-      if (revenueCostData.financialIndicators) {
-        // 直接使用已有的财务指标
+      // 优先使用已有的财务指标
+      if (revenueCostData?.financialIndicators) {
+        console.log('找到现有的 financialIndicators:', revenueCostData.financialIndicators)
         return revenueCostData.financialIndicators
       }
       
-      // 如果没有财务指标，尝试从收入成本数据中提取
-      if (revenueCostData.revenueItems && revenueCostData.costItems) {
-        const totalRevenue = revenueCostData.revenueItems.reduce((sum: number, item: any) => 
+      // 尝试从其他字段获取财务指标
+      if (revenueCostData?.profitAnalysis) {
+        console.log('从 profitAnalysis 提取财务指标')
+        const profitAnalysis = revenueCostData.profitAnalysis
+        if (profitAnalysis.financialIndicators) {
+          console.log('从 profitAnalysis.financialIndicators 提取:', profitAnalysis.financialIndicators)
+          return profitAnalysis.financialIndicators
+        }
+      }
+      
+      // 如果没有财务指标，尝试从收入成本数据中提取基础指标
+      if (revenueCostData?.revenueItems && revenueCostData?.costItems) {
+        console.log('从收入成本数据计算基础财务指标')
+        const totalRevenue = revenueCostData.revenueItems.reduce((sum: number, item: any) =>
           sum + (item.annualRevenue || 0), 0)
-        const totalCost = revenueCostData.costItems.reduce((sum: number, item: any) => 
+        const totalCost = revenueCostData.costItems.reduce((sum: number, item: any) =>
           sum + (item.annualCost || 0), 0)
         
         indicators.totalRevenue = totalRevenue
         indicators.totalCost = totalCost
         indicators.profit = totalRevenue - totalCost
         indicators.profitMargin = totalRevenue > 0 ? (indicators.profit / totalRevenue * 100) : 0
+        
+        // 添加一些默认的财务指标值，避免返回空数据
+        indicators.irr = 0
+        indicators.npv = 0
+        indicators.paybackPeriod = 0
+        indicators.roi = indicators.profitMargin
+        indicators.totalInvestmentROI = indicators.profitMargin
+        
+        console.log('计算得到的财务指标:', indicators)
+      } else {
+        console.warn('无法找到收入成本数据来计算财务指标')
+        
+        // 返回默认的财务指标结构，避免完全为空
+        indicators.irr = 0
+        indicators.npv = 0
+        indicators.paybackPeriod = 0
+        indicators.roi = 0
+        indicators.totalInvestmentROI = 0
+        indicators.totalRevenue = 0
+        indicators.totalCost = 0
+        indicators.profit = 0
+        indicators.profitMargin = 0
       }
       
       return indicators
     } catch (error) {
-      console.warn('提取财务指标失败:', error)
-      return {}
+      console.error('提取财务指标失败:', error)
+      // 返回默认结构，避免完全为空
+      return {
+        irr: 0,
+        npv: 0,
+        paybackPeriod: 0,
+        roi: 0,
+        totalInvestmentROI: 0,
+        totalRevenue: 0,
+        totalCost: 0,
+        profit: 0,
+        profitMargin: 0
+      }
     }
   }
 
@@ -936,13 +990,21 @@ ${JSON.stringify(summary, null, 2)}
     reportId: string,
     llmConfig: any,
     promptTemplate: string,
-    project: any
+    project: any,
+    tableDataJSON?: Record<string, string>
   ): Promise<void> {
     try {
       console.log('开始流式生成报告:', reportId)
+      console.log('tableDataJSON keys:', tableDataJSON ? Object.keys(tableDataJSON) : '无')
       
       // 收集项目相关数据
       const projectData = await this.collectProjectData(project.id)
+      
+      // 如果前端传入了 tableDataJSON，优先使用它
+      if (tableDataJSON) {
+        console.log('使用前端传入的 tableDataJSON')
+        projectData.tableDataJSON = tableDataJSON
+      }
       
       // 构建完整的提示词
       const fullPrompt = this.buildDataAwarePrompt(promptTemplate, projectData)

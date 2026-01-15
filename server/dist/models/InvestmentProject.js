@@ -13,15 +13,26 @@ export class InvestmentProjectModel {
     }
     static async findByUserId(userId, isAdmin = false) {
         try {
-            let query = 'SELECT * FROM investment_projects';
+            // JOIN users 表获取创建者名称
+            let query = `
+        SELECT 
+          p.*,
+          u.username as creator_name
+        FROM investment_projects p
+        LEFT JOIN users u ON p.user_id = u.id
+      `;
             const params = [];
             if (!isAdmin) {
-                query += ' WHERE user_id = ?';
+                query += ' WHERE p.user_id = ?';
                 params.push(userId);
             }
-            query += ' ORDER BY created_at DESC';
+            query += ' ORDER BY p.created_at DESC';
             const [rows] = await pool.execute(query, params);
-            return rows;
+            // 格式化返回数据，将 creator_name 映射到 user_name
+            return rows.map((row) => ({
+                ...row,
+                user_name: row.creator_name || row.user_name || '-'
+            }));
         }
         catch (error) {
             console.error('获取用户项目列表失败:', error);

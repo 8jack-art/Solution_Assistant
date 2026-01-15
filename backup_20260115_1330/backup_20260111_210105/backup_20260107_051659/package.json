@@ -1,0 +1,47 @@
+{
+  "name": "miaoda-react-admin",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "start": "cd server && npm run start",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "lint": "cd client && npm run lint && cd ../server && npm run lint"
+  },
+  "devDependencies": {
+    "@types/uuid": "^10.0.0",
+    "concurrently": "^8.2.2"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "dependencies": {
+    "@mantine/core": "^8.3.10",
+    "@mantine/hooks": "^8.3.10",
+    "@mantine/tiptap": "^8.3.10",
+    "@tiptap/extension-highlight": "^3.14.0",
+    "@tiptap/extension-link": "^3.14.0",
+    "@tiptap/extension-placeholder": "^3.14.0",
+    "@tiptap/extension-subscript": "^3.14.0",
+    "@tiptap/extension-superscript": "^3.14.0",
+    "@tiptap/extension-text-align": "^3.14.0",
+    "@tiptap/pm": "^3.14.0",
+    "@tiptap/react": "^3.14.0",
+    "@tiptap/starter-kit": "^3.14.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "bcryptjs": "^3.0.3",
+    "eventsource": "^4.1.0",
+    "uuid": "^13.0.0"
+  },
+  "resolutions": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  }
+}

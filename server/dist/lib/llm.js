@@ -106,7 +106,6 @@ export class LLMService {
                 // 如果是429错误且还有重试机会，则等待后重试
                 if (response.status === 429 && attempt < MAX_RETRIES) {
                     const delay = BASE_DELAY * Math.pow(2, attempt); // 指数退避
-                    console.log(`收到429错误，等待${delay}ms后重试，第${attempt + 1}次重试`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
@@ -142,7 +141,6 @@ export class LLMService {
                 // 如果是网络错误且还有重试机会，则等待后重试
                 if (attempt < MAX_RETRIES) {
                     const delay = BASE_DELAY * Math.pow(2, attempt); // 指数退避
-                    console.log(`网络错误，等待${delay}ms后重试，第${attempt + 1}次重试`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
@@ -204,7 +202,6 @@ export class LLMService {
                 // 如果是429错误且还有重试机会，则等待后重试
                 if (response.status === 429 && attempt < MAX_RETRIES) {
                     const delay = BASE_DELAY * Math.pow(2, attempt); // 指数退避
-                    console.log(`收到429错误，等待${delay}ms后重试，第${attempt + 1}次重试`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
@@ -256,7 +253,6 @@ export class LLMService {
                 // 如果是网络错误且还有重试机会，则等待后重试
                 if (attempt < MAX_RETRIES) {
                     const delay = BASE_DELAY * Math.pow(2, attempt); // 指数退避
-                    console.log(`网络错误，等待${delay}ms后重试，第${attempt + 1}次重试`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
