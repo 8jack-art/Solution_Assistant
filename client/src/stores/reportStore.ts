@@ -42,7 +42,7 @@ interface ReportState {
   projectData: any
   projectOverview: string | null  // 项目概况
   customVariables: Record<string, string>  // 自定义变量 key -> value
-  cachedTableDataJSON: Record<string, string>  // 缓存的表格数据JSON（用于LLM提示词）
+  cachedTableDataJSON: Record<string, Record<string, string>>  // 缓存的表格数据JSON（用于LLM提示词），按项目ID隔离
   
   // 加载状态
   isLoading: boolean
@@ -106,7 +106,7 @@ interface ReportState {
   // 资源操作
   updateResources: (resources: Partial<ResourceMap>) => void
   
-  // 缓存表格数据JSON
+  // 缓存表格数据JSON（按项目ID隔离）
   getCachedTableDataJSON: () => Record<string, string>
   
   loadTemplates: () => Promise<void>
@@ -181,7 +181,17 @@ export const useReportStore = create<ReportState>((set, get) => ({
     await get().loadDefaultWordStyleConfig()
   },
 
-  setProjectId: (id) => set({ projectId: id }),
+  setProjectId: (id) => set((state) => {
+    // 切换项目时，清理非当前项目的缓存，避免变量串用
+    const newCachedTableDataJSON: Record<string, Record<string, string>> = {}
+    if (state.cachedTableDataJSON[id]) {
+      newCachedTableDataJSON[id] = state.cachedTableDataJSON[id]
+    }
+    return { 
+      projectId: id,
+      cachedTableDataJSON: newCachedTableDataJSON
+    }
+  }),
   
   setReportTitle: (title) => set({ reportTitle: title }),
   
@@ -501,6 +511,67 @@ export const useReportStore = create<ReportState>((set, get) => ({
       // 直接使用 API 返回的 tableDataJSON
       const tableDataJSON = projectData.tableDataJSON
       
+      // 【修复】将 {{repair_rate}} 变量也存入 tableDataJSON，确保后端使用前端计算的值
+      const repairRateValue = (() => {
+        const depAmort = projectData.revenueCost?.depreciationAmortization || {}
+        const costConfig = projectData.revenueCost?.costConfig?.repair || {}
+        const constructionInterest = projectData.investment?.partF?.合计 || 0
+        
+        const valueA = depAmort.A?.原值 || 0
+        const valueD = depAmort.D?.原值 || 0
+        const fixedAssetsOriginalValue = valueA + valueD
+        const fixedAssetsInvestment = Math.max(0, fixedAssetsOriginalValue - constructionInterest)
+        
+        const annualRepairCost = costConfig.type === 'percentage' 
+          ? fixedAssetsInvestment * (costConfig.percentageOfFixedAssets || 0) / 100
+          : (costConfig.directAmount || 0)
+        
+        return JSON.stringify({
+          标题: '修理费估算表',
+          计算方式: costConfig.type === 'percentage' ? '按固定资产投资百分比' : '固定金额',
+          '固定资产投资额（万元）': fixedAssetsInvestment,
+          '固定资产修理费率（%）': costConfig.percentageOfFixedAssets || 0,
+          '固定金额（万元）': costConfig.directAmount || 0,
+          '年修理费（万元）': annualRepairCost,
+          说明: costConfig.type === 'percentage' 
+            ? `固定资产修理费率取${costConfig.percentageOfFixedAssets || 0}%`
+            : `每年固定 ${costConfig.directAmount || 0} 万元`
+        }, null, 2)
+      })()
+      
+      // 将 repair_rate 存入 tableDataJSON
+      tableDataJSON['repair_rate'] = repairRateValue
+      
+      // 【新增】构建 land_transfer 变量（土地流转信息）
+      const otherExpenses = projectData.revenueCost?.costConfig?.otherExpenses || {}
+      const hasLandTransfer = (otherExpenses.name || '').includes('土地') || 
+                              (otherExpenses.name || '').includes('流转')
+      const landTransferValue = hasLandTransfer 
+        ? JSON.stringify({
+            name: otherExpenses.name,
+            remark: otherExpenses.remark || ''
+          }, null, 2)
+        : 'null'
+      tableDataJSON['land_transfer'] = landTransferValue
+      
+      // 【新增】构建 project_overview 变量（项目概况）
+      const projectOverviewValue = projectData.projectOverview 
+        ? JSON.stringify({ content: projectData.projectOverview }, null, 2)
+        : 'null'
+      tableDataJSON['project_overview'] = projectOverviewValue
+      
+      // 【新增】构建 operation_load 变量（运营负荷）
+      const productionRates = projectData.revenueCost?.productionRates || []
+      const operationLoadValue = JSON.stringify(
+        productionRates.map((p: any) => ({
+          year: p.yearIndex,
+          rate: `${((p.rate || 0) * 100).toFixed(0)}%`
+        })),
+        null,
+        2
+      )
+      tableDataJSON['operation_load'] = operationLoadValue
+      
       const variables: ReportVariable[] = [
         { key: '{{project_name}}', label: '项目名称', value: projectData.project?.name || '' },
         { key: '{{construction_unit}}', label: '建设单位', value: projectData.project?.constructionUnit || '' },
@@ -543,6 +614,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
               : `每年固定 ${costConfig.directAmount || 0} 万元`
           }, null, 2)
         })() },
+        { key: '{{land_transfer}}', label: '土地流转信息', category: 'tableData', value: landTransferValue },
         // 表格数据（JSON格式，用于LLM提示词）
         { key: '{{DATA:investment_estimate}}', label: '投资估算简表JSON', category: 'tableData', value: tableDataJSON['DATA:investment_estimate'] || '{}' },
         { key: '{{DATA:depreciation_amortization}}', label: '折旧与摊销估算表JSON', category: 'tableData', value: tableDataJSON['DATA:depreciation_amortization'] || '{}' },
@@ -557,6 +629,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{DATA:loan_repayment}}', label: '借款还本付息计划表JSON', category: 'tableData', value: tableDataJSON['DATA:loan_repayment'] || '{}' },
         { key: '{{DATA:loan_repayment_section12}}', label: '借款还本付息计划表1.2节JSON', category: 'tableData', value: tableDataJSON['DATA:loan_repayment_section12'] || '{}' },
         { key: '{{DATA:financial_static_dynamic}}', label: '财务静态动态指标JSON', category: 'tableData', value: tableDataJSON['DATA:financial_static_dynamic'] || '{}' },
+        { key: '{{DATA:project_overview}}', label: '项目概况', category: 'tableData', value: projectOverviewValue },
+        { key: '{{DATA:operation_load}}', label: '运营负荷', category: 'tableData', value: operationLoadValue },
         // 表格资源（渲染HTML）
         { key: '{{TABLE:investment_estimate}}', label: '投资估算简表', category: 'table' },
         { key: '{{TABLE:revenue_cost_detail}}', label: '收入成本明细表', category: 'table' },
@@ -575,7 +649,10 @@ export const useReportStore = create<ReportState>((set, get) => ({
       set((state) => ({ 
         projectData: projectData,
         availableVariables: variables,
-        cachedTableDataJSON: tableDataJSON,  // 缓存tableDataJSON，确保小眼睛和LLM使用相同数据
+        cachedTableDataJSON: {
+          ...state.cachedTableDataJSON,
+          [projectId]: tableDataJSON
+        },  // 按项目ID隔离存储缓存数据
         resources: { ...state.resources, tables },
         isLoading: false 
       }))
@@ -599,8 +676,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
       return
     }
     
-    // 使用缓存的 tableDataJSON，确保与小眼睛查看的数据一致
-    const tableDataJSON = cachedTableDataJSON || {}
+    // 使用当前项目的缓存 tableDataJSON，确保与小眼睛查看的数据一致
+    const tableDataJSON = (cachedTableDataJSON || {})[projectId] || {}
     
     set({ isLoading: true, error: null, reportContent: '' })
     try {
@@ -752,7 +829,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       },
       projectOverview: null,
       customVariables: {},
-      cachedTableDataJSON: {}  // 重置缓存的 tableDataJSON
+      cachedTableDataJSON: {}  // 重置所有项目的缓存数据
     })
   },
   
@@ -792,9 +869,10 @@ export const useReportStore = create<ReportState>((set, get) => ({
     }
   },
   
-  // 获取缓存的表格数据JSON
+  // 获取当前项目的缓存表格数据JSON
   getCachedTableDataJSON: () => {
-    const { cachedTableDataJSON } = get()
-    return cachedTableDataJSON || {}
+    const { cachedTableDataJSON, projectId } = get()
+    if (!projectId) return {}
+    return (cachedTableDataJSON || {})[projectId] || {}
   }
 }))

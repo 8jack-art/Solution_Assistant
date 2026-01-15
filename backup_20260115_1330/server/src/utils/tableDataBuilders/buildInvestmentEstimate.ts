@@ -56,16 +56,18 @@ export function buildInvestmentEstimateJSON(estimateData: any): string {
           
           return {
             序号: subIndex + 1,
-            工程或费用名称: subItem.name || '',
+            名称: subItem.name || '',
             单位: subItem.unit || '',
             数量: formatNumber2(subItem.quantity),
             单价: formatNumber2(subItem.unit_price),
             单价万元: formatNumber2(subItem.unit_price / 10000),
-            合计: formatNumber2(totalPrice),
+            工程总价: formatNumber2(totalPrice),
             建设工程费: formatNumber2(constructionCost),
             设备购置费: formatNumber2(equipmentCost),
             安装工程费: formatNumber2(installationCost),
-            其它费用: formatNumber2(otherCost)
+            其它费用: formatNumber2(otherCost),
+            占总价比例: subItem.construction_ratio 
+              ? `${(subItem.construction_ratio * 100).toFixed(1)}%` : ''
           }
         })
       }
@@ -83,8 +85,8 @@ export function buildInvestmentEstimateJSON(estimateData: any): string {
       contingency: formatNumber2(estimateData.partD?.合计)
     },
     partA: {
-      工程或费用名称: '第一部分 工程费用',
-      合计: formatNumber2(estimateData.partA?.合计),
+      name: '第一部分 工程费用',
+      total: formatNumber2(estimateData.partA?.合计),
       建设工程费: partAConstructionTotal,
       设备购置费: partAEquipTotal,
       安装工程费: partAInstallTotal,
@@ -93,8 +95,8 @@ export function buildInvestmentEstimateJSON(estimateData: any): string {
       children: buildPartAChildren()
     },
     partB: {
-      工程或费用名称: '第二部分 工程其它费用',
-      合计: formatNumber2(estimateData.partB?.合计),
+      name: '第二部分 工程其它费用',
+      total: formatNumber2(estimateData.partB?.合计),
       建设工程费: 0,
       设备购置费: 0,
       安装工程费: 0,
@@ -109,8 +111,8 @@ export function buildInvestmentEstimateJSON(estimateData: any): string {
       }))
     },
     partC: {
-      工程或费用名称: '第一、二部分合计',
-      合计: formatNumber2(estimateData.partC?.合计),
+      name: '第一、二部分合计',
+      total: formatNumber2(estimateData.partC?.合计),
       建设工程费: partAConstructionTotal,
       设备购置费: partAEquipTotal,
       安装工程费: partAInstallTotal,
@@ -118,22 +120,25 @@ export function buildInvestmentEstimateJSON(estimateData: any): string {
       备注: 'C=A+B'
     },
     partD: {
-      合计: formatNumber2(estimateData.partD?.合计),
+      total: formatNumber2(estimateData.partD?.合计),
       备注: formatString(estimateData.partD?.备注)
     },
     partE: {
-      合计: formatNumber2(estimateData.partE?.合计),
+      total: formatNumber2(estimateData.partE?.合计),
       贷款总额: formatNumber2(estimateData.partE?.贷款总额 || estimateData.partF?.贷款总额),
       年利率: formatNumber2((estimateData.partE?.年利率 || estimateData.partF?.年利率 || 0) * 100),
       建设期年限: estimateData.partE?.建设期年限 || estimateData.partF?.建设期年限 || '',
       备注: formatString(estimateData.partE?.备注)
     },
     partF: {
-      合计: formatNumber2(estimateData.partF?.合计),
+      total: formatNumber2(estimateData.partF?.合计),
+      贷款总额: formatNumber2(estimateData.partF?.贷款总额),
+      年利率: formatNumber2((estimateData.partF?.年利率 || 0) * 100),
+      建设期年限: estimateData.partF?.建设期年限 || '',
       备注: formatString(estimateData.partF?.备注)
     },
     partG: {
-      合计: formatNumber2(estimateData.partG?.合计),
+      total: formatNumber2(estimateData.partG?.合计),
       备注: formatString(estimateData.partG?.备注)
     }
   }

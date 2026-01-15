@@ -351,7 +351,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       setPostTaxRate(Number(savedPostTaxRate));
       setTempPostTaxRate(Number(savedPostTaxRate));
     }
-  }, [])
+  }, [context?.projectId])
   
   // 强制触发cachedTaxAndSurcharges计算的useEffect
   useEffect(() => {
@@ -1858,27 +1858,49 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
     }
   };
 
-  // 计算弥补以前年度亏损（累计）
-  const calculateCumulativeLoss = (year: number): number => {
+  // 计算截至到某年年初的累计未弥补亏损
+  const calculateUncoveredLoss = (year: number): number => {
     if (!context) return 0;
-    let cumulativeLoss = 0;
+    let uncoveredLoss = 0; // 累计未弥补亏损
+    
     for (let y = 1; y < year; y++) {
       const profit = calculateTotalProfit(y);
       if (profit < 0) {
-        cumulativeLoss += Math.abs(profit);
+        // 亏损期：亏损累加到未弥补亏损
+        uncoveredLoss += Math.abs(profit);
       } else {
-        cumulativeLoss = Math.max(0, cumulativeLoss - profit);
+        // 盈利期：用利润弥补未弥补亏损
+        uncoveredLoss = Math.max(0, uncoveredLoss - profit);
       }
     }
-    return cumulativeLoss;
+    
+    return uncoveredLoss;
+  };
+
+  // 计算弥补以前年度亏损（当年实际弥补额）
+  const calculateCumulativeLoss = (year: number): number => {
+    if (!context) return 0;
+    
+    // 前提条件：只有当期利润总额 > 0 时，才能用盈利弥补以前年度亏损
+    const currentProfit = calculateTotalProfit(year);
+    if (currentProfit <= 0) {
+      return 0; // 亏损期不能弥补
+    }
+    
+    // 获取截至到年初的累计未弥补亏损
+    const uncoveredLoss = calculateUncoveredLoss(year);
+    
+    // 弥补额 = min(当年利润, 累计未弥补亏损)
+    return Math.min(currentProfit, uncoveredLoss);
   };
 
   // 计算应纳税所得额（按年份）
   const calculateYearlyTaxableIncome = (year?: number): number => {
     if (year !== undefined) {
       const profit = calculateTotalProfit(year);
-      const cumulativeLoss = calculateCumulativeLoss(year);
-      return Math.max(0, profit - cumulativeLoss);
+      const lossRecovery = calculateCumulativeLoss(year);
+      // 应纳税所得额 = 利润 - 弥补额（最小为0）
+      return Math.max(0, profit - lossRecovery);
     } else {
       if (!context) return 0;
       const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
@@ -1913,8 +1935,8 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       if (!context) return 0;
       const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
       let totalSum = 0;
-      years.forEach((year) => {
-        totalSum += calculateNetProfit(year);
+      years.forEach((y) => {
+        totalSum += calculateNetProfit(y);
       });
       return totalSum;
     }
@@ -2101,6 +2123,11 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
 
   // 在useEffect中更新缓存的财务指标，避免在渲染期间更新状态
   useEffect(() => {
+    // 确保context和必要数据已加载
+    if (!context || !revenueTableData || !costTableData) {
+      return;
+    }
+    
     const indicators = useCachedFinancialIndicators();
     setCachedFinancialIndicators(indicators);
     setLastCalculationKey(JSON.stringify({

@@ -455,51 +455,33 @@ export class ReportService {
     
     console.log('  annualRepairCost (年修理费):', annualRepairCost)
     
-      // 【修复】优先使用前端传入的 {{repair_rate}}，确保与小眼睛显示一致
-      const repairRateJson = (tableDataJSON && tableDataJSON['repair_rate']) 
-        ? tableDataJSON['repair_rate'] 
-        : (() => {
-            // 如果前端没有传入，回退到后端计算（向后兼容）
-            const repairConfig = revenueCost?.costConfig?.repair || {}
-            const depAmortData = revenueCost?.depreciationAmortization || {}
-            const depreciationA = depAmortData.A || {}
-            const depreciationD = depAmortData.D || {}
-            const valueA = depreciationA.原值 || depreciationA.originalValue || 0
-            const valueD = depreciationD.原值 || depreciationD.originalValue || 0
-            const constructionInterest = investment?.partF?.合计 || 0
-            const fixedAssetsOriginalValue = valueA + valueD
-            const fixedAssetsInvestment = Math.max(0, fixedAssetsOriginalValue - constructionInterest)
-            const annualRepairCost = repairConfig.type === 'percentage' 
-              ? fixedAssetsInvestment * (repairConfig.percentageOfFixedAssets || 0) / 100
-              : (repairConfig.directAmount || 0)
-            return JSON.stringify({
-              标题: '修理费估算表',
-              计算方式: repairConfig.type === 'percentage' ? '按固定资产投资百分比' : '固定金额',
-              '固定资产投资额（万元）': fixedAssetsInvestment,
-              '占固定资产投资百分比（%）': repairConfig.percentageOfFixedAssets || 0,
-              '固定金额（万元）': repairConfig.directAmount || 0,
-              '年修理费（万元）': annualRepairCost,
-              说明: repairConfig.type === 'percentage' 
-                ? `按固定资产投资额的${repairConfig.percentageOfFixedAssets || 0}%计算`
-                : `每年固定 ${repairConfig.directAmount || 0} 万元`
-            }, null, 2)
-          })()
-      
-      // 【修复】优先使用前端传入的 {{land_transfer}}，确保与小眼睛显示一致
-      const landTransferJson = (tableDataJSON && tableDataJSON['land_transfer']) 
-        ? tableDataJSON['land_transfer'] 
-        : (() => {
-            // 如果前端没有传入，回退到后端计算（向后兼容）
-            const otherExpenses = revenueCost?.costConfig?.otherExpenses || {}
-            const hasLandTransfer = (otherExpenses.name || '').includes('土地') || 
-                                    (otherExpenses.name || '').includes('流转')
-            return hasLandTransfer 
-              ? JSON.stringify({
-                  name: otherExpenses.name,
-                  remark: otherExpenses.remark || ''
-                }, null, 2)
-              : 'null'
-          })()
+    // 组合修理费详细信息为JSON格式（与 reportStore.ts 保持一致）
+    const repairRateJson = JSON.stringify({
+      标题: '修理费估算表',
+      计算方式: repairConfig.type === 'percentage' ? '按固定资产投资百分比' : '固定金额',
+      '固定资产投资额（万元）': fixedAssetsInvestment,
+      '占固定资产投资百分比（%）': repairConfig.percentageOfFixedAssets || 0,
+      '固定金额（万元）': repairConfig.directAmount || 0,
+      '年修理费（万元）': annualRepairCost,
+      说明: repairConfig.type === 'percentage' 
+        ? `按固定资产投资额的${repairConfig.percentageOfFixedAssets || 0}%计算`
+        : `每年固定 ${repairConfig.directAmount || 0} 万元`
+    }, null, 2)
+    
+    // 获取其他费用配置（包含土地流转信息）
+    const otherExpenses = revenueCost?.costConfig?.otherExpenses || {}
+    
+    // 检测费用名称是否包含"土地"或"流转"
+    const hasLandTransfer = (otherExpenses.name || '').includes('土地') || 
+                            (otherExpenses.name || '').includes('流转')
+    
+    // 构建土地流转JSON
+    const landTransferJson = hasLandTransfer 
+      ? JSON.stringify({
+          name: otherExpenses.name,
+          remark: otherExpenses.remark || ''
+        }, null, 2)
+      : 'null'
     
     // 检查是否使用简化的数据标记
     const hasProjectMarker = basePrompt.includes('{{PROJECT}}')
@@ -553,20 +535,8 @@ export class ReportService {
         .replace(/\{\{irr\}\}/g, String(financialIndicators?.irr || 0))
         .replace(/\{\{npv\}\}/g, String(financialIndicators?.npv || 0))
         .replace(/\{\{current_date\}\}/g, new Date().toLocaleDateString('zh-CN'))
-        .replace(/\{\{project_overview\}\}/g, 
-          (tableDataJSON && tableDataJSON['project_overview'] && tableDataJSON['project_overview'] !== 'null')
-            ? (() => {
-                try {
-                  return JSON.parse(tableDataJSON['project_overview']).content || ''
-                } catch {
-                  return projectOverview || ''
-                }
-              })()
-            : (projectOverview || ''))
-        .replace(/\{\{operation_load\}\}/g, 
-          (tableDataJSON && tableDataJSON['operation_load'] && tableDataJSON['operation_load'] !== 'null')
-            ? tableDataJSON['operation_load'] 
-            : '[]')
+        .replace(/\{\{project_overview\}\}/g, projectOverview || '')
+        .replace(/\{\{operation_load\}\}/g, operationLoadJson || '[]')
         .replace(/\{\{repair_rate\}\}/g, repairRateJson || '{}')
         .replace(/\{\{land_transfer\}\}/g, landTransferJson || 'null')
       
@@ -646,22 +616,9 @@ ${JSON.stringify(financialIndicators, null, 2)}
       .replace(/\{\{REVENUE_COST\}\}/g, injectedData.includes('收入成本数据') ? this.summarizeRevenueCostData(revenueCost) : '')
       .replace(/\{\{FINANCIAL\}\}/g, injectedData.includes('关键财务指标') ? JSON.stringify(financialIndicators, null, 2) : '')
       .replace(/\{\{ALL_DATA\}\}/g, injectedData.trim())
-      // 统一替换项目概况、运营负荷和修理费变量（所有模式都需要）
-        .replace(/\{\{project_overview\}\}/g, 
-          (tableDataJSON && tableDataJSON['project_overview'] && tableDataJSON['project_overview'] !== 'null')
-            ? (() => {
-                try {
-                  return JSON.parse(tableDataJSON['project_overview']).content || ''
-                } catch {
-                  return projectOverview || ''
-                }
-              })()
-            : (projectOverview || ''))
-        .replace(/\{\{operation_load\}\}/g, 
-          (tableDataJSON && tableDataJSON['operation_load'] && tableDataJSON['operation_load'] !== 'null')
-            ? tableDataJSON['operation_load'] 
-            : '[]')
-      .replace(/\{\{repair_rate\}\}/g, repairRateJson || '{}')
+      // 统一替换项目概况和运营负荷变量（所有模式都需要）
+      .replace(/\{\{project_overview\}\}/g, projectOverview || '')
+      .replace(/\{\{operation_load\}\}/g, operationLoadJson || '[]')
     
     return processedPrompt
   }
@@ -1040,37 +997,13 @@ ${JSON.stringify(summary, null, 2)}
       console.log('开始流式生成报告:', reportId)
       console.log('tableDataJSON keys:', tableDataJSON ? Object.keys(tableDataJSON) : '无')
       
-      // 【修复】优先使用前端传入的数据，确保与小眼睛显示一致
-      let projectData: any
+      // 收集项目相关数据
+      const projectData = await this.collectProjectData(project.id)
       
-      if (tableDataJSON && Object.keys(tableDataJSON).length > 0) {
-        // 前端传入了完整的表格数据，使用前端数据
-        console.log('[修复] 使用前端传入的 tableDataJSON，确保与小眼睛显示一致')
-        
-        // 从 tableDataJSON 构建 projectData，保持与小眼睛相同的数据结构
-        projectData = {
-          project: {
-            id: project?.id,
-            name: project?.name || '',
-            description: project?.description || project?.project_info || '',
-            constructionUnit: project?.constructionUnit || project?.construction_unit || '',
-            totalInvestment: project?.totalInvestment ?? project?.total_investment ?? 0,
-            constructionYears: project?.constructionYears ?? project?.construction_years ?? 0,
-            operationYears: project?.operationYears ?? project?.operation_years ?? 0,
-            projectType: project?.projectType || project?.project_type || project?.industry || '',
-            location: project?.location || ''
-          },
-          // 从 tableDataJSON 中提取财务指标（与小眼睛使用的数据一致）
-          financialIndicators: extractFinancialIndicatorsFromTableDataJSON(tableDataJSON),
-          // 使用前端传入的完整表格数据
-          tableDataJSON: tableDataJSON
-        }
-        
-        console.log('[修复] 使用前端数据 - 总投资:', projectData.project.totalInvestment)
-      } else {
-        // 没有前端数据，回退到实时查询数据库（向后兼容）
-        console.log('前端未传入 tableDataJSON，实时查询数据库')
-        projectData = await this.collectProjectData(project.id)
+      // 如果前端传入了 tableDataJSON，优先使用它
+      if (tableDataJSON) {
+        console.log('使用前端传入的 tableDataJSON')
+        projectData.tableDataJSON = tableDataJSON
       }
       
       // 构建完整的提示词
@@ -2588,125 +2521,5 @@ ${JSON.stringify(financialIndicators || {}, null, 2)}
         <img src="data:image/png;base64,${base64Data}" alt="${chartResource.title}" style="max-width: 100%; height: auto;" />
       </div>
     `
-  }
-}
-
-/**
- * 【修复】从表格数据JSON中提取财务指标
- * 确保与小眼睛显示的财务指标保持一致
- */
-function extractFinancialIndicatorsFromTableDataJSON(tableDataJSON: Record<string, string>): any {
-  try {
-    console.log('[修复] extractFinancialIndicatorsFromTableDataJSON 开始提取')
-    
-    // 尝试从财务计算指标表提取
-    const financialIndicatorsData = tableDataJSON['DATA:financial_indicators']
-    if (financialIndicatorsData) {
-      try {
-        const parsed = JSON.parse(financialIndicatorsData)
-        console.log('[修复] 从财务计算指标表提取:', parsed)
-        
-        // 尝试提取关键指标
-        if (parsed.总投资收益率 !== undefined) {
-          return {
-            roi: parsed.总投资收益率,
-            irr: parsed.项目投资财务内部收益率 || parsed.IRR || parsed.irr || 0,
-            npv: parsed.项目投资财务净现值 || parsed.NPV || parsed.npv || 0,
-            paybackPeriod: parsed.投资回收期 || parsed.paybackPeriod || 0,
-            totalInvestmentROI: parsed.总投资收益率 || 0,
-            totalRevenue: parsed.营业收入 || parsed.totalRevenue || 0,
-            totalCost: parsed.总成本费用 || parsed.totalCost || 0,
-            profit: parsed.利润总额 || parsed.profit || 0,
-            profitMargin: parsed.总投资收益率 || 0
-          }
-        }
-        
-        // 如果有完整的roi、irr、npv字段
-        if (parsed.roi !== undefined || parsed.irr !== undefined) {
-          return {
-            roi: parsed.roi || 0,
-            irr: parsed.irr || 0,
-            npv: parsed.npv || 0,
-            paybackPeriod: parsed.paybackPeriod || 0,
-            totalInvestmentROI: parsed.roi || 0,
-            totalRevenue: parsed.totalRevenue || 0,
-            totalCost: parsed.totalCost || 0,
-            profit: parsed.profit || 0,
-            profitMargin: parsed.profitMargin || 0
-          }
-        }
-        
-        return parsed
-      } catch (e) {
-        console.warn('[修复] 解析财务计算指标表失败:', e)
-      }
-    }
-    
-    // 尝试从财务静态动态指标表提取
-    const staticDynamicData = tableDataJSON['DATA:financial_static_dynamic']
-    if (staticDynamicData) {
-      try {
-        const parsed = JSON.parse(staticDynamicData)
-        console.log('[修复] 从财务静态动态指标表提取:', parsed)
-        
-        // 提取静态指标
-        if (parsed.静态指标 && Array.isArray(parsed.静态指标)) {
-          const indicators: any = {}
-          for (const item of parsed.静态指标) {
-            if (item.指标名称?.includes('投资收益率') || item.指标名称?.includes('ROI')) {
-              indicators.roi = item.指标值 || 0
-            }
-            if (item.指标名称?.includes('投资回收期')) {
-              indicators.paybackPeriod = item.指标值 || 0
-            }
-          }
-          // 提取动态指标
-          if (parsed.动态指标 && Array.isArray(parsed.动态指标)) {
-            for (const item of parsed.动态指标) {
-              if (item.指标名称?.includes('内部收益率') || item.指标名称?.includes('IRR')) {
-                indicators.irr = item.指标值 || 0
-              }
-              if (item.指标名称?.includes('净现值') || item.指标名称?.includes('NPV')) {
-                indicators.npv = item.指标值 || 0
-              }
-            }
-          }
-          
-          if (Object.keys(indicators).length > 0) {
-            console.log('[修复] 提取到财务指标:', indicators)
-            return indicators
-          }
-        }
-      } catch (e) {
-        console.warn('[修复] 解析财务静态动态指标表失败:', e)
-      }
-    }
-    
-    // 返回默认值
-    console.log('[修复] 未找到财务指标数据，返回默认值')
-    return {
-      roi: 0,
-      irr: 0,
-      npv: 0,
-      paybackPeriod: 0,
-      totalInvestmentROI: 0,
-      totalRevenue: 0,
-      totalCost: 0,
-      profit: 0,
-      profitMargin: 0
-    }
-  } catch (error) {
-    console.error('[修复] 提取财务指标失败:', error)
-    return {
-      roi: 0,
-      irr: 0,
-      npv: 0,
-      paybackPeriod: 0,
-      totalInvestmentROI: 0,
-      totalRevenue: 0,
-      totalCost: 0,
-      profit: 0,
-      profitMargin: 0
-    }
   }
 }

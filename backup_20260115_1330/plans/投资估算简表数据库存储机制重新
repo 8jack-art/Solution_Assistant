@@ -1,0 +1,411 @@
+# 投资估算简表数据库存储机制重新设计
+
+## 一、问题分析
+
+### 当前问题
+
+当前系统中，`/api/investment/generate/:projectId` API 在每次调用时都会：
+1. 执行迭代计算（最大10次迭代）
+2. **立即保存结果到数据库**
+
+这种设计导致：
+- **频繁写入**：每次前端触发计算都会写入数据库
+- **数据冗余**：迭代中间结果也会被保存
+- **性能问题**：不必要的数据库IO
+
+### 用户需求
+
+> "我这个表，会进行迭代计算。不可能每次迭代计算时都存。"
+
+**核心原则**：计算归计算，存储归存储
+
+---
+
+## 二、新设计方案
+
+### 设计理念
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        前端用户操作                              │
+│  ┌──────────┐    ┌──────────────┐    ┌────────────────────┐   │
+│  │ 修改子项 │ →  │ 点击"生成"   │ →  │ 点击"保存/确认"    │   │
+│  └──────────┘    └──────────────┘    └────────────────────┘   │
+│       ↓                 ↓                       ↓              │
+│  本地状态更新      仅计算，不存储            明确保存到数据库     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 核心改动
+
+| 阶段 | 操作 | API调用 | 数据库写入 |
+|------|------|---------|-----------|
+| 1. 计算 | 用户修改参数/子项 | `/api/investment/calculate` | ❌ 不写入 |
+| 2. 预览 | 查看计算结果 | 返回计算结果 | ❌ 不写入 |
+| 3. 保存 | 用户确认结果 | `/api/investment/save` | ✅ 写入数据库 |
+
+---
+
+## 三、API设计
+
+### 3.1 计算API - 仅计算，不存储
+
+**接口**: `POST /api/investment/calculate`
+
+**功能**: 执行迭代计算，返回结果（不写入数据库）
+
+**请求参数**:
+```typescript
+{
+  project_id: string           // 项目ID（必需）
+  ai_items?: InvestmentItem[]  // AI生成的子项（可选）
+  custom_loan_amount?: number  // 自定义贷款额（可选）
+  custom_land_cost?: number    // 自定义土地费用（可选）
+}
+```
+
+**响应**:
+```typescript
+{
+  success: true,
+  data: {
+    summary: InvestmentEstimateResult,  // 计算结果
+    iterationCount: number,             // 迭代次数
+    gapRate: number,                    // 差距率
+    thirdLevelItems?: Record<number, any[]> // 三级子项（如果存在）
+  }
+}
+```
+
+### 3.2 保存API - 明确保存
+
+**接口**: `POST /api/investment/save`
+
+**功能**: 将计算结果保存到数据库（由前端明确调用）
+
+**请求参数**:
+```typescript
+{
+  project_id: string                    // 项目ID（必需）
+  estimate_data: InvestmentEstimateResult, // 完整的估算数据（必需）
+  thirdLevelItems?: Record<number, any[]> // 三级子项数据（可选）
+  save_mode: 'create' | 'update' | 'auto' // 保存模式
+}
+```
+
+**响应**:
+```typescript
+{
+  success: true,
+  data: {
+    estimate: InvestmentEstimate,  // 保存的记录
+    savedAt: string               // 保存时间戳
+  }
+}
+```
+
+### 3.3 获取API - 保持现有
+
+**接口**: `GET /api/investment/project/:projectId`
+
+**功能**: 获取已保存的投资估算数据
+
+**响应**:
+```typescript
+{
+  success: true,
+  data: {
+    estimate: InvestmentEstimate | null,  // 已保存的数据
+    hasSavedData: boolean,                // 是否有已保存的数据
+    lastSavedAt?: string                  // 上次保存时间
+  }
+}
+```
+
+---
+
+## 四、数据流设计
+
+### 4.1 前端操作流程
+
+```
+1. 进入投资估算简表页面
+   ↓
+   调用 GET /api/investment/project/:id
+   ↓
+   ┌─────────────────────────────────────┐
+   │ 有已保存数据？                       │
+   └─────────────────────────────────────┘
+        ↓是                    ↓否
+   显示已保存数据         显示"无数据"状态
+        ↓                    ↓
+   用户可选择：         用户点击"生成投资估算"
+   - 查看/编辑         ↓
+   - 重新生成          调用 POST /api/investment/calculate
+   - 删除              ↓
+                    仅计算，返回结果
+                         ↓
+                    显示计算结果（临时状态）
+                         ↓
+                    用户确认后点击"保存"
+                         ↓
+                    调用 POST /api/investment/save
+                         ↓
+                    保存到数据库
+```
+
+### 4.2 临时状态管理
+
+前端需要管理"临时计算结果"状态：
+
+```typescript
+interface InvestmentEstimateState {
+  // 已保存的数据
+  savedEstimate: InvestmentEstimateResult | null
+  
+  // 临时计算结果（未保存）
+  temporaryEstimate: InvestmentEstimateResult | null
+  
+  // 是否有未保存的修改
+  hasUnsavedChanges: boolean
+  
+  // 最后计算时间
+  lastCalculatedAt: string | null
+}
+```
+
+---
+
+## 五、数据库表调整
+
+### 5.1 新增字段
+
+在 `investment_estimates` 表中增加状态字段：
+
+```sql
+ALTER TABLE investment_estimates ADD COLUMN status ENUM('draft', 'confirmed', 'archived') DEFAULT 'draft';
+
+ALTER TABLE investment_estimates ADD COLUMN calculated_at TIMESTAMP NULL;
+
+ALTER TABLE investment_estimates ADD COLUMN saved_by VARCHAR(36) NULL COMMENT '保存用户ID';
+```
+
+### 5.2 表结构说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | VARCHAR(36) | 主键 |
+| project_id | VARCHAR(36) | 项目ID |
+| estimate_data | JSON | 完整估算数据 |
+| status | ENUM | 状态（draft/confirmed/archived） |
+| calculated_at | TIMESTAMP | 最后计算时间 |
+| saved_by | VARCHAR(36) | 保存用户ID |
+| created_at | TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | 更新时间 |
+
+---
+
+## 六、前端改动
+
+### 6.1 新增API调用
+
+```typescript
+// 仅计算，不保存
+export const investmentApi = {
+  calculate: (params: {
+    project_id: string
+    ai_items?: any[]
+    custom_loan_amount?: number
+    custom_land_cost?: number
+  }) =>
+    api.post<any, ApiResponse<{ summary: any; iterationCount: number; gapRate: number }>>('/investment/calculate', params),
+  
+  // 明确保存
+  saveEstimate: (params: {
+    project_id: string
+    estimate_data: any
+    thirdLevelItems?: Record<number, any[]>
+  }) =>
+    api.post<any, ApiResponse<{ estimate: any; savedAt: string }>>('/investment/save', params),
+  
+  // ... 现有方法保持兼容
+}
+```
+
+### 6.2 组件状态管理
+
+```typescript
+// InvestmentSummary.tsx 中的状态
+const [savedEstimate, setSavedEstimate] = useState<any>(null)
+const [temporaryEstimate, setTemporaryEstimate] = useState<any>(null)
+const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+// 计算（不保存）
+const handleCalculate = async () => {
+  const response = await investmentApi.calculate({
+    project_id: id,
+    // ... 参数
+  })
+  if (response.success) {
+    setTemporaryEstimate(response.data.summary)
+    setHasUnsavedChanges(true)
+  }
+}
+
+// 保存（用户确认后）
+const handleSave = async () => {
+  if (!temporaryEstimate) return
+  
+  const response = await investmentApi.saveEstimate({
+    project_id: id,
+    estimate_data: temporaryEstimate
+  })
+  
+  if (response.success) {
+    setSavedEstimate(temporaryEstimate)
+    setTemporaryEstimate(null)
+    setHasUnsavedChanges(false)
+    notifications.show({ title: '✅ 保存成功', message: '投资估算已保存', color: 'green' })
+  }
+}
+```
+
+---
+
+## 七、后端改动
+
+### 7.1 新增calculate接口
+
+```typescript
+// investmentController.ts
+
+static async calculate(req: AuthRequest, res: Response) {
+  try {
+    const { projectId } = req.params
+    const { ai_items, custom_loan_amount, custom_land_cost } = req.body
+    
+    // 权限验证...
+    
+    // 获取项目信息
+    const project = await InvestmentProjectModel.findById(projectId)
+    if (!project) {
+      return res.status(404).json({ success: false, error: '项目不存在' })
+    }
+    
+    // 保留原有的三级子项数据
+    const existingEstimate = await InvestmentEstimateModel.findByProjectId(projectId)
+    let existingThirdLevelItems: Record<number, any[]> = {}
+    
+    if (existingEstimate?.estimate_data?.thirdLevelItems) {
+      existingThirdLevelItems = existingEstimate.estimate_data.thirdLevelItems
+    }
+    
+    // 执行计算（不保存）
+    const result = calculateInvestmentEstimate({
+      projectName: project.project_name,
+      targetInvestment: project.total_investment,
+      constructionYears: project.construction_years,
+      operationYears: project.operation_years,
+      loanRatio: project.loan_ratio,
+      loanInterestRate: project.loan_interest_rate,
+      landCost: custom_land_cost ?? project.land_cost ?? 0,
+      aiGeneratedItems: ai_items,
+      customLoanAmount: custom_loan_amount
+    })
+    
+    // 合并三级子项数据
+    if (Object.keys(existingThirdLevelItems).length > 0) {
+      result.thirdLevelItems = existingThirdLevelItems
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        summary: result,
+        iterationCount: result.iterationCount,
+        gapRate: result.gapRate
+      }
+    })
+  } catch (error) {
+    console.error('计算投资估算失败:', error)
+    res.status(500).json({ success: false, error: '计算失败' })
+  }
+}
+```
+
+### 7.2 调整generateSummary接口
+
+```typescript
+// generateSummary 不再自动保存，只返回计算结果
+static async generateSummary(req: AuthRequest, res: Response) {
+  try {
+    // ... 权限验证 ...
+    // ... 获取项目信息 ...
+    
+    // 执行计算
+    const result = calculateInvestmentEstimate({ ... })
+    
+    // 不保存到数据库，直接返回结果
+    res.json({
+      success: true,
+      data: {
+        summary: result  // 只返回计算结果
+      }
+    })
+  } catch (error) {
+    res.status(500).json({ success: false, error: '计算失败' })
+  }
+}
+```
+
+---
+
+## 八、兼容性设计
+
+### 8.1 向后兼容
+
+- 现有 `generateSummary` 接口保留，用于向后兼容
+- 新增 `calculate` 接口用于精确控制
+- 前端逐步迁移到新流程
+
+### 8.2 数据迁移
+
+```sql
+-- 为现有记录添加默认状态
+UPDATE investment_estimates SET status = 'confirmed' WHERE status IS NULL;
+```
+
+---
+
+## 九、实施计划
+
+### Phase 1: 后端改动
+1. 新增 `calculate` API（仅计算，不保存）
+2. 调整 `save` API，支持保存模式
+3. 添加数据库字段（status, calculated_at）
+
+### Phase 2: 前端改动
+1. 更新 `investmentApi` 新增方法
+2. 修改 `InvestmentSummary.tsx` 状态管理
+3. 添加"保存"按钮和确认逻辑
+
+### Phase 3: 测试验证
+1. 单元测试
+2. 集成测试
+3. 用户验收测试
+
+---
+
+## 十、总结
+
+**核心改动**：
+1. 分离"计算"和"存储"两个阶段
+2. 计算API仅返回结果，不写入数据库
+3. 保存API由前端明确调用
+4. 前端管理临时状态和未保存修改
+
+**收益**：
+- 减少不必要的数据库写入
+- 提升系统性能和响应速度
+- 更清晰的数据流和状态管理
+- 用户可预览计算结果后再确认保存
