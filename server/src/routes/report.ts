@@ -46,6 +46,9 @@ router.get('/project/summary/:projectId', ReportController.getProjectSummary)
 router.post('/project/overview', ReportController.saveProjectOverview)
 router.get('/project/overview/:projectId', ReportController.getProjectOverview)
 
+// ==================== 自定义变量管理 ====================
+router.post('/project/custom-variables', ReportController.saveCustomVariables)
+
 // ==================== 项目概况生成（SSE流式） ====================
 router.post('/generate/overview/:projectId', ReportController.generateProjectOverview)
 

@@ -42,6 +42,15 @@ const defaultStyleConfig: ReportStyleConfig = {
     spaceAfter: 6,
     firstLineIndent: 0
   },
+  heading3: {
+    font: '黑体',
+    fontSize: 15,
+    bold: true,
+    lineSpacing: 1.5,
+    spaceBefore: 0,
+    spaceAfter: 0,
+    firstLineIndent: 0
+  },
   body: {
     font: '宋体',
     fontSize: 12,
@@ -220,6 +229,18 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
     autoSave({ ...styleConfig, ...newConfig })
   }, [styleConfig, updateStyleConfig, autoSave])
 
+  // 处理标题3样式变更
+  const handleHeading3Change = useCallback((field: string, value: any) => {
+    const newConfig = {
+      heading3: {
+        ...styleConfig?.heading3,
+        [field]: value
+      }
+    }
+    updateStyleConfig(newConfig)
+    autoSave({ ...styleConfig, ...newConfig })
+  }, [styleConfig, updateStyleConfig, autoSave])
+
   // 处理正文样式变更
   const handleBodyChange = useCallback((field: string, value: any) => {
     const newConfig = {
@@ -334,6 +355,56 @@ export const StyleSettingsPanel: React.FC<StyleSettingsPanelProps> = ({ onClose 
                   type="checkbox"
                   checked={styleConfig?.heading2?.bold ?? defaultStyleConfig.heading2.bold}
                   onChange={(e) => handleHeading2Change('bold', e.target.checked)}
+                />
+                加粗
+              </label>
+            </div>
+          </div>
+        </section>
+
+        {/* 标题3样式设置 */}
+        <section className="settings-section">
+          <h4>标题3样式（预览）</h4>
+          <div className="settings-grid">
+            <div className="setting-item">
+              <label>字体</label>
+              <select
+                value={styleConfig?.heading3?.font || defaultStyleConfig.heading3.font}
+                onChange={(e) => handleHeading3Change('font', e.target.value)}
+              >
+                {fontOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="setting-item">
+              <label>字号</label>
+              <select
+                value={styleConfig?.heading3?.fontSize || defaultStyleConfig.heading3.fontSize}
+                onChange={(e) => handleHeading3Change('fontSize', Number(e.target.value))}
+              >
+                {fontSizeOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="setting-item">
+              <label>行间距</label>
+              <select
+                value={styleConfig?.heading3?.lineSpacing || defaultStyleConfig.heading3.lineSpacing}
+                onChange={(e) => handleHeading3Change('lineSpacing', e.target.value === 'fixed' ? 'fixed' : Number(e.target.value))}
+              >
+                {lineSpacingOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="setting-item checkbox-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={styleConfig?.heading3?.bold ?? defaultStyleConfig.heading3.bold}
+                  onChange={(e) => handleHeading3Change('bold', e.target.checked)}
                 />
                 加粗
               </label>

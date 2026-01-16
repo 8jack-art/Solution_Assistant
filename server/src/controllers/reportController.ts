@@ -823,6 +823,13 @@ export class ReportController {
       // 构建所有表格数据的 JSON（用于 LLM 提示词和小眼睛预览）
       const tableDataJSON = buildAllTableDataJSON(projectData)
 
+      // 获取项目概况（从单独的 report_project_overview 表）
+      const [overviews] = await pool.execute(
+        'SELECT content FROM report_project_overview WHERE project_id = ?',
+        [projectId]
+      ) as any[]
+      const projectOverview = overviews.length > 0 ? overviews[0].content : null
+
       res.json({ 
         success: true, 
         data: {
@@ -837,6 +844,7 @@ export class ReportController {
             location: project.location || '',
             constructionUnit: project.construction_unit || ''
           },
+          projectOverview,
           investment: projectData.investment,
           revenueCost: projectData.revenueCost,
           financialIndicators: projectData.financialIndicators,
@@ -948,15 +956,93 @@ export class ReportController {
         return
       }
 
+      // 处理 custom_variables 字段（可能是 JSON 字符串或对象）
+      let customVariables = overviews[0].custom_variables
+      if (typeof customVariables === 'string') {
+        try {
+          customVariables = JSON.parse(customVariables)
+        } catch {
+          customVariables = {}
+        }
+      }
+      if (typeof customVariables !== 'object' || customVariables === null) {
+        customVariables = {}
+      }
+
       res.json({ 
         success: true, 
         data: {
-          content: overviews[0].content
+          content: overviews[0].content,
+          customVariables
         }
       })
     } catch (error) {
       console.error('获取项目概况失败:', error)
       res.status(500).json({ success: false, error: '获取项目概况失败' })
+    }
+  }
+
+  /**
+   * 保存自定义变量
+   */
+  static async saveCustomVariables(req: Request, res: Response): Promise<void> {
+    try {
+      const { projectId, customVariables } = req.body
+      const userId = ReportController.getUserId(req)
+
+      if (!projectId) {
+        res.status(400).json({ success: false, error: '缺少项目ID' })
+        return
+      }
+
+      if (!customVariables || typeof customVariables !== 'object') {
+        res.status(400).json({ success: false, error: '自定义变量格式不正确' })
+        return
+      }
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: '未授权' })
+        return
+      }
+
+      // 验证项目是否存在且属于当前用户
+      const [projects] = await pool.execute(
+        'SELECT id FROM investment_projects WHERE id = ? AND user_id = ?',
+        [projectId, userId]
+      ) as any[]
+
+      if (projects.length === 0) {
+        res.status(404).json({ success: false, error: '项目不存在' })
+        return
+      }
+
+      // 检查是否已存在项目概况记录
+      const [existing] = await pool.execute(
+        'SELECT id FROM report_project_overview WHERE project_id = ?',
+        [projectId]
+      ) as any[]
+
+      const customVariablesJson = JSON.stringify(customVariables)
+
+      if (existing.length > 0) {
+        // 更新现有记录
+        await pool.execute(
+          'UPDATE report_project_overview SET custom_variables = ?, updated_at = NOW() WHERE project_id = ?',
+          [customVariablesJson, projectId]
+        )
+      } else {
+        // 新建记录
+        const overviewId = uuidv4()
+        await pool.execute(
+          'INSERT INTO report_project_overview (id, project_id, custom_variables) VALUES (?, ?, ?)',
+          [overviewId, projectId, customVariablesJson]
+        )
+      }
+
+      res.json({ success: true, message: '自定义变量保存成功' })
+    } catch (error) {
+      console.error('保存自定义变量失败:', error)
+      res.status(500).json({ success: false, error: '保存自定义变量失败' })
     }
   }
 

@@ -1048,6 +1048,21 @@ ${JSON.stringify(summary, null, 2)}
         console.log('[修复] 使用前端传入的 tableDataJSON，确保与小眼睛显示一致')
         
         // 从 tableDataJSON 构建 projectData，保持与小眼睛相同的数据结构
+        // 【修复】添加 revenueCost（包含 productionRates）和 projectOverview
+        const productionRates = extractProductionRatesFromTableDataJSON(tableDataJSON)
+        
+        // 获取项目概况数据
+        let projectOverview = ''
+        try {
+          const projectOverviewJson = tableDataJSON['project_overview']
+          if (projectOverviewJson && projectOverviewJson !== 'null') {
+            const parsed = JSON.parse(projectOverviewJson)
+            projectOverview = parsed.content || ''
+          }
+        } catch (e) {
+          console.warn('[修复] 解析 project_overview 失败:', e)
+        }
+        
         projectData = {
           project: {
             id: project?.id,
@@ -1060,13 +1075,20 @@ ${JSON.stringify(summary, null, 2)}
             projectType: project?.projectType || project?.project_type || project?.industry || '',
             location: project?.location || ''
           },
+          // 【修复】添加 revenueCost，包含 productionRates（用于 operation_load 回退）
+          revenueCost: {
+            productionRates: productionRates
+          },
+          // 【修复】添加 projectOverview
+          projectOverview: projectOverview,
           // 从 tableDataJSON 中提取财务指标（与小眼睛使用的数据一致）
           financialIndicators: extractFinancialIndicatorsFromTableDataJSON(tableDataJSON),
           // 使用前端传入的完整表格数据
           tableDataJSON: tableDataJSON
         }
         
-        console.log('[修复] 使用前端数据 - 总投资:', projectData.project.totalInvestment)
+        console.log('[修复] 使用前端数据 - projectOverview:', projectOverview ? '有数据' : '空')
+        console.log('[修复] 使用前端数据 - productionRates:', productionRates.length, '条')
       } else {
         // 没有前端数据，回退到实时查询数据库（向后兼容）
         console.log('前端未传入 tableDataJSON，实时查询数据库')
@@ -2588,6 +2610,34 @@ ${JSON.stringify(financialIndicators || {}, null, 2)}
         <img src="data:image/png;base64,${base64Data}" alt="${chartResource.title}" style="max-width: 100%; height: auto;" />
       </div>
     `
+  }
+}
+
+/**
+ * 【修复】从表格数据JSON中提取运营负荷数据（productionRates）
+ */
+function extractProductionRatesFromTableDataJSON(tableDataJSON: Record<string, string>): any[] {
+  try {
+    const operationLoadData = tableDataJSON['operation_load']
+    if (operationLoadData && operationLoadData !== 'null') {
+      try {
+        const parsed = JSON.parse(operationLoadData)
+        // 如果是数组，直接返回
+        if (Array.isArray(parsed)) {
+          return parsed
+        }
+        // 如果是对象，包含content字段
+        if (parsed.content && Array.isArray(parsed.content)) {
+          return parsed.content
+        }
+      } catch (e) {
+        console.warn('[修复] 解析 operation_load 失败:', e)
+      }
+    }
+    return []
+  } catch (error) {
+    console.error('[修复] 提取运营负荷数据失败:', error)
+    return []
   }
 }
 

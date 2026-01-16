@@ -96,14 +96,15 @@ function markdownToHtml(markdown: string): string {
     .replace(/\n\n/g, '</p><p>')
     
   // 包装在段落标签中
-  return '<p>' + html + '</p>'
-    .replace(/<p><\/p>/g, '<p></p>')
-    .replace(/<p>(<h[1-6]>)/g, '$1')
-    .replace(/(<\/h[1-6]>)<\/p>/g, '$1')
-    .replace(/<p>(<blockquote>)/g, '$1')
-    .replace(/(<\/blockquote>)<\/p>/g, '$1')
-    .replace(/<p>(<li>)/g, '<ul>$1')
-    .replace(/(<\/li>)<\/p>/g, '$1</ul>')
+  let result = '<p>' + html + '</p>'
+  result = result.replace(/<p><\/p>/g, '<p></p>')
+  result = result.replace(/<p>(<h[1-6]>)/g, '$1')
+  result = result.replace(/(<\/h[1-6]>)<\/p>/g, '$1')
+  result = result.replace(/<p>(<blockquote>)/g, '$1')
+  result = result.replace(/(<\/blockquote>)<\/p>/g, '$1')
+  result = result.replace(/<p>(<li>)/g, '<ul>$1')
+  result = result.replace(/<\/li><\/p>/g, '$1</ul>')
+  return result
 }
 
 interface ProjectOverviewModalProps {
@@ -160,7 +161,7 @@ function ToolbarButton({ icon, label, isActive, disabled, onClick }: ToolbarButt
 }
 
 export function ProjectOverviewModal({ opened, onClose }: ProjectOverviewModalProps) {
-  const { projectData, projectId, projectOverview, saveProjectOverview } = useReportStore()
+  const { projectData, projectId, projectOverview, saveProjectOverview, getCachedTableDataJSON } = useReportStore()
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [lockConstructionScale, setLockConstructionScale] = useState(false)  // 锁定建设规模滑块
@@ -168,43 +169,65 @@ export function ProjectOverviewModal({ opened, onClose }: ProjectOverviewModalPr
   // 使用 hook 处理项目数据
   const projectOverviewData = useProjectOverviewData(projectData)
 
+  // 从 {{DATA:revenue_tax}} 提取产品/服务名称列表（单一数据来源）
+  const productsServicesFromRevenueTax = useMemo(() => {
+    const tableDataJSON = getCachedTableDataJSON()
+    const revenueTaxJson = tableDataJSON['DATA:revenue_tax']
+    
+    if (!revenueTaxJson || revenueTaxJson === 'null') {
+      console.log('[productsServices] DATA:revenue_tax 无数据')
+      return []
+    }
+    
+    try {
+      const data = JSON.parse(revenueTaxJson)
+      // 从含税收入表提取产品名称
+      const products = data?.products || data?.产品 || []
+      if (Array.isArray(products) && products.length > 0) {
+        const names = products.map((p: any) => p.name || p.产品名称 || p.产品 || '').filter(Boolean)
+        console.log('[productsServices] 从DATA:revenue_tax提取:', names)
+        return names
+      }
+      // 如果没有products字段，尝试从rows提取
+      const rows = data?.rows || data?.数据 || []
+      if (Array.isArray(rows) && rows.length > 0) {
+        const names = rows.map((r: any) => r.name || r.产品 || r.产品名称 || r.项目 || '').filter(Boolean)
+        console.log('[productsServices] 从DATA:revenue_tax.rows提取:', names)
+        return names
+      }
+      console.log('[productsServices] DATA:revenue_tax 格式不符合预期:', data)
+      return []
+    } catch (e) {
+      console.error('[productsServices] 解析DATA:revenue_tax失败:', e)
+      return []
+    }
+  }, [getCachedTableDataJSON])
+
   // 构建大模型 Prompt
   const buildPrompt = useMemo(() => {
     if (!projectOverviewData) return ''
     
     const project = projectData?.project || {}
-    const revenueItems = projectData?.revenueItems || []
     
-    // 产品/服务：优先使用localStorage保存的数据，否则从revenueItems获取
-    let productsServices: string[] = []
-    if (projectOverviewData?.productsServices && projectOverviewData.productsServices.length > 0) {
-      productsServices = projectOverviewData.productsServices
-      console.log('[buildPrompt] 使用projectOverviewData的productsServices:', productsServices)
-    } else {
-      productsServices = revenueItems.map((item: any) => item.name || '').filter(Boolean)
-      console.log('[buildPrompt] 使用revenueItems的productsServices:', productsServices)
-    }
-
+    // 使用 {{DATA:revenue_tax}} 提取的产品/服务名称（单一数据来源）
+    const productsServices = productsServicesFromRevenueTax.length > 0 
+      ? productsServicesFromRevenueTax 
+      : ['暂无产品或服务数据']
+    
     // 建设规模：根据锁定状态决定
     let constructionScaleText = ''
     const projectId = projectData?.project?.id || projectData?.projectId
     const lockedKey = projectId ? `project_construction_scale_locked_${projectId}` : ''
     
     if (lockConstructionScale && lockedKey) {
-      // 锁定时，从localStorage读取保存的建设规模
       const lockedScale = localStorage.getItem(lockedKey)
       if (lockedScale) {
         constructionScaleText = lockedScale
-        console.log('[buildPrompt] 锁定建设规模，从localStorage读取:', lockedScale.substring(0, 50) + '...')
       } else {
-        // 如果localStorage没有值，使用当前值
         constructionScaleText = projectOverviewData?.constructionScale || ''
-        console.log('[buildPrompt] localStorage无值，使用当前值')
       }
     } else {
-      // 未锁定时，使用projectOverviewData的值
       constructionScaleText = projectOverviewData?.constructionScale || ''
-      console.log('[buildPrompt] 未锁定建设规模，使用projectOverviewData:', constructionScaleText.substring(0, 50) + '...')
     }
     
     // 建设周期
@@ -214,18 +237,9 @@ export function ProjectOverviewModal({ opened, onClose }: ProjectOverviewModalPr
     // [DEBUG] 获取当前时间，格式：2026年1月
     const currentDate = new Date()
     const currentDateText = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`
-    console.log('[buildPrompt] 当前时间:', currentDateText)
-
-    console.log('[ProjectOverviewModal] 使用projectOverviewData构建Prompt:', {
-      projectName: projectOverviewData.projectName,
-      investmentScale: projectOverviewData.investmentScale,
-      fundingSource: projectOverviewData.fundingSource,
-      constructionPeriodText,
-      currentDate: currentDateText
-    })
     
     return `
-先输出${productsServices.join('、')}变量。根据以下项目信息，生成项目概况（当前时间：${currentDateText}）：
+根据以下项目信息，生成项目概况（当前时间：${currentDateText}）：
 
 项目名称：${projectOverviewData.projectName}
 建设单位：${projectOverviewData.constructionUnit}
@@ -241,7 +255,7 @@ ${projectOverviewData.investmentScale}
 资金来源信息：
 ${projectOverviewData.fundingSource}
 
-产品/服务信息：
+产品/服务信息（来自{{DATA:revenue_tax}}）：
 ${productsServices.join('、')}
 
 请按照以下JSON格式输出项目概况（不要添加markdown代码块标记，不要用\`\`\`json包裹）：
@@ -249,14 +263,14 @@ ${productsServices.join('、')}
   "projectName": "项目名称",
   "constructionUnit": "建设单位",
   "constructionSite": "建设地点",
-  "constructionScale": "你是一位专业的企业投资项目可行性研究报告撰写专家。你拥有十年以上大型项目咨询经验，根据已知的"建设规模信息"进行详细的建设规模描述",
+  "constructionScale": "详细的建设规模描述",
   "investmentScale": "详细的投资规模描述，包括各分项金额",
   "fundingSource": "资金来源描述，包括贷款和自筹比例",
   "constructionPeriod": "建设周期描述。例：2年，即：2025年9月～2027年8月。",
-  "productsServices": "你是一位专业的企业投资项目可行性研究报告撰写专家。你拥有十年以上大型项目咨询经验，根据产品/服务信息，列出项目所涉的主要产品或服务名称"
+  "productsServices": "列出项目所涉的主要产品或服务名称"
 }
     `.trim()
-  }, [projectOverviewData, projectData, lockConstructionScale])
+  }, [projectOverviewData, projectData, lockConstructionScale, productsServicesFromRevenueTax])
 
   // JSON转HTML
   const jsonToHtml = useMemo(() => {
@@ -405,11 +419,6 @@ ${productsServices.join('、')}
 
     // 将HTML转换为Markdown格式
     const markdownContent = htmlToMarkdown(htmlContent)
-    console.log('[handleSave] HTML转Markdown:', {
-      htmlLength: htmlContent.length,
-      markdownLength: markdownContent.length,
-      markdownPreview: markdownContent.substring(0, 100) + '...'
-    })
 
     setSaving(true)
     try {
@@ -599,7 +608,6 @@ ${productsServices.join('、')}
                         if (projectId && projectOverviewData?.constructionScale) {
                           const lockedKey = `project_construction_scale_locked_${projectId}`
                           localStorage.setItem(lockedKey, projectOverviewData.constructionScale)
-                          console.log('[锁定建设规模] 已保存到localStorage:', projectOverviewData.constructionScale.substring(0, 50) + '...')
                         }
                       } else {
                         // 解锁时，删除localStorage中的锁定值
@@ -607,10 +615,8 @@ ${productsServices.join('、')}
                         if (projectId) {
                           const lockedKey = `project_construction_scale_locked_${projectId}`
                           localStorage.removeItem(lockedKey)
-                          console.log('[锁定建设规模] 已从localStorage删除')
                         }
                       }
-                      console.log('[锁定建设规模] 状态:', checked ? '锁定' : '未锁定')
                     }}
                     label="锁定建设规模"
                     styles={{ label: { fontSize: '11px', color: lockConstructionScale ? 'var(--mantine-color-red-6)' : 'var(--mantine-color-dark-5)' } }}

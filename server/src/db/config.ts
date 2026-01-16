@@ -64,6 +64,8 @@ async function ensureFields() {
     "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS style_config JSON COMMENT '样式配置'",
     "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS sections_config JSON COMMENT '章节配置'",
     "ALTER TABLE generated_reports ADD COLUMN IF NOT EXISTS resources_config JSON COMMENT '资源映射'",
+    // 自定义变量字段
+    "ALTER TABLE report_project_overview ADD COLUMN IF NOT EXISTS custom_variables JSON COMMENT '自定义变量，键值对格式'",
   ]
 
   for (const query of alterQueries) {

@@ -1,11 +1,19 @@
 import { useState } from 'react'
 import { useReportStore } from '../../stores/reportStore'
 import { Text, Badge, Group, Stack, ActionIcon, Tooltip, Button, Modal, TextInput, Textarea, ScrollArea, Code } from '@mantine/core'
-import { Sparkles, Plus, Trash2, Eye } from 'lucide-react'
+import { Sparkles, Plus, Trash2, Eye, Edit2 } from 'lucide-react'
 import { ProjectOverviewModal } from './ProjectOverviewModal'
 
 export function VariablePicker() {
-  const { projectOverview, customVariables, addCustomVariable, removeCustomVariable, availableVariables } = useReportStore()
+  const { 
+    projectOverview, 
+    getCustomVariables, 
+    addCustomVariable, 
+    removeCustomVariable,
+    updateCustomVariable,
+    availableVariables,
+    saveCustomVariables 
+  } = useReportStore()
   const [modalOpened, setModalOpened] = useState(false)
   const [newVariableModalOpened, setNewVariableModalOpened] = useState(false)
   const [newVariableKey, setNewVariableKey] = useState('')
@@ -13,6 +21,9 @@ export function VariablePicker() {
   const [jsonViewerOpened, setJsonViewerOpened] = useState(false)
   const [jsonViewerTitle, setJsonViewerTitle] = useState('')
   const [jsonViewerData, setJsonViewerData] = useState('')
+  
+  // 获取当前项目的自定义变量
+  const customVariables = getCustomVariables()
 
   const handleCopyVariable = (variableKey: string) => {
     navigator.clipboard.writeText(variableKey)
@@ -42,19 +53,70 @@ export function VariablePicker() {
   const hasProjectOverview = !!projectOverview && projectOverview.trim() !== ''
 
   // 创建自定义变量
-  const handleCreateVariable = () => {
+  const handleCreateVariable = async () => {
     if (newVariableKey.trim()) {
+      // 验证变量名格式（只能包含字母、数字、下划线，不能以数字开头）
+      if (!validateVariableName(newVariableKey.trim())) {
+        alert('变量名格式不正确！只能包含字母、数字、下划线，且不能以数字开头')
+        return
+      }
+      
       const key = `{{${newVariableKey.trim()}}}`
       addCustomVariable(key, newVariableValue)
       setNewVariableKey('')
       setNewVariableValue('')
       setNewVariableModalOpened(false)
+      
+      // 自动保存到后端
+      try {
+        await saveCustomVariables()
+      } catch (error) {
+        console.error('保存自定义变量失败:', error)
+      }
     }
   }
 
   // 删除自定义变量
-  const handleDeleteVariable = (key: string) => {
+  const handleDeleteVariable = async (key: string) => {
     removeCustomVariable(key)
+    
+    // 自动保存到后端
+    try {
+      await saveCustomVariables()
+    } catch (error) {
+      console.error('保存自定义变量失败:', error)
+    }
+  }
+
+  // 打开修改变量 Modal
+  const [editVariableKey, setEditVariableKey] = useState('')
+  const [editVariableValue, setEditVariableValue] = useState('')
+  const [editVariableModalOpened, setEditVariableModalOpened] = useState(false)
+
+  const handleOpenEditModal = (key: string, value: string) => {
+    setEditVariableKey(key)
+    setEditVariableValue(value)
+    setEditVariableModalOpened(true)
+  }
+
+  const handleSaveEditVariable = async () => {
+    if (editVariableKey) {
+      updateCustomVariable(editVariableKey, editVariableValue)
+      setEditVariableModalOpened(false)
+      
+      // 自动保存到后端
+      try {
+        await saveCustomVariables()
+      } catch (error) {
+        console.error('保存自定义变量失败:', error)
+      }
+    }
+  }
+
+  // 验证变量名格式（只能包含字母、数字、下划线，不能以数字开头）
+  const validateVariableName = (name: string): boolean => {
+    const regex = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+    return regex.test(name)
   }
 
   return (
@@ -571,17 +633,34 @@ export function VariablePicker() {
                   onClick={() => handleCopyVariable(key)}
                   title="点击复制"
                   rightSection={
-                    <ActionIcon
-                      size="xs"
-                      variant="transparent"
-                      color="gray"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteVariable(key)
-                      }}
-                    >
-                      <Trash2 size={10} />
-                    </ActionIcon>
+                    <>
+                      <Tooltip label="修改变量值">
+                        <ActionIcon
+                          size="xs"
+                          variant="transparent"
+                          color="blue"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenEditModal(key, value)
+                          }}
+                        >
+                          <Edit2 size={10} />
+                        </ActionIcon>
+                      </Tooltip>
+                      <Tooltip label="删除变量">
+                        <ActionIcon
+                          size="xs"
+                          variant="transparent"
+                          color="gray"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteVariable(key)
+                          }}
+                        >
+                          <Trash2 size={10} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </>
                   }
                 >
                   {key.replace('{{', '').replace('}}', '')}
@@ -611,7 +690,11 @@ export function VariablePicker() {
           setNewVariableValue('')
         }}
         title="新建变量"
-        size="sm"
+        size="lg"
+        styles={{
+          body: { minHeight: '300px' },
+          content: { height: '500px' }
+        }}
       >
         <Stack gap="md">
           <TextInput
@@ -626,7 +709,8 @@ export function VariablePicker() {
             placeholder="输入变量的值..."
             value={newVariableValue}
             onChange={(e) => setNewVariableValue(e.target.value)}
-            minRows={3}
+            minRows={9}
+            styles={{ input: { height: '250px' } }}
           />
           <Group justify="flex-end" mt="md">
             <Button 
@@ -676,6 +760,56 @@ export function VariablePicker() {
             复制JSON
           </Button>
         </Group>
+      </Modal>
+
+      {/* 修改变量Modal */}
+      <Modal
+        opened={editVariableModalOpened}
+        onClose={() => setEditVariableModalOpened(false)}
+        title="修改变量"
+        size="lg"
+        styles={{
+          body: { minHeight: '300px' },
+          content: { height: '510px' }
+        }}
+      >
+        <Stack gap="md">
+          <TextInput
+            label="变量名"
+            value={editVariableKey.replace('{{', '').replace('}}', '')}
+            disabled
+            description="变量名不可修改"
+          />
+          <Textarea
+            label="变量值"
+            placeholder="输入变量的值..."
+            value={editVariableValue}
+            onChange={(e) => setEditVariableValue(e.target.value)}
+            minRows={9}
+            styles={{ input: { height: '250px' } }}
+          />
+          <Group justify="flex-end" mt="md">
+            <Button 
+              variant="light" 
+              color="red"
+              onClick={() => setEditVariableValue('')}
+            >
+              清空
+            </Button>
+            <Button 
+              variant="light" 
+              onClick={() => setEditVariableModalOpened(false)}
+            >
+              取消
+            </Button>
+            <Button 
+              onClick={handleSaveEditVariable}
+              disabled={!editVariableValue.trim()}
+            >
+              保存
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
     </div>
   )

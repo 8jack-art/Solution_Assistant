@@ -41,6 +41,15 @@ const defaultStyleConfig: ReportStyleConfig = {
     spaceAfter: 6,
     firstLineIndent: 0
   },
+  heading3: {
+    font: '黑体',
+    fontSize: 15,
+    bold: true,
+    lineSpacing: 1.5,
+    spaceBefore: 0,
+    spaceAfter: 0,
+    firstLineIndent: 0
+  },
   body: {
     font: '宋体',
     fontSize: 12,

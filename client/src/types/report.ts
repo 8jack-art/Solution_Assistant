@@ -66,6 +66,7 @@ export interface ReportStyleConfig {
   // 新增：标题和正文独立段落样式
   heading1: ParagraphStyle   // 标题1样式
   heading2: ParagraphStyle   // 标题2样式
+  heading3: ParagraphStyle   // 标题3样式
   body: ParagraphStyle       // 正文样式
   
   // 页面设置
@@ -116,7 +117,7 @@ export const defaultStyleConfig: ReportStyleConfig = {
     bold: true,
     lineSpacing: 1.5,
     spaceBefore: 0,
-    spaceAfter: 6,
+    spaceAfter: 0,
     firstLineIndent: 0
   },
   heading2: {
@@ -124,8 +125,17 @@ export const defaultStyleConfig: ReportStyleConfig = {
     fontSize: 16,        // 小三
     bold: true,
     lineSpacing: 1.5,
-    spaceBefore: 6,
-    spaceAfter: 6,
+    spaceBefore: 0,
+    spaceAfter: 0,
+    firstLineIndent: 0
+  },
+  heading3: {
+    font: '黑体',
+    fontSize: 15,        // 三号
+    bold: true,
+    lineSpacing: 1.5,
+    spaceBefore: 0,
+    spaceAfter: 0,
     firstLineIndent: 0
   },
   body: {
@@ -308,6 +318,18 @@ export function validateAndCompleteStyleConfig(config: Partial<ReportStyleConfig
     firstLineIndent: config.heading2?.firstLineIndent ?? defaultStyleConfig.heading2.firstLineIndent,
   }
 
+  // 补全 heading3
+  const heading3 = {
+    font: config.heading3?.font ?? defaultStyleConfig.heading3.font,
+    fontSize: config.heading3?.fontSize ?? defaultStyleConfig.heading3.fontSize,
+    bold: config.heading3?.bold ?? defaultStyleConfig.heading3.bold,
+    lineSpacing: config.heading3?.lineSpacing ?? defaultStyleConfig.heading3.lineSpacing,
+    lineSpacingValue: config.heading3?.lineSpacingValue ?? defaultStyleConfig.heading3.lineSpacingValue,
+    spaceBefore: config.heading3?.spaceBefore ?? defaultStyleConfig.heading3.spaceBefore,
+    spaceAfter: config.heading3?.spaceAfter ?? defaultStyleConfig.heading3.spaceAfter,
+    firstLineIndent: config.heading3?.firstLineIndent ?? defaultStyleConfig.heading3.firstLineIndent,
+  }
+
   // 补全 body
   const body = {
     font: config.body?.font ?? defaultStyleConfig.body.font,
@@ -345,6 +367,7 @@ export function validateAndCompleteStyleConfig(config: Partial<ReportStyleConfig
     paragraph,
     heading1,
     heading2,
+    heading3,
     body,
     page,
     table,

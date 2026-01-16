@@ -41,7 +41,7 @@ interface ReportState {
   availableVariables: ReportVariable[]
   projectData: any
   projectOverview: string | null  // 项目概况
-  customVariables: Record<string, string>  // 自定义变量 key -> value
+  customVariablesByProject: Record<string, Record<string, string>>  // 自定义变量按项目ID隔离
   cachedTableDataJSON: Record<string, Record<string, string>>  // 缓存的表格数据JSON（用于LLM提示词），按项目ID隔离
   
   // 加载状态
@@ -52,11 +52,14 @@ interface ReportState {
   saveProjectOverview: (content: string) => Promise<void>
   loadProjectOverview: () => Promise<void>
   
-  // 自定义变量操作
+  // 自定义变量操作（按项目隔离）
+  getCustomVariables: () => Record<string, string>
   addCustomVariable: (key: string, value: string) => void
   removeCustomVariable: (key: string) => void
   updateCustomVariable: (key: string, value: string) => void
   clearCustomVariables: () => void
+  saveCustomVariables: () => Promise<void>
+  loadCustomVariables: () => Promise<void>
   
   // 变量插入
   variableToInsert: string | null
@@ -147,32 +150,113 @@ export const useReportStore = create<ReportState>((set, get) => ({
     tables: {},
     charts: {}
   },
-  customVariables: {},
+  customVariablesByProject: {},
   cachedTableDataJSON: {},
 
-  // 自定义变量操作实现
+  // 获取当前项目的自定义变量
+  getCustomVariables: () => {
+    const { customVariablesByProject, projectId } = get()
+    if (!projectId) return {}
+    return (customVariablesByProject || {})[projectId] || {}
+  },
+
+  // 自定义变量操作实现（按项目隔离）
   addCustomVariable: (key: string, value: string) => {
+    const { projectId, customVariablesByProject } = get()
+    if (!projectId) return
     set((state) => ({
-      customVariables: { ...state.customVariables, [key]: value }
+      customVariablesByProject: {
+        ...state.customVariablesByProject,
+        [projectId]: {
+          ...((state.customVariablesByProject || {})[projectId] || {}),
+          [key]: value
+        }
+      }
     }))
   },
   
   removeCustomVariable: (key: string) => {
+    const { projectId, customVariablesByProject } = get()
+    if (!projectId) return
     set((state) => {
-      const newVariables = { ...state.customVariables }
-      delete newVariables[key]
-      return { customVariables: newVariables }
+      const projectVariables = { ...((state.customVariablesByProject || {})[projectId] || {}) }
+      delete projectVariables[key]
+      return {
+        customVariablesByProject: {
+          ...state.customVariablesByProject,
+          [projectId]: projectVariables
+        }
+      }
     })
   },
   
   updateCustomVariable: (key: string, value: string) => {
+    const { projectId, customVariablesByProject } = get()
+    if (!projectId) return
     set((state) => ({
-      customVariables: { ...state.customVariables, [key]: value }
+      customVariablesByProject: {
+        ...state.customVariablesByProject,
+        [projectId]: {
+          ...((state.customVariablesByProject || {})[projectId] || {}),
+          [key]: value
+        }
+      }
     }))
   },
   
   clearCustomVariables: () => {
-    set({ customVariables: {} })
+    const { projectId, customVariablesByProject } = get()
+    if (!projectId) return
+    set((state) => ({
+      customVariablesByProject: {
+        ...state.customVariablesByProject,
+        [projectId]: {}
+      }
+    }))
+  },
+
+  // 保存自定义变量到后端
+  saveCustomVariables: async () => {
+    const { projectId, customVariablesByProject } = get()
+    if (!projectId) {
+      throw new Error('缺少项目ID')
+    }
+    
+    const customVariables = (customVariablesByProject || {})[projectId] || {}
+    
+    set({ isLoading: true, error: null })
+    try {
+      const response = await reportApi.saveCustomVariables(projectId, customVariables)
+      if (response?.success) {
+        set({ isLoading: false })
+      } else {
+        throw new Error(response?.error || '保存自定义变量失败')
+      }
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false })
+      throw error
+    }
+  },
+
+  // 从后端加载自定义变量
+  loadCustomVariables: async () => {
+    const { projectId } = get()
+    if (!projectId) return
+    
+    try {
+      const response = await reportApi.getProjectOverview(projectId)
+      if (response?.success) {
+        const customVariables = response.data?.customVariables || {}
+        set((state) => ({
+          customVariablesByProject: {
+            ...state.customVariablesByProject,
+            [projectId]: customVariables
+          }
+        }))
+      }
+    } catch (error) {
+      console.error('加载自定义变量失败:', error)
+    }
   },
 
   // 初始化时加载默认样式配置
@@ -630,6 +714,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
         { key: '{{DATA:loan_repayment_section12}}', label: '借款还本付息计划表1.2节JSON', category: 'tableData', value: tableDataJSON['DATA:loan_repayment_section12'] || '{}' },
         { key: '{{DATA:financial_static_dynamic}}', label: '财务静态动态指标JSON', category: 'tableData', value: tableDataJSON['DATA:financial_static_dynamic'] || '{}' },
         { key: '{{DATA:project_overview}}', label: '项目概况', category: 'tableData', value: projectOverviewValue },
+        { key: '{{project_overview}}', label: '项目概况', value: projectData.projectOverview || '' },
+        { key: '{{operation_load}}', label: '运营负荷', value: operationLoadValue },
         { key: '{{DATA:operation_load}}', label: '运营负荷', category: 'tableData', value: operationLoadValue },
         // 表格资源（渲染HTML）
         { key: '{{TABLE:investment_estimate}}', label: '投资估算简表', category: 'table' },
@@ -664,7 +750,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
   },
   
   startGeneration: async () => {
-    const { projectId, promptTemplate, reportTitle, cachedTableDataJSON } = get()
+    const { projectId, promptTemplate, reportTitle, cachedTableDataJSON, customVariablesByProject } = get()
     
     if (!projectId) {
       set({ error: '缺少项目ID' })
@@ -678,6 +764,17 @@ export const useReportStore = create<ReportState>((set, get) => ({
     
     // 使用当前项目的缓存 tableDataJSON，确保与小眼睛查看的数据一致
     const tableDataJSON = (cachedTableDataJSON || {})[projectId] || {}
+    
+    // 【修复】在调用LLM之前，先替换提示词中的自定义变量
+    // 注意：customVariables 中的 key 可能包含 {{ }}，需要去掉后再构建正则
+    const customVariables = (customVariablesByProject || {})[projectId] || {}
+    let processedPromptTemplate = promptTemplate
+    for (const [fullKey, value] of Object.entries(customVariables)) {
+      // 去掉 key 两侧的 {{ 和 }}
+      const key = fullKey.replace(/^\{\{|\}\}$/g, '')
+      const variablePattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+      processedPromptTemplate = processedPromptTemplate.replace(variablePattern, String(value))
+    }
     
     set({ isLoading: true, error: null, reportContent: '' })
     try {
@@ -695,7 +792,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       
       set({ reportId, generationStatus: 'generating' })
       
-      await reportApi.generateReport(reportId, promptTemplate, tableDataJSON, {
+      await reportApi.generateReport(reportId, processedPromptTemplate, tableDataJSON, {
         onChunk: (content: string) => {
           set((state) => ({
             reportContent: state.reportContent + content,
@@ -828,7 +925,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
         charts: {}
       },
       projectOverview: null,
-      customVariables: {},
+      customVariablesByProject: {},
       cachedTableDataJSON: {}  // 重置所有项目的缓存数据
     })
   },
@@ -838,14 +935,51 @@ export const useReportStore = create<ReportState>((set, get) => ({
   insertVariable: (variable) => set({ variableToInsert: variable }),
   
   saveProjectOverview: async (content: string) => {
-    const { projectId } = get()
+    const { projectId, availableVariables, cachedTableDataJSON, projectData } = get()
     if (!projectId) throw new Error('缺少项目ID')
     
     set({ isLoading: true, error: null })
     try {
       const response = await reportApi.saveProjectOverview(projectId, content)
       if (response?.success) {
+        // 构建新的 project_overview 值
+        const projectOverviewValue = JSON.stringify({ content }, null, 2)
+        
+        // 更新 projectOverview 状态
         set({ projectOverview: content, isLoading: false })
+        
+        // 【修复】同时更新 availableVariables 中的 {{project_overview}} 变量
+        set((state) => ({
+          availableVariables: state.availableVariables.map((v) => 
+            v.key === '{{project_overview}}' 
+              ? { ...v, value: content }
+              : v
+          )
+        }))
+        
+        // 【关键修复】同时更新 cachedTableDataJSON['project_overview']，确保LLM使用最新值
+        set((state) => {
+          const currentProjectCachedData = state.cachedTableDataJSON[projectId] || {}
+          return {
+            cachedTableDataJSON: {
+              ...state.cachedTableDataJSON,
+              [projectId]: {
+                ...currentProjectCachedData,
+                'project_overview': projectOverviewValue
+              }
+            }
+          }
+        })
+        
+        // 【关键修复】同时更新 projectData.projectOverview，供后续使用
+        if (projectData) {
+          set((state) => ({
+            projectData: {
+              ...state.projectData,
+              projectOverview: content
+            }
+          }))
+        }
       } else {
         throw new Error(response?.error || '保存失败')
       }
@@ -861,8 +995,28 @@ export const useReportStore = create<ReportState>((set, get) => ({
     
     try {
       const response = await reportApi.getProjectOverview(projectId)
-      if (response?.success) {
-        set({ projectOverview: response.data?.content || null })
+      if (response?.success && response.data) {
+        set({ projectOverview: response.data.content || null })
+        
+        // 加载自定义变量（如果后端返回了）
+        const customVars = response.data.customVariables
+        // 确保 customVariables 是对象类型，且不是字符串被错误解析
+        if (customVars && typeof customVars === 'object' && !Array.isArray(customVars)) {
+          set((state) => ({
+            customVariablesByProject: {
+              ...state.customVariablesByProject,
+              [projectId]: customVars
+            }
+          }))
+        } else {
+          // 容错：如果 customVariables 无效，清空该项目的数据
+          set((state) => ({
+            customVariablesByProject: {
+              ...state.customVariablesByProject,
+              [projectId]: {}
+            }
+          }))
+        }
       }
     } catch (error) {
       console.error('加载项目概况失败:', error)

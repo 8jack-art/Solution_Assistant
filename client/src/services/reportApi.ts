@@ -322,7 +322,18 @@ export const reportApi = {
 
   // 获取项目概况
   async getProjectOverview(projectId: string) {
-    const response = await api.get<any, ApiResponse<{ content: string }>>(`/report/project/overview/${projectId}`)
+    const response = await api.get<any, ApiResponse<{ content: string; customVariables: Record<string, string> }>>(`/report/project/overview/${projectId}`)
+    return response
+  },
+
+  // ==================== 自定义变量 API ====================
+
+  // 保存自定义变量
+  async saveCustomVariables(projectId: string, customVariables: Record<string, string>) {
+    const response = await api.post<any, ApiResponse>('/report/project/custom-variables', {
+      projectId,
+      customVariables
+    })
     return response
   },
 
