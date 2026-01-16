@@ -80,7 +80,10 @@ interface ReportState {
   
   // Actions
   setProjectId: (id: string) => void
+  setReportId: (id: string | null) => void
   setReportTitle: (title: string) => void
+  setReportContent: (content: string) => void
+  setGenerationStatus: (status: 'idle' | 'generating' | 'paused' | 'completed' | 'failed') => void
   setPromptTemplate: (template: string) => void
   setPromptHtml: (html: string) => void
   selectTemplate: (templateId: string) => void
@@ -277,7 +280,13 @@ export const useReportStore = create<ReportState>((set, get) => ({
     }
   }),
   
+  setReportId: (id) => set({ reportId: id }),
+  
   setReportTitle: (title) => set({ reportTitle: title }),
+  
+  setReportContent: (content) => set({ reportContent: content }),
+  
+  setGenerationStatus: (status) => set({ generationStatus: status }),
   
   setPromptTemplate: (template) => set({ promptTemplate: template }),
   
@@ -569,9 +578,10 @@ export const useReportStore = create<ReportState>((set, get) => ({
       const preTaxRateStr = localStorage.getItem(`financialIndicatorsPreTaxRate_${projectId}`)
       const postTaxRateStr = localStorage.getItem(`financialIndicatorsPostTaxRate_${projectId}`)
       
+      // 确保基准收益率始终有默认值（6%），避免首次加载时数据为空
       const discountRates = {
-        preTaxRate: preTaxRateStr ? parseFloat(preTaxRateStr) : undefined,
-        postTaxRate: postTaxRateStr ? parseFloat(postTaxRateStr) : undefined
+        preTaxRate: preTaxRateStr ? parseFloat(preTaxRateStr) : 6,
+        postTaxRate: postTaxRateStr ? parseFloat(postTaxRateStr) : 6
       }
       
       console.log('[reportStore] 从localStorage读取基准收益率:', discountRates)
@@ -635,7 +645,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
             name: otherExpenses.name,
             remark: otherExpenses.remark || ''
           }, null, 2)
-        : 'null'
+        : JSON.stringify({ name: 'ABCD', remark: '' }, null, 2)  // 如果不包含"土地"或"流转"关键词，则赋值为JSON格式的ABCD
       tableDataJSON['land_transfer'] = landTransferValue
       
       // 【新增】构建 project_overview 变量（项目概况）
@@ -698,7 +708,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
               : `每年固定 ${costConfig.directAmount || 0} 万元`
           }, null, 2)
         })() },
-        { key: '{{land_transfer}}', label: '土地流转信息', category: 'tableData', value: landTransferValue },
+        { key: '{{land_transfer}}', label: '土地流转信息', category: 'project', value: landTransferValue },
         // 表格数据（JSON格式，用于LLM提示词）
         { key: '{{DATA:investment_estimate}}', label: '投资估算简表JSON', category: 'tableData', value: tableDataJSON['DATA:investment_estimate'] || '{}' },
         { key: '{{DATA:depreciation_amortization}}', label: '折旧与摊销估算表JSON', category: 'tableData', value: tableDataJSON['DATA:depreciation_amortization'] || '{}' },
@@ -750,7 +760,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
   },
   
   startGeneration: async () => {
-    const { projectId, promptTemplate, reportTitle, cachedTableDataJSON, customVariablesByProject } = get()
+    const { projectId, promptTemplate, reportTitle, cachedTableDataJSON, customVariablesByProject, availableVariables } = get()
     
     if (!projectId) {
       set({ error: '缺少项目ID' })
@@ -764,11 +774,22 @@ export const useReportStore = create<ReportState>((set, get) => ({
     
     // 使用当前项目的缓存 tableDataJSON，确保与小眼睛查看的数据一致
     const tableDataJSON = (cachedTableDataJSON || {})[projectId] || {}
-    
-    // 【修复】在调用LLM之前，先替换提示词中的自定义变量
+
+    // 【修复】在调用LLM之前，先替换提示词中的所有变量（自定义变量 + 系统变量）
+    let processedPromptTemplate = promptTemplate
+
+    // 1. 先替换系统变量（从 availableVariables 中获取）
+    for (const variable of availableVariables) {
+      if (variable.key && variable.value !== undefined) {
+        // 构建正则表达式，替换所有匹配的变量
+        const variablePattern = new RegExp(variable.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')
+        processedPromptTemplate = processedPromptTemplate.replace(variablePattern, String(variable.value))
+      }
+    }
+
+    // 2. 再替换自定义变量
     // 注意：customVariables 中的 key 可能包含 {{ }}，需要去掉后再构建正则
     const customVariables = (customVariablesByProject || {})[projectId] || {}
-    let processedPromptTemplate = promptTemplate
     for (const [fullKey, value] of Object.entries(customVariables)) {
       // 去掉 key 两侧的 {{ 和 }}
       const key = fullKey.replace(/^\{\{|\}\}$/g, '')

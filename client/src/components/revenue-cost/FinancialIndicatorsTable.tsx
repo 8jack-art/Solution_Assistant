@@ -3090,10 +3090,12 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <NumberInput
               value={tempPreTaxRate}
               onChange={(value) => setTempPreTaxRate(typeof value === 'number' ? value : 0)}
-              min={0}
-              max={100}
+              min={0.1}
+              max={12}
               step={0.1}
               placeholder="请输入基准收益率（所得税前）"
+              description="数值范围：0<x ≤12"
+              error={tempPreTaxRate <= 0 || tempPreTaxRate > 12 ? '请输入0<x≤12的数值' : null}
             />
           </div>
           
@@ -3102,14 +3104,26 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
             <NumberInput
               value={tempPostTaxRate}
               onChange={(value) => setTempPostTaxRate(typeof value === 'number' ? value : 0)}
-              min={0}
-              max={100}
+              min={0.1}
+              max={12}
               step={0.1}
               placeholder="请输入基准收益率（所得税后）"
+              description="数值范围：0<x ≤12"
+              error={tempPostTaxRate <= 0 || tempPostTaxRate > 12 ? '请输入0<x≤12的数值' : null}
             />
           </div>
           
           <Group justify="flex-end" mt="md">
+            <Button
+              variant="outline"
+              color="gray"
+              onClick={() => {
+                setTempPreTaxRate(6);
+                setTempPostTaxRate(6);
+              }}
+            >
+              默认
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -3123,9 +3137,21 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
               取消
             </Button>
             <Button
+              disabled={tempPreTaxRate <= 0 || tempPreTaxRate > 12 || tempPostTaxRate <= 0 || tempPostTaxRate > 12}
               onClick={() => {
+                // 最终校验：确保值在有效范围内
+                if (tempPreTaxRate <= 0 || tempPreTaxRate > 12 || tempPostTaxRate <= 0 || tempPostTaxRate > 12) {
+                  notifications.show({
+                    title: '保存失败',
+                    message: '请输入有效的基准收益率（0<x≤12）',
+                    color: 'red',
+                  });
+                  return;
+                }
+                
                 // 保存设置并关闭弹窗（按项目隔离存储）
                 const projectId = context?.projectId || 'default';
+                
                 setPreTaxRate(tempPreTaxRate);
                 setPostTaxRate(tempPostTaxRate);
                 localStorage.setItem(`financialIndicatorsPreTaxRate_${projectId}`, tempPreTaxRate.toString());
@@ -3134,6 +3160,12 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 // 强制刷新财务指标表
                 setFinancialIndicatorsRefreshKey(prev => prev + 1);
                 setShowFinancialIndicatorsSettings(false);
+                
+                notifications.show({
+                  title: '保存成功',
+                  message: '基准收益率已设置为：所得税前 ' + tempPreTaxRate + '%，所得税后 ' + tempPostTaxRate + '%',
+                  color: 'green',
+                });
                 
                 // 重新打开财务指标表modal，保持用户操作流程连贯
                 setTimeout(() => {

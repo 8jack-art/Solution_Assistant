@@ -619,4 +619,19 @@ export const revenueCostApi = {
     api.delete<any, ApiResponse>(`/revenue-cost/${id}`),
 }
 
+// ==================== 报告相关 API ====================
+export const reportApi = {
+  // 获取报告详情
+  getById: (id: string) =>
+    api.get<any, ApiResponse<{ report: any }>>(`/report/${id}`),
+
+  // 获取项目最近5个已完成报告
+  getRecentCompletedReports: (projectId: string) =>
+    api.get<any, ApiResponse<{ reports: any[] }>>(`/report/project/${projectId}/recent-completed`),
+
+  // 删除报告
+  deleteReport: (reportId: string) =>
+    api.delete<any, ApiResponse>(`/report/${reportId}`),
+}
+
 export default api

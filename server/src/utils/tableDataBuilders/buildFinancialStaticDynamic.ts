@@ -29,18 +29,20 @@ export function buildFinancialStaticDynamicJSON(financialData: any): string {
   const revenueCost = financialData.revenueCost || {}
   const financialIndicators = revenueCost.financialIndicators || revenueCost
   
-  // 获取基准收益率（从 revenueCost 或 financialIndicators）
+  // 获取基准收益率（从多个数据源查找，确保有默认值6%）
   const preTaxRate = Number(financialIndicators.preTaxRate || 
                             financialIndicators.preTaxRateInput || 
                             financialIndicators.基准收益率所得税前 ||
                             revenueCost.preTaxRate ||
-                            0)
+                            financialData.tableDataJSON?.['DATA:financial_static_dynamic']?.基准收益率?.所得税前 ||
+                            6)
   
   const postTaxRate = Number(financialIndicators.postTaxRate || 
                              financialIndicators.postTaxRateInput || 
                              financialIndicators.基准收益率所得税后 ||
                              revenueCost.postTaxRate ||
-                             0)
+                             financialData.tableDataJSON?.['DATA:financial_static_dynamic']?.基准收益率?.所得税后 ||
+                             6)
   
   console.log('获取基准收益率:')
   console.log('  所得税前:', preTaxRate)

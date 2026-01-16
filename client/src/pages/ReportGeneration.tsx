@@ -10,6 +10,7 @@ import { Header } from '../components/common/Header'
 import { StyleSettingsPanel } from '../components/report/StyleSettingsPanel'
 import { WordStyleSettingsPanel } from '../components/report/WordStyleSettingsPanel'
 import { SectionConfigPanel } from '../components/report/SectionConfigPanel'
+import { LoadReportModal } from '../components/report/LoadReportModal'
 import { llmConfigApi } from '@/lib/api'
 
 export function ReportGeneration() {
@@ -19,6 +20,7 @@ export function ReportGeneration() {
   const [showStylePanel, setShowStylePanel] = useState(false)
   const [showWordStylePanel, setShowWordStylePanel] = useState(false)
   const [showSectionPanel, setShowSectionPanel] = useState(false)
+  const [showLoadReportModal, setShowLoadReportModal] = useState(false)
 
   // 加载当前LLM配置
   useEffect(() => {
@@ -54,20 +56,32 @@ export function ReportGeneration() {
     await store.startGeneration()
   }
 
-  const handlePause = () => {
-    if (store.generationStatus === 'generating') {
-      store.pauseGeneration()
-    } else if (store.generationStatus === 'paused') {
-      store.resumeGeneration()
-    }
-  }
-
   const handleStop = () => {
     store.stopGeneration()
   }
 
   const handleExport = () => {
     store.exportToWord()
+  }
+
+  // 处理加载报告 - 将报告内容加载到预览区域
+  const handleLoadReport = (reportContent: string, reportId: string) => {
+    console.log('[ReportGeneration] handleLoadReport 被调用')
+    console.log('[ReportGeneration] reportContent 长度:', reportContent?.length || 0)
+    console.log('[ReportGeneration] reportId:', reportId)
+    
+    if (reportContent) {
+      // 使用 store 方法更新状态
+      store.setReportContent(reportContent)
+      store.setReportId(reportId)
+      store.setGenerationStatus('completed')
+      
+      console.log('[ReportGeneration] 已更新 store')
+      console.log('[ReportGeneration] store.reportContent 长度:', store.reportContent?.length || 0)
+      console.log('[ReportGeneration] store.generationStatus:', store.generationStatus)
+    } else {
+      console.error('[ReportGeneration] reportContent 为空!')
+    }
   }
 
   return (
@@ -161,38 +175,39 @@ export function ReportGeneration() {
             {/* 控制按钮 */}
             <Paper p="md" withBorder radius="md">
               <Group>
-                <Button 
+                <Button
                   onClick={handleGenerate}
                   disabled={store.generationStatus === 'generating'}
                   color="blue"
                 >
                   {store.generationStatus === 'idle' ? '开始生成' : '重新生成'}
                 </Button>
-                
-                <Button 
-                  onClick={handlePause}
-                  disabled={store.generationStatus === 'idle'}
-                  variant="light"
-                >
-                  {store.generationStatus === 'paused' ? '继续' : '暂停'}
-                </Button>
-                
-                <Button 
+
+                <Button
                   onClick={handleStop}
-                  disabled={store.generationStatus === 'idle'}
+                  disabled={store.generationStatus !== 'generating'}
                   variant="light"
                   color="red"
                 >
                   停止
                 </Button>
-                
-                <Button 
+
+                <Button
                   onClick={handleExport}
-                  disabled={!store.reportId}
+                  disabled={store.generationStatus === 'generating' || !store.reportId}
                   variant="light"
                   color="green"
                 >
                   导出Word
+                </Button>
+
+                <Button
+                  onClick={() => setShowLoadReportModal(true)}
+                  disabled={store.generationStatus === 'generating'}
+                  variant="light"
+                  color="blue"
+                >
+                  加载报告
                 </Button>
               </Group>
             </Paper>
@@ -245,6 +260,14 @@ export function ReportGeneration() {
       >
         <SectionConfigPanel onClose={() => setShowSectionPanel(false)} />
       </Modal>
+
+      {/* 加载报告弹窗 */}
+      <LoadReportModal
+        opened={showLoadReportModal}
+        onClose={() => setShowLoadReportModal(false)}
+        onLoadReport={handleLoadReport}
+        projectId={projectId || ''}
+      />
     </div>
   )
 }

@@ -39,8 +39,12 @@ export function VariablePicker() {
   const handleViewJson = (variableKey: string, title: string) => {
     const variable = availableVariables.find(v => v.key === variableKey)
     if (variable && variable.value) {
+      // 如果值是'ABCD'，显示提示信息
+      const displayData = variable.value === 'ABCD' 
+        ? '// 该变量当前值为 "ABCD"\n// 如需使用土地流转信息，请在"收入成本建模"页面将"其他费用"名称改为包含"土地"或"流转"的名称\nABCD' 
+        : variable.value
       setJsonViewerTitle(title)
-      setJsonViewerData(variable.value)
+      setJsonViewerData(displayData)
       setJsonViewerOpened(true)
     }
   }
@@ -227,6 +231,30 @@ export function VariablePicker() {
               title="点击复制"
             >
               项目地点
+            </Badge>
+            <Badge
+              variant="light"
+              color="cyan"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{land_transfer}}')}
+              title="点击复制"
+              rightSection={
+                <Tooltip label="查看JSON数据">
+                  <ActionIcon
+                    size="xs"
+                    variant="transparent"
+                    color="cyan"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleViewJson('{{land_transfer}}', '土地流转信息')
+                    }}
+                  >
+                    <Eye size={12} />
+                  </ActionIcon>
+                </Tooltip>
+              }
+            >
+              土地流转
             </Badge>
           </Group>
         </div>

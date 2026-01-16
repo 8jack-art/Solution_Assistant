@@ -323,6 +323,80 @@ export class ReportController {
   }
 
   /**
+   * 获取项目最近5个已完成报告
+   * GET /api/reports/project/:projectId/recent-completed
+   */
+  static async getRecentCompletedReports(req: Request, res: Response): Promise<void> {
+    try {
+      const { projectId } = req.params
+      const userId = ReportController.getUserId(req)
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: '未授权' })
+        return
+      }
+
+      // 按created_at降序排列，限制5条，只查询completed状态
+      const [reports] = await pool.execute(
+        `SELECT id, project_id, report_title, generation_status, report_content, created_at, updated_at
+         FROM generated_reports
+         WHERE project_id = ? AND user_id = ? AND generation_status = 'completed'
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [projectId, userId]
+      ) as any[]
+
+      console.log('getRecentCompletedReports found:', reports.length, 'reports for project:', projectId)
+
+      res.json({ success: true, reports })
+    } catch (error) {
+      console.error('获取最近报告列表失败:', error)
+      res.status(500).json({ success: false, error: '获取报告列表失败' })
+    }
+  }
+
+  /**
+   * 删除报告
+   * DELETE /api/reports/:id
+   */
+  static async deleteReport(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params
+      const userId = ReportController.getUserId(req)
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: '未授权' })
+        return
+      }
+
+      // 验证报告是否存在
+      const [reports] = await pool.execute(
+        'SELECT * FROM generated_reports WHERE id = ?',
+        [id]
+      ) as any[]
+      
+      if (reports.length === 0) {
+        res.status(404).json({ success: false, error: '报告不存在' })
+        return
+      }
+
+      if (reports[0].user_id !== userId) {
+        res.status(403).json({ success: false, error: '无权删除此报告' })
+        return
+      }
+
+      await pool.execute('DELETE FROM generated_reports WHERE id = ?', [id])
+
+      console.log('deleteReport: Report', id, 'deleted successfully')
+
+      res.json({ success: true, message: '报告已删除' })
+    } catch (error) {
+      console.error('删除报告失败:', error)
+      res.status(500).json({ success: false, error: '删除报告失败' })
+    }
+  }
+
+  /**
    * 暂停报告生成
    */
   static async pause(req: Request, res: Response): Promise<void> {
@@ -803,24 +877,24 @@ export class ReportController {
       // 收集项目数据
       const projectData = await ReportService.collectProjectData(projectId)
       
-      // 将基准收益率注入到 projectData 中，供 buildFinancialStaticDynamicJSON 使用
-      if (preTaxRate !== undefined || postTaxRate !== undefined) {
-        if (!projectData.revenueCost) {
-          projectData.revenueCost = {}
-        }
-        if (!projectData.revenueCost.financialIndicators) {
-          projectData.revenueCost.financialIndicators = {}
-        }
-        if (preTaxRate !== undefined) {
-          projectData.revenueCost.financialIndicators.preTaxRate = preTaxRate
-        }
-        if (postTaxRate !== undefined) {
-          projectData.revenueCost.financialIndicators.postTaxRate = postTaxRate
-        }
-        console.log('注入后的 financialIndicators:', projectData.revenueCost.financialIndicators)
+      // ✅ 关键修复：确保基准收益率始终有默认值（6%），在调用 buildAllTableDataJSON 之前注入
+      // 这样可以保证 buildFinancialStaticDynamicJSON 在首次调用时就能获取到正确的基准收益率
+      const preTaxRateValue = preTaxRate ?? 6
+      const postTaxRateValue = postTaxRate ?? 6
+      
+      if (!projectData.revenueCost) {
+        projectData.revenueCost = {}
       }
+      if (!projectData.revenueCost.financialIndicators) {
+        projectData.revenueCost.financialIndicators = {}
+      }
+      // 使用 6% 作为默认值，确保始终有值
+      projectData.revenueCost.financialIndicators.preTaxRate = preTaxRateValue
+      projectData.revenueCost.financialIndicators.postTaxRate = postTaxRateValue
+      console.log('[getProjectSummary] 注入基准收益率:', { preTaxRate: preTaxRateValue, postTaxRate: postTaxRateValue })
       
       // 构建所有表格数据的 JSON（用于 LLM 提示词和小眼睛预览）
+      // 现在 financialIndicators 已经有正确的基准收益率值了
       const tableDataJSON = buildAllTableDataJSON(projectData)
 
       // 获取项目概况（从单独的 report_project_overview 表）

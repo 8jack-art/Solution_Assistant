@@ -136,6 +136,8 @@ const RevenueCostModeling: React.FC = () => {
 
   // 加载项目基础信息和投资估算数据
   useEffect(() => {
+    const controller = new AbortController();
+    
     const loadProjectData = async () => {
       try {
         setLoading(true)
@@ -147,11 +149,19 @@ const RevenueCostModeling: React.FC = () => {
         
         // 获取store方法
         const { loadFromBackend } = useRevenueCostStore.getState()
+        
+        // 使用 AbortController 取消请求
         const [projectResponse, estimateResponse, revenueCostResponse] = await Promise.all([
           projectApi.getById(id!),
           investmentApi.getByProjectId(id!),
           revenueCostApi.getByProjectId(id!) // 加载收入成本数据
-        ])
+        ].map(p => p.catch(e => {
+          if (e.name === 'AbortError') {
+            console.log('请求被取消:', e);
+            return null;
+          }
+          throw e;
+        })))
         
         let projectData = null
         let estimateData = null
@@ -260,6 +270,12 @@ const RevenueCostModeling: React.FC = () => {
     if (id) {
       loadProjectData()
     }
+    
+    // 清理函数：在组件卸载时取消请求
+    return () => {
+      controller.abort();
+      console.log('✅ 已取消未完成的请求');
+    };
   }, [id, navigate])
 
   // 检查并自动保存建设期利息详情
@@ -2160,9 +2176,9 @@ const RevenueCostModeling: React.FC = () => {
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {repaymentTableData.map((row, idx) => (
+                        {repaymentTableData.map((row) => (
                           <Table.Tr 
-                            key={idx}
+                            key={row.序号}
                             style={{
                               backgroundColor: row.isMainRow ? '#E6F7FF' : undefined,
                               fontWeight: row.isMainRow ? 600 : undefined

@@ -23,7 +23,9 @@ router.delete('/styles/:id', ReportController.deleteStyleConfig)
 // ==================== 报告 CRUD ====================
 router.post('/create', ReportController.create)
 router.get('/:id', ReportController.getById)
+router.delete('/:id', ReportController.deleteReport)
 router.get('/project/:projectId', ReportController.getByProjectId)
+router.get('/project/:projectId/recent-completed', ReportController.getRecentCompletedReports)
 
 // ==================== 流式生成 ====================
 router.post('/generate/:id', ReportController.generate)
