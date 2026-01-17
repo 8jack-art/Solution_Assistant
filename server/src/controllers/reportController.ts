@@ -504,13 +504,12 @@ export class ReportController {
   }
 
   /**
-   * 导出 Word 文档（扩展版本，支持章节和资源配置）
+   * 导出 Word 文档（扩展版本，支持资源配置）
    */
   static async exportWithConfig(req: Request, res: Response): Promise<void> {
     try {
       const { 
         title, 
-        sections, 
         styleConfig, 
         resources 
       } = req.body
@@ -523,9 +522,9 @@ export class ReportController {
 
       // 生成 Word 文档
       const buffer = await ReportService.generateWordDocument(
-        '', // content - 留空，使用sections
+        '', // content
         title || '投资方案报告',
-        { sections, resources, styleConfig }
+        { resources, styleConfig }
       )
 
       // 设置响应头
@@ -544,9 +543,9 @@ export class ReportController {
    */
   static async exportHtml(req: Request, res: Response): Promise<void> {
     try {
-      const { 
-        title, 
-        htmlContent, 
+      const {
+        title,
+        htmlContent,
         styleConfig,
         resources
       } = req.body

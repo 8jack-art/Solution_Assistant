@@ -2,7 +2,6 @@ import api from '../lib/api'
 import { ApiResponse } from '../types'
 import { 
   ExportRequest,
-  ReportSections,
   ReportStyleConfig,
   ResourceMap
 } from '../types/report'
@@ -130,10 +129,9 @@ export const reportApi = {
     return response
   },
 
-  // 导出 Word（支持章节、样式和资源）
+  // 导出 Word（支持样式和资源）
   async exportWord(options: {
     title?: string
-    sections?: ReportSections
     styleConfig?: ReportStyleConfig
     resources?: ResourceMap
   }) {
@@ -146,7 +144,6 @@ export const reportApi = {
       },
       body: JSON.stringify({
         title: options.title || '投资方案报告',
-        sections: options.sections,
         styleConfig: options.styleConfig,
         resources: options.resources
       })

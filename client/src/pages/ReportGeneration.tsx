@@ -9,7 +9,7 @@ import { TemplateSelector } from '../components/report/TemplateSelector'
 import { Header } from '../components/common/Header'
 import { StyleSettingsPanel } from '../components/report/StyleSettingsPanel'
 import { WordStyleSettingsPanel } from '../components/report/WordStyleSettingsPanel'
-import { SectionConfigPanel } from '../components/report/SectionConfigPanel'
+
 import { LoadReportModal } from '../components/report/LoadReportModal'
 import { llmConfigApi } from '@/lib/api'
 
@@ -251,15 +251,7 @@ export function ReportGeneration() {
         <WordStyleSettingsPanel onClose={() => setShowWordStylePanel(false)} />
       </Modal>
 
-      {/* 章节配置弹窗 */}
-      <Modal
-        opened={showSectionPanel}
-        onClose={() => setShowSectionPanel(false)}
-        title="章节配置"
-        size="lg"
-      >
-        <SectionConfigPanel onClose={() => setShowSectionPanel(false)} />
-      </Modal>
+
 
       {/* 加载报告弹窗 */}
       <LoadReportModal

@@ -6,12 +6,6 @@ import {
   ReportHistoryItem,
   ReportStyleConfig,
   defaultStyleConfig,
-  ReportSections,
-  defaultSections,
-  CoverSection,
-  TableOfContentsSection,
-  BodySection,
-  AppendixSection,
   ResourceMap,
   TableResource,
   ChartResource,
@@ -69,9 +63,6 @@ interface ReportState {
   wordStyleConfig: ReportStyleConfig  // Word导出专用样式配置
   styleConfigs: any[]
   
-  // 章节配置
-  sections: ReportSections
-  
   // 资源（表格和图表）
   resources: ResourceMap
   
@@ -104,17 +95,13 @@ interface ReportState {
   deleteStyleConfig: (configId: string) => Promise<void>
   applyStyleConfig: (config: ReportStyleConfig) => void
   applyWordStyleConfig: (config: ReportStyleConfig) => void
-  
-  // 章节配置操作
-  updateSections: (sections: Partial<ReportSections>) => void
-  resetSections: () => void
-  
+   
   // 资源操作
   updateResources: (resources: Partial<ResourceMap>) => void
-  
+   
   // 缓存表格数据JSON（按项目ID隔离）
   getCachedTableDataJSON: () => Record<string, string>
-  
+   
   loadTemplates: () => Promise<void>
   loadProjectData: () => Promise<void>
   saveTemplate: (data: { name: string; description?: string; promptTemplate: string; isDefault?: boolean }) => Promise<void>
@@ -148,7 +135,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
   styleConfig: defaultStyleConfig,
   wordStyleConfig: defaultStyleConfig,
   styleConfigs: [],
-  sections: defaultSections,
   resources: {
     tables: {},
     charts: {}
@@ -473,14 +459,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
   applyWordStyleConfig: (config: ReportStyleConfig) => {
     set({ wordStyleConfig: config })
   },
-  
-  // 章节配置操作
-  updateSections: (sections) => set((state) => ({
-    sections: { ...state.sections, ...sections }
-  })),
-  
-  resetSections: () => set({ sections: defaultSections }),
-  
+   
   // 资源操作
   updateResources: (resources) => set((state) => ({
     resources: { ...state.resources, ...resources }
@@ -940,7 +919,6 @@ export const useReportStore = create<ReportState>((set, get) => ({
       variableToInsert: null,
       styleConfig: defaultStyleConfig,
       wordStyleConfig: defaultStyleConfig,
-      sections: defaultSections,
       resources: {
         tables: {},
         charts: {}
