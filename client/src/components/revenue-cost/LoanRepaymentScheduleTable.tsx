@@ -17,7 +17,6 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useRevenueCostStore, LoanConfig, LoanRepaymentTableData } from '@/stores/revenueCostStore'
-import * as XLSX from 'xlsx'
 import ConstructionInterestModal from './ConstructionInterestModal'
 import JsonDataViewer from './JsonDataViewer'
 
@@ -546,7 +545,7 @@ const LoanRepaymentScheduleTable = forwardRef<{ handleExportExcel: () => void },
   }, [getConstructionInterestData, calculateLoanRepaymentData]);
 
   // 导出Excel（放在前面以便useImperativeHandle调用）
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!context || !calculateLoanRepaymentData) {
       notifications.show({
         title: '导出失败',
@@ -560,57 +559,69 @@ const LoanRepaymentScheduleTable = forwardRef<{ handleExportExcel: () => void },
     const operationYears = context.operationYears;
     const totalYears = constructionYears + operationYears;
 
+    // 动态导入xlsx-js-style
+    const XLSX = await import('xlsx-js-style');
+
     // 创建工作簿和工作表
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([]);
 
-    // 设置列宽
+    // 设置列宽（参考营业收入表：序号3、项目18、合计7、各年份7）
     const colWidths = [
-      { wch: 8 },   // 序号
-      { wch: 25 },  // 项目
-      { wch: 15 },  // 合计
-      ...Array(totalYears).fill({ wch: 12 }) // 各年份
+      { wch: 3 },   // 序号
+      { wch: 18 },  // 项目
+      { wch: 7 },   // 合计
+      ...Array(totalYears).fill({ wch: 7 }) // 各年份
     ];
     ws['!cols'] = colWidths;
 
-    // 第一行表头
+    // 第一行表头 - 合并为"计算期"
     const header1 = [
       '序号',
       '项目',
       '合计',
-      ...Array(constructionYears).fill('建设期'),
-      ...Array(operationYears).fill('运营期')
+      ...Array(totalYears).fill('计算期')
     ];
     XLSX.utils.sheet_add_aoa(ws, [header1], { origin: 'A1' });
 
-    // 第二行表头（年份）
+    // 第二行表头（年份）- 连续自然数列
     const header2 = ['', '', ''];
     for (let i = 1; i <= totalYears; i++) {
       header2.push(i.toString());
     }
     XLSX.utils.sheet_add_aoa(ws, [header2], { origin: 'A2' });
 
-    // 合并表头单元格
-    if (constructionYears > 0) {
+    // 合并表头单元格 - 序号、项目、合计向下跨2行，"计算期"横向跨所有年份列
+    if (totalYears > 0) {
       ws['!merges'] = ws['!merges'] || [];
-      ws['!merges'].push({ s: { r: 0, c: 3 }, e: { r: 0, c: 3 + constructionYears - 1 } });
-    }
-    if (operationYears > 0) {
-      ws['!merges'] = ws['!merges'] || [];
-      ws['!merges'].push({ s: { r: 0, c: 3 + constructionYears }, e: { r: 0, c: 3 + constructionYears + operationYears - 1 } });
+      ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } });  // "序号"跨2行
+      ws['!merges'].push({ s: { r: 0, c: 1 }, e: { r: 1, c: 1 } });  // "项目"跨2行
+      ws['!merges'].push({ s: { r: 0, c: 2 }, e: { r: 1, c: 2 } });  // "合计"跨2行
+      ws['!merges'].push({ s: { r: 0, c: 3 }, e: { r: 0, c: 3 + totalYears - 1 } });  // "计算期"横向跨所有年份列
     }
 
     // 添加数据行
     let currentRow = 3;
+    // 用于记录哪些行是分类行（在数据生成时就判断，避免后续Excel单元格类型问题）
+    const categoryRows: Set<number> = new Set();
     calculateLoanRepaymentData.rows.forEach((row) => {
-      const isCategoryRow = /^\d+$/.test(row.序号) && row.序号 !== '';
+      const isCategoryRow = /^\d+$/.test(String(row.序号)) && String(row.序号) !== '';
+      if (isCategoryRow) {
+        categoryRows.add(currentRow);
+      }
       
       const dataRow = [
         row.序号,
         row.项目,
         row.合计 !== null ? row.合计 : '',
         ...row.建设期.map(value => (row.序号 === '3.4' || row.序号 === '3.5') ? '-' : (value === 0 ? '' : value)),
-        ...row.运营期.map(value => value === 0 ? '' : value)
+        ...row.运营期.map((value, idx) => {
+          // 1.3行（期末借款余额）运营期最后1年即使为0也要显示
+          if (row.序号 === '1.3' && idx === row.运营期.length - 1) {
+            return value;
+          }
+          return value === 0 ? '' : value;
+        })
       ];
       
       XLSX.utils.sheet_add_aoa(ws, [dataRow], { origin: `A${currentRow}` });
@@ -620,50 +631,93 @@ const LoanRepaymentScheduleTable = forwardRef<{ handleExportExcel: () => void },
           const cellAddress = XLSX.utils.encode_cell({ r: currentRow - 1, c: col });
           if (!ws[cellAddress]) continue;
           ws[cellAddress].s = {
-            font: { bold: true },
-            alignment: { vertical: 'center', horizontal: 'center' }
+            font: { bold: true, sz: 8 },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: {
+              top: { style: 'thin' },
+              bottom: { style: 'thin' },
+              left: { style: 'thin' },
+              right: { style: 'thin' }
+            }
           };
-        }
-      }
-      
-      for (let col = 0; col < dataRow.length; col++) {
-        if (col === 0 || col === 2 || col >= 3) {
-          const cellAddress = XLSX.utils.encode_cell({ r: currentRow - 1, c: col });
-          if (!ws[cellAddress]) continue;
-          if (!ws[cellAddress].s) ws[cellAddress].s = {};
-          ws[cellAddress].s.alignment = { vertical: 'center', horizontal: 'center' };
         }
       }
       
       currentRow++;
     });
 
-    // 设置表头样式
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 3 + totalYears; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-        if (!ws[cellAddress]) continue;
-        ws[cellAddress].s = {
-          font: { bold: true },
-          alignment: { vertical: 'center', horizontal: 'center' },
-          fill: { fgColor: { rgb: 'F7F8FA' } }
-        };
+    // 设置表头样式（参考营业收入表样式）
+    const headerStyle = {
+      font: { bold: true, sz: 8 },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' }
       }
-    }
+    };
 
-    // 添加边框样式
+    // 设置数值单元格样式（参考营业收入表样式）
+    const cellStyle = {
+      font: { sz: 8 },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' }
+      },
+      numFmt: '0.00' // 数值格式：2位小数
+    };
+
+    // 设置项目名称列样式（左对齐）
+    const nameCellStyle = {
+      font: { sz: 8 },
+      alignment: { horizontal: 'left', vertical: 'center' },
+      border: {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' }
+      }
+    };
+
+    // 遍历所有单元格设置样式
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    for (let row = range.s.r; row <= range.e.r; row++) {
-      for (let col = range.s.c; col <= range.e.c; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      // 使用之前记录的分类行信息
+      const isCategoryRow = categoryRows.has(R + 1);
+      
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!ws[cellAddress]) continue;
-        if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        ws[cellAddress].s.border = {
-          top: { style: 'thin', color: { auto: 1 } },
-          bottom: { style: 'thin', color: { auto: 1 } },
-          left: { style: 'thin', color: { auto: 1 } },
-          right: { style: 'thin', color: { auto: 1 } }
-        };
+        
+        // 表头行
+        if (R === 0 || R === 1) {
+          ws[cellAddress].s = headerStyle;
+        } else {
+          // 数据行
+          if (C === 1) {
+            // 项目名称列左对齐
+            const baseStyle = isCategoryRow ? { ...nameCellStyle, font: { bold: true, sz: 8 } } : nameCellStyle;
+            ws[cellAddress].s = baseStyle;
+          } else {
+            // 其他列居中，设置数值格式
+            const cellValue = ws[cellAddress].v;
+            // 分类行加粗样式
+            const boldFont = { bold: true, sz: 8 };
+            if (typeof cellValue === 'number') {
+              ws[cellAddress].s = isCategoryRow 
+                ? { ...cellStyle, numFmt: '0.00', font: boldFont }
+                : { ...cellStyle, numFmt: '0.00' };
+            } else {
+              ws[cellAddress].s = isCategoryRow 
+                ? { ...cellStyle, font: boldFont }
+                : cellStyle;
+            }
+          }
+        }
       }
     }
 

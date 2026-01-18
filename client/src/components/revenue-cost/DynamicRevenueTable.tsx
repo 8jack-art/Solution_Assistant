@@ -938,6 +938,7 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
   
   /**
    * 导出营业收入、营业税金及附加和增值税估算表为Excel
+   * 使用 xlsx-js-style 库，支持样式设置和单元格合并
    */
   const handleExportRevenueTable = () => {
     if (!context) {
@@ -952,163 +953,297 @@ const DynamicRevenueTable: React.FC<DynamicRevenueTableProps> = ({ deductibleInp
     const operationYears = context.operationYears;
     const years = Array.from({ length: operationYears }, (_, i) => i + 1);
 
-    // 准备Excel数据
-    const excelData: any[] = [];
-    
-    // 添加表头
-    const headerRow: any = { '序号': '', '收入项目': '', '合计': '' };
-    years.forEach((year) => {
-      headerRow[year.toString()] = year;
-    });
-    excelData.push(headerRow);
+    // 导入 xlsx-js-style
+    import('xlsx-js-style').then((XLSX) => {
+      // 准备Excel数据（使用数组形式，确保列顺序正确）
+      console.log('🔍 [Excel导出] context值:', context);
+      console.log('🔍 [Excel导出] constructionYears:', context?.constructionYears);
+      const constructionYears = context?.constructionYears || 0;
+      const totalYearColumns = constructionYears + operationYears;
 
-    // 1. 营业收入
-    const row1: any = { '序号': '1', '收入项目': '营业收入' };
-    let totalRow1 = 0;
-    years.forEach((year) => {
-      const yearTotal = revenueItems.reduce((sum, item) => {
-        const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
-        return sum + calculateYearlyRevenue(item, year, productionRate)
-      }, 0);
-      row1[year.toString()] = yearTotal;
-      totalRow1 += yearTotal;
-    });
-    row1['合计'] = totalRow1;
-    excelData.push(row1);
+      // 第二行表头：年度列使用连续自然数列（建设期从1开始，运营期续接）
+      const yearHeaders: string[] = [];
+      for (let i = 1; i <= totalYearColumns; i++) {
+        yearHeaders.push(i.toString());
+      }
 
-    // 1.1, 1.2, 1.3... 收入项
-    revenueItems.forEach((item, idx) => {
-      const row: any = { '序号': `1.${idx + 1}`, '收入项目': `${item.name}（${(item.vatRate * 100).toFixed(0)}%）` };
-      let total = 0;
+      // 第一行表头：序号、收入项目、合计、"计算期"
+      const headerRow1: any[] = ['序号', '收入项目', '合计'];
+      // 添加"计算期"占位（后续需要合并单元格）
+      headerRow1.push('计算期');
+      // 填充剩余位置（使"计算期"横跨所有年度列）
+      for (let i = 1; i < totalYearColumns; i++) {
+        headerRow1.push('');
+      }
+
+      // 第二行表头：序号、收入项目、合计、各年度编号
+      const headerRow2: any[] = ['序号', '收入项目', '合计', ...yearHeaders];
+
+      const excelData: any[] = [headerRow1, headerRow2];
+      
+      // 1. 营业收入 - 先计算每年的值和合计
+      const row1Data: number[] = [];
+      let totalRow1 = 0;
       years.forEach((year) => {
-        const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
-        const revenue = calculateYearlyRevenue(item, year, productionRate);
-        row[year.toString()] = revenue;
-        total += revenue;
+        const yearTotal = revenueItems.reduce((sum, item) => {
+          const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+          return sum + calculateYearlyRevenue(item, year, productionRate)
+        }, 0);
+        row1Data.push(yearTotal);
+        totalRow1 += yearTotal;
       });
-      row['合计'] = total;
-      excelData.push(row);
-    });
+      // 建设期营业收入为0（显示为空字符串以保持数据展示的清晰性）
+      const constructionZeros = Array(constructionYears).fill('');
+      const row1: any = ['1', '营业收入', totalRow1, ...constructionZeros, ...row1Data];
+      excelData.push(row1);
 
-    // 2. 增值税
-    const row2: any = { '序号': '2', '收入项目': '增值税' };
-    let totalRow2 = 0;
-    years.forEach((year) => {
-      // 计算销项税额
-      const yearOutputTax = revenueItems.reduce((sum, item) => {
-        const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
-        const revenue = calculateYearlyRevenue(item, year, productionRate)
-        // 销项税额 = 含税收入 - 不含税收入
-        return sum + (revenue - revenue / (1 + item.vatRate))
-      }, 0);
+      // 1.1, 1.2, 1.3... 收入项 + 销项税额行
+      revenueItems.forEach((item, idx) => {
+        // 收入项行
+        const row: any = [`1.${idx + 1}`, item.name, 0, ...constructionZeros];
+        let total = 0;
+        years.forEach((year) => {
+          const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+          const revenue = calculateYearlyRevenue(item, year, productionRate);
+          row.push(revenue);
+          total += revenue;
+        });
+        row[2] = total;
+        excelData.push(row);
+
+        // 销项税额行（序号为空，共享收入项的序号）
+        const outputTaxRow: any = ['', `销项税额（${(item.vatRate * 100).toFixed(0)}%）`, 0, ...constructionZeros];
+        let totalOutputTax = 0;
+        years.forEach((year) => {
+          const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+          const revenue = calculateYearlyRevenue(item, year, productionRate)
+          // 销项税额 = 含税收入 - 不含税收入
+          const outputTax = revenue - revenue / (1 + item.vatRate);
+          outputTaxRow.push(outputTax);
+          totalOutputTax += outputTax;
+        });
+        outputTaxRow[2] = totalOutputTax;
+        excelData.push(outputTaxRow);
+      });
+
+      // 2. 增值税
+      const row2: any = ['2', '增值税', 0, ...constructionZeros];
+      let totalRow2 = 0;
+      years.forEach((year) => {
+        // 计算销项税额
+        const yearOutputTax = revenueItems.reduce((sum, item) => {
+          const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+          const revenue = calculateYearlyRevenue(item, year, productionRate)
+          // 销项税额 = 含税收入 - 不含税收入
+          return sum + (revenue - revenue / (1 + item.vatRate))
+        }, 0);
+        
+        // 计算进项税额
+        const yearInputTax = calculateTotalInputTaxForYear(year);
+        
+        // 计算进项税额（固定资产待抵扣）
+        const yearFixedAssetInputTax = calculateFixedAssetInputTaxForYear(year);
+        
+        // 增值税 = 销项税额 - 进项税额 - 进项税额（固定资产待抵扣）
+        const yearVat = yearOutputTax - yearInputTax - yearFixedAssetInputTax;
+        
+        row2.push(yearVat);
+        totalRow2 += yearVat;
+      });
+      row2[2] = totalRow2;
+      excelData.push(row2);
+
+      // 2.1 销项税额
+      const row2_1: any = ['2.1', '销项税额', 0, ...constructionZeros];
+      let totalRow2_1 = 0;
+      years.forEach((year) => {
+        const yearTotal = revenueItems.reduce((sum, item) => {
+          const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
+          const revenue = calculateYearlyRevenue(item, year, productionRate)
+          // 销项税额 = 含税收入 - 不含税收入
+          return sum + (revenue - revenue / (1 + item.vatRate))
+        }, 0);
+        row2_1.push(yearTotal);
+        totalRow2_1 += yearTotal;
+      });
+      row2_1[2] = totalRow2_1;
+      excelData.push(row2_1);
+
+      // 2.2 进项税额
+      const row2_2: any = ['2.2', '进项税额', 0, ...constructionZeros];
+      let totalRow2_2 = 0;
+      years.forEach((year) => {
+        const yearTotal = calculateTotalInputTaxForYear(year);
+        row2_2.push(yearTotal);
+        totalRow2_2 += yearTotal;
+      });
+      row2_2[2] = totalRow2_2;
+      excelData.push(row2_2);
+
+      // 2.3 进项税额（固定资产待抵扣）
+      const row2_3: any = ['2.3', '进项税额（固定资产待抵扣）', 0, ...constructionZeros];
+      let totalRow2_3 = 0;
+      years.forEach((year) => {
+        const yearTotal = calculateFixedAssetInputTaxForYear(year);
+        row2_3.push(yearTotal);
+        totalRow2_3 += yearTotal;
+      });
+      row2_3[2] = totalRow2_3;
+      excelData.push(row2_3);
+
+      // 3. 其他税费及附加
+      const row3: any = ['3', '其他税费及附加', 0, ...constructionZeros];
+      let totalRow3 = 0;
+      years.forEach((year) => {
+        // 使用新的增值税计算函数
+        const vatAmount = calculateVatForYear(year);
+        // 使用状态中的税率
+        const urbanTax = vatAmount * urbanTaxRate
+        const educationTax = vatAmount * 0.05 // 教育费附加(3%+地方2%)
+        const otherTaxes = urbanTax + educationTax
+        row3.push(otherTaxes);
+        totalRow3 += otherTaxes;
+      });
+      row3[2] = totalRow3;
+      excelData.push(row3);
+
+      // 3.1 城市建设维护税
+      const row3_1: any = ['3.1', `城市建设维护税(${(urbanTaxRate * 100).toFixed(0)}%)`, 0, ...constructionZeros];
+      let totalRow3_1 = 0;
+      years.forEach((year) => {
+        // 使用新的增值税计算函数
+        const vatAmount = calculateVatForYear(year);
+        const urbanTax = vatAmount * urbanTaxRate
+        row3_1.push(urbanTax);
+        totalRow3_1 += urbanTax;
+      });
+      row3_1[2] = totalRow3_1;
+      excelData.push(row3_1);
+
+      // 3.2 教育费附加(3%+地方2%)
+      const row3_2: any = ['3.2', '教育费附加(3%+地方2%)', 0, ...constructionZeros];
+      let totalRow3_2 = 0;
+      years.forEach((year) => {
+        // 使用新的增值税计算函数
+        const vatAmount = calculateVatForYear(year);
+        const educationTax = vatAmount * 0.05 // 3%+2%=5%
+        row3_2.push(educationTax);
+        totalRow3_2 += educationTax;
+      });
+      row3_2[2] = totalRow3_2;
+      excelData.push(row3_2);
+
+      // 创建工作簿和工作表
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
       
-      // 计算进项税额
-      const yearInputTax = calculateTotalInputTaxForYear(year);
-      
-      // 计算进项税额（固定资产待抵扣）
-      const yearFixedAssetInputTax = calculateFixedAssetInputTaxForYear(year);
-      
-      // 增值税 = 销项税额 - 进项税额 - 进项税额（固定资产待抵扣）
-      const yearVat = yearOutputTax - yearInputTax - yearFixedAssetInputTax;
-      
-      row2[year.toString()] = yearVat;
-      totalRow2 += yearVat;
-    });
-    row2['合计'] = totalRow2;
-    excelData.push(row2);
+      // 设置列宽
+      const cols: any[] = [
+        { wch: 3 }, // 序号
+        { wch: 18 }, // 收入项目
+        { wch: 7 }, // 合计
+      ];
+      // 添加建设期列宽
+      for (let i = 0; i < constructionYears; i++) {
+        cols.push({ wch: 7 }); // 建设期列
+      }
+      years.forEach(() => {
+        cols.push({ wch: 7 }); // 年度列
+      });
+      ws['!cols'] = cols;
 
-    // 2.1 销项税额
-    const row2_1: any = { '序号': '2.1', '收入项目': '销项税额' };
-    let totalRow2_1 = 0;
-    years.forEach((year) => {
-      const yearTotal = revenueItems.reduce((sum, item) => {
-        const productionRate = getProductionRateForYear(useRevenueCostStore.getState().productionRates, year)
-        const revenue = calculateYearlyRevenue(item, year, productionRate)
-        // 销项税额 = 含税收入 - 不含税收入
-        return sum + (revenue - revenue / (1 + item.vatRate))
-      }, 0);
-      row2_1[year.toString()] = yearTotal;
-      totalRow2_1 += yearTotal;
-    });
-    row2_1['合计'] = totalRow2_1;
-    excelData.push(row2_1);
+      // 设置合并单元格（双层列头）
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },  // "序号"跨2行
+        { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },  // "收入项目"跨2行
+        { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },  // "合计"跨2行
+        { s: { r: 0, c: 3 }, e: { r: 0, c: 3 + totalYearColumns - 1 } }  // "计算期"横向跨所有年度列
+      ];
 
-    // 2.2 进项税额
-    const row2_2: any = { '序号': '2.2', '收入项目': '进项税额' };
-    let totalRow2_2 = 0;
-    years.forEach((year) => {
-      const yearTotal = calculateTotalInputTaxForYear(year);
-      row2_2[year.toString()] = yearTotal;
-      totalRow2_2 += yearTotal;
-    });
-    row2_2['合计'] = totalRow2_2;
-    excelData.push(row2_2);
+      // 设置表头样式（加粗，居中，带边框，字体大小12）
+      const headerStyle = {
+        font: { bold: true, sz: 8 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
 
-    // 2.3 进项税额（固定资产待抵扣）
-    const row2_3: any = { '序号': '2.3', '收入项目': '进项税额（固定资产待抵扣）' };
-    let totalRow2_3 = 0;
-    years.forEach((year) => {
-      const yearTotal = calculateFixedAssetInputTaxForYear(year);
-      row2_3[year.toString()] = yearTotal;
-      totalRow2_3 += yearTotal;
-    });
-    row2_3['合计'] = totalRow2_3;
-    excelData.push(row2_3);
+      // 设置数值单元格样式（居中，带边框，字体大小11）
+      const cellStyle = {
+        font: { sz: 8 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
 
-    // 3. 其他税费及附加
-    const row3: any = { '序号': '3', '收入项目': '其他税费及附加' };
-    let totalRow3 = 0;
-    years.forEach((year) => {
-      // 使用新的增值税计算函数
-      const vatAmount = calculateVatForYear(year);
-      // 使用状态中的税率
-      const urbanTax = vatAmount * urbanTaxRate
-      const educationTax = vatAmount * 0.05 // 教育费附加(3%+地方2%)
-      const otherTaxes = urbanTax + educationTax
-      row3[year.toString()] = otherTaxes;
-      totalRow3 += otherTaxes;
-    });
-    row3['合计'] = totalRow3;
-    excelData.push(row3);
+      // 设置收入项目列样式（左对齐，带边框，字体大小11）
+      const nameCellStyle = {
+        font: { sz: 8 },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
 
-    // 3.1 城市建设维护税
-    const row3_1: any = { '序号': '3.1', '收入项目': `城市建设维护税(${(urbanTaxRate * 100).toFixed(0)}%)` };
-    let totalRow3_1 = 0;
-    years.forEach((year) => {
-      // 使用新的增值税计算函数
-      const vatAmount = calculateVatForYear(year);
-      const urbanTax = vatAmount * urbanTaxRate
-      row3_1[year.toString()] = urbanTax;
-      totalRow3_1 += urbanTax;
-    });
-    row3_1['合计'] = totalRow3_1;
-    excelData.push(row3_1);
+      // 遍历所有单元格设置样式
+      const range = XLSX.utils.decode_range(ws['!ref']!);
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+          
+          // 表头行加粗并居中
+          if (R === 0 || R === 1) {
+            ws[cellAddress].s = headerStyle;
+          } else {
+            // 收入项目列（C=1）左对齐，其他列居中
+            if (C === 1) {
+              ws[cellAddress].s = nameCellStyle;
+            } else {
+              // 判断是否为运营期列（建设期列之后的列）
+              // 列结构：0=序号, 1=收入项目, 2=合计, 3..3+constructionYears-1=建设期, 之后=运营期
+              const operationYearStartCol = 3 + constructionYears;
+              const isOperationYearColumn = C >= operationYearStartCol;
+              
+              // 对于运营期数值列，检查值是否为0，如果是则显示为空字符串
+              if (isOperationYearColumn && typeof ws[cellAddress].v === 'number' && ws[cellAddress].v === 0) {
+                ws[cellAddress].v = '';
+                ws[cellAddress].t = 's';  // 设置为字符串类型
+                ws[cellAddress].s = cellStyle;  // 应用样式但保留边框
+              } else {
+                ws[cellAddress].s = cellStyle;
+                // 设置数值格式为2位小数
+                if (typeof ws[cellAddress].v === 'number') {
+                  ws[cellAddress].z = '0.00';
+                }
+              }
+            }
+          }
+        }
+      }
 
-    // 3.2 教育费附加(3%+地方2%)
-    const row3_2: any = { '序号': '3.2', '收入项目': '教育费附加(3%+地方2%)' };
-    let totalRow3_2 = 0;
-    years.forEach((year) => {
-      // 使用新的增值税计算函数
-      const vatAmount = calculateVatForYear(year);
-      const educationTax = vatAmount * 0.05 // 3%+2%=5%
-      row3_2[year.toString()] = educationTax;
-      totalRow3_2 += educationTax;
-    });
-    row3_2['合计'] = totalRow3_2;
-    excelData.push(row3_2);
+      // 使用 xlsx-js-style 的 book_new
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '营业收入、营业税金及附加和增值税估算表');
 
-    // 创建工作簿和工作表
-    const ws = XLSX.utils.json_to_sheet(excelData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '营业收入、营业税金及附加和增值税估算表');
+      // 导出文件
+      XLSX.writeFile(wb, `营业收入、营业税金及附加和增值税估算表_${context.projectName || '项目'}.xlsx`);
 
-    // 导出文件
-    XLSX.writeFile(wb, `营业收入、营业税金及附加和增值税估算表_${context.projectName || '项目'}.xlsx`);
-
-    notifications.show({
-      title: '导出成功',
-      message: '营业收入、营业税金及附加和增值税估算表已导出为Excel文件',
-      color: 'green',
+      notifications.show({
+        title: '导出成功',
+        message: '营业收入、营业税金及附加和增值税估算表已导出为Excel文件',
+        color: 'green',
+      });
     });
   };
 

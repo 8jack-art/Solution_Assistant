@@ -848,22 +848,24 @@ ${JSON.stringify(summary, null, 2)}
   static parseContentToWord(content: string, title: string): any[] {
     const paragraphs: any[] = []
     
-    // 添加标题
-    paragraphs.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: title,
-            bold: true,
-            size: 32,
-            color: '000000'
-          })
-        ],
-        heading: HeadingLevel.TITLE,
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 400 }
-      })
-    )
+    // 添加标题（仅当title非空时添加）
+    if (title && title.trim()) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: title,
+              bold: true,
+              size: 32,
+              color: '000000'
+            })
+          ],
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 }
+        })
+      )
+    }
     
     // 合并多个连续换行符为一个，避免段落间距过大
     const normalizedContent = content.replace(/\n\n+/g, '\n')
@@ -1872,11 +1874,16 @@ ${JSON.stringify(financialIndicators || {}, null, 2)}
       const htmlBodyContent = this.buildStyledHtmlContent(processedContent, config)
       
       // 构建完整的 HTML 文档
+      // 标题部分（仅当title非空时添加）
+      const titleHtml = (title && title.trim()) 
+        ? `<h1 style="text-align: center; margin: 24pt 0; font-family: "黑体", "SimHei", sans-serif; font-size: ${config.heading1?.fontSize || 22}pt; font-weight: bold; color: #000000;">${title}</h1>`
+        : ''
+      
       const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>${title}</title>
+  <title>${title || ''}</title>
   <style>
     /* 页面设置 */
     @page {
@@ -1982,7 +1989,7 @@ ${JSON.stringify(financialIndicators || {}, null, 2)}
   </style>
 </head>
 <body>
-  <h1 style="text-align: center; margin: 24pt 0; font-family: "黑体", "SimHei", sans-serif; font-size: ${config.heading1?.fontSize || 22}pt; font-weight: bold; color: #000000;">${title}</h1>
+  ${titleHtml}
   ${htmlBodyContent}
 </body>
 </html>`

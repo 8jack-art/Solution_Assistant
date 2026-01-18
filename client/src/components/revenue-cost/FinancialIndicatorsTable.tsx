@@ -2158,7 +2158,19 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '3', name: '总成本费用', calc: (y?: number) => calculateTotalCost(y) },
       { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
-      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
+      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => {
+        // 计算所有运营期的弥补以前年度亏损总和
+        if (y === undefined) {
+          if (!context) return 0;
+          let total = 0;
+          const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+          years.forEach((year) => {
+            total += calculateCumulativeLoss(year);
+          });
+          return total;
+        }
+        return calculateCumulativeLoss(y);
+      } },
       { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateYearlyTaxableIncome(y) },
       { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
@@ -2243,7 +2255,19 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '3', name: '总成本费用', calc: (y?: number) => calculateTotalCost(y) },
       { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
-      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
+      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => {
+        // 计算所有运营期的弥补以前年度亏损总和
+        if (y === undefined) {
+          if (!context) return 0;
+          let total = 0;
+          const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+          years.forEach((year) => {
+            total += calculateCumulativeLoss(year);
+          });
+          return total;
+        }
+        return calculateCumulativeLoss(y);
+      } },
       { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateYearlyTaxableIncome(y) },
       { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
@@ -2306,7 +2330,19 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '3', name: '总成本费用', calc: (y?: number) => calculateTotalCost(y) },
       { id: '4', name: '补贴收入', calc: (y?: number) => calculateSubsidyIncome(y) },
       { id: '5', name: '利润总额（1-2-3+4）', calc: (y?: number) => calculateTotalProfit(y) },
-      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => y !== undefined ? calculateCumulativeLoss(y) : 0 },
+      { id: '6', name: '弥补以前年度亏损', calc: (y?: number) => {
+        // 计算所有运营期的弥补以前年度亏损总和
+        if (y === undefined) {
+          if (!context) return 0;
+          let total = 0;
+          const years = Array.from({ length: context.operationYears }, (_, i) => i + 1);
+          years.forEach((year) => {
+            total += calculateCumulativeLoss(year);
+          });
+          return total;
+        }
+        return calculateCumulativeLoss(y);
+      } },
       { id: '7', name: '应纳税所得额（5-6）', calc: (y?: number) => calculateYearlyTaxableIncome(y) },
       { id: '8', name: `所得税(${incomeTaxRate}%)`, calc: (y?: number) => calculateIncomeTax(y) },
       { id: '9', name: '净利润（5-8）', calc: (y?: number) => calculateNetProfit(y) },
@@ -2854,12 +2890,26 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
       { id: '15', name: '平均偿债备付率', unit: '-', data: formatNumberNoRounding(debtServiceCoverageRatioTotal) },
       { id: '16', name: '项目投资税前指标', unit: '', data: '' },
       { id: '16.1', name: '财务内部收益率', unit: '％', data: formatNumberNoRounding(indicators.preTaxIRR) },
-      { id: '16.2', name: `项目投资财务净现值（Ic=${preTaxRate}％）`, unit: '万元', data: formatNumberNoRounding(indicators.preTaxNPV) },
-      { id: '16.3', name: '全部投资回收期', unit: '年', data: formatPaybackPeriod(indicators.preTaxDynamicPaybackPeriod) },
+      { id: '16.2', name: `项目投资财务净现值（Ic=${preTaxRate}％）`, unit: '万元', 
+        data: formatNumberNoRounding(indicators.preTaxNPV),
+        fw: indicators.preTaxNPV < 0 ? 700 : undefined,
+        c: indicators.preTaxNPV < 0 ? 'red' : undefined
+      },
+      { id: '16.3', name: '全部投资回收期', unit: '年',
+        data: (indicators.preTaxDynamicPaybackPeriod ?? 0) >= ((context?.constructionYears ?? 0) + (context?.operationYears ?? 0)) ? '-' : formatPaybackPeriod(indicators.preTaxDynamicPaybackPeriod),
+        c: (indicators.preTaxDynamicPaybackPeriod ?? 0) >= ((context?.constructionYears ?? 0) + (context?.operationYears ?? 0)) ? 'red' : undefined
+      },
       { id: '17', name: '项目投资税后指标', unit: '', data: '' },
       { id: '17.1', name: '财务内部收益率', unit: '％', data: formatNumberNoRounding(indicators.postTaxIRR) },
-      { id: '17.2', name: `项目投资财务净现值（Ic=${postTaxRate}％）`, unit: '万元', data: formatNumberNoRounding(indicators.postTaxNPV) },
-      { id: '17.3', name: '全部投资回收期', unit: '年', data: formatPaybackPeriod(indicators.postTaxDynamicPaybackPeriod) }
+      { id: '17.2', name: `项目投资财务净现值（Ic=${postTaxRate}％）`, unit: '万元',
+        data: formatNumberNoRounding(indicators.postTaxNPV),
+        fw: indicators.postTaxNPV < 0 ? 700 : undefined,
+        c: indicators.postTaxNPV < 0 ? 'red' : undefined
+      },
+      { id: '17.3', name: '全部投资回收期', unit: '年',
+        data: (indicators.postTaxDynamicPaybackPeriod ?? 0) >= ((context?.constructionYears ?? 0) + (context?.operationYears ?? 0)) ? '-' : formatPaybackPeriod(indicators.postTaxDynamicPaybackPeriod),
+        c: (indicators.postTaxDynamicPaybackPeriod ?? 0) >= ((context?.constructionYears ?? 0) + (context?.operationYears ?? 0)) ? 'red' : undefined
+      }
     ];
   }, [context, preTaxRate, postTaxRate, revenueTableData, loanRepaymentTableData]);
   
@@ -3302,11 +3352,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                       </Table.Tr>
                       <Table.Tr>
                         <Table.Td style={{ textAlign: 'left' }}>项目投资财务净现值（所得税前）（ic={preTaxRate}%）</Table.Td>
-                        <Table.Td>{formatNumberNoRounding(indicators.preTaxNPV)}</Table.Td>
+                        <Table.Td fw={indicators.preTaxNPV < 0 ? 700 : 400} c={indicators.preTaxNPV < 0 ? 'red' : undefined}>
+                          {formatNumberNoRounding(indicators.preTaxNPV)}
+                        </Table.Td>
                       </Table.Tr>
                       <Table.Tr>
                         <Table.Td style={{ textAlign: 'left' }}>项目投资财务净现值（所得税后）（ic={postTaxRate}%）</Table.Td>
-                        <Table.Td>{formatNumberNoRounding(indicators.postTaxNPV)}</Table.Td>
+                        <Table.Td fw={indicators.postTaxNPV < 0 ? 700 : 400} c={indicators.postTaxNPV < 0 ? 'red' : undefined}>
+                          {formatNumberNoRounding(indicators.postTaxNPV)}
+                        </Table.Td>
                       </Table.Tr>
                       <Table.Tr>
                         <Table.Td style={{ textAlign: 'left' }}>项目静态投资回收期（年）（所得税前）</Table.Td>
@@ -3318,11 +3372,15 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                       </Table.Tr>
                       <Table.Tr>
                         <Table.Td style={{ textAlign: 'left' }}>项目动态投资回收期（年）（所得税前）</Table.Td>
-                        <Table.Td>{formatPaybackPeriod(indicators.preTaxDynamicPaybackPeriod)}</Table.Td>
+                        <Table.Td c={(indicators.preTaxDynamicPaybackPeriod ?? 0) >= (context?.constructionYears + context?.operationYears) ? 'red' : undefined}>
+                          {(indicators.preTaxDynamicPaybackPeriod ?? 0) >= (context?.constructionYears + context?.operationYears) ? '-' : formatPaybackPeriod(indicators.preTaxDynamicPaybackPeriod)}
+                        </Table.Td>
                       </Table.Tr>
                       <Table.Tr>
                         <Table.Td style={{ textAlign: 'left' }}>项目动态投资回收期（年）（所得税后）</Table.Td>
-                        <Table.Td>{formatPaybackPeriod(indicators.postTaxDynamicPaybackPeriod)}</Table.Td>
+                        <Table.Td c={(indicators.postTaxDynamicPaybackPeriod ?? 0) >= (context?.constructionYears + context?.operationYears) ? 'red' : undefined}>
+                          {(indicators.postTaxDynamicPaybackPeriod ?? 0) >= (context?.constructionYears + context?.operationYears) ? '-' : formatPaybackPeriod(indicators.postTaxDynamicPaybackPeriod)}
+                        </Table.Td>
                       </Table.Tr>
                     </>
                   );
@@ -3497,7 +3555,7 @@ const FinancialIndicatorsTable: React.FC<FinancialIndicatorsTableProps> = ({
                 <Table.Td>{row.id}</Table.Td>
                 <Table.Td style={{ textAlign: 'left' }}>{row.name}</Table.Td>
                 <Table.Td>{row.unit}</Table.Td>
-                <Table.Td>{typeof row.data === 'number' ? formatNumberNoRounding(row.data) : row.data}</Table.Td>
+                <Table.Td fw={row.fw} c={row.c}>{typeof row.data === 'number' ? formatNumberNoRounding(row.data) : row.data}</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

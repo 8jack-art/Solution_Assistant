@@ -29,6 +29,8 @@ import {
   IconTrash,
   IconClearAll,
   IconDownload,
+  IconReceipt,
+  IconCoin,
   IconX
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
@@ -2322,180 +2324,218 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     return true;
   };
 
-  // 导出总成本费用估算表为Excel
+  // 计算外购原材料费（含税）的函数
+  const calculateRawMaterialsWithTax = useCallback((targetYear?: number, yearsArray?: number[]) => {
+    if (targetYear !== undefined) {
+      const productionRate = costConfig.rawMaterials.applyProductionRate
+        ? (productionRates?.find(p => p.yearIndex === targetYear)?.rate || 1)
+        : 1;
+      
+      // 外购原材料（除税）
+      const excludingTax = calculateRawMaterialsExcludingTax(targetYear, yearsArray);
+      
+      // 进项税额
+      let totalInputTax = 0;
+      (costConfig.rawMaterials.items || []).forEach((item: CostItem) => {
+        const baseAmount = calculateBaseAmount(item, revenueItems || []);
+        const taxRate = Number(item.taxRate) || 0;
+        const taxRateDecimal = taxRate / 100;
+        totalInputTax += baseAmount * productionRate * taxRateDecimal / (1 + taxRateDecimal);
+      });
+      
+      // 含税金额 = 除税金额 + 进项税额
+      return excludingTax + totalInputTax;
+    } else {
+      if (!yearsArray) return 0;
+      let totalSum = 0;
+      yearsArray.forEach((year: number) => {
+        totalSum += calculateRawMaterialsWithTax(year, yearsArray);
+      });
+      return totalSum;
+    }
+  }, [costConfig.rawMaterials, productionRates, revenueItems]);
+
+  // 计算外购燃料及动力费（含税）的函数
+  const calculateFuelPowerWithTax = useCallback((targetYear?: number, yearsArray?: number[]) => {
+    if (targetYear !== undefined) {
+      const productionRate = costConfig.fuelPower.applyProductionRate 
+        ? (productionRates?.find(p => p.yearIndex === targetYear)?.rate || 1)
+        : 1;
+      
+      // 外购燃料及动力（除税）
+      const excludingTax = calculateFuelPowerExcludingTax(targetYear, yearsArray);
+      
+      // 进项税额
+      let totalInputTax = 0;
+      (costConfig.fuelPower.items || []).forEach((item: FuelPowerItem) => {
+        const consumption = item.consumption || 0;
+        let amount = 0;
+        if (['汽油', '柴油'].includes(item.name)) {
+          amount = (item.price || 0) * consumption / 10000 * productionRate;
+        } else {
+          amount = consumption * (item.price || 0) * productionRate;
+        }
+        const taxRate = (item.taxRate || 13) / 100;
+        totalInputTax += amount * taxRate / (1 + taxRate);
+      });
+      
+      // 含税金额 = 除税金额 + 进项税额
+      return excludingTax + totalInputTax;
+    } else {
+      if (!yearsArray) return 0;
+      let totalSum = 0;
+      yearsArray.forEach((year: number) => {
+        totalSum += calculateFuelPowerWithTax(year, yearsArray);
+      });
+      return totalSum;
+    }
+  }, [costConfig.fuelPower, productionRates]);
+
+  // 计算其他费用（含税）的函数
+  const calculateOtherExpensesWithTax = useCallback((year: number) => {
+    const productionRate = costConfig.otherExpenses.applyProductionRate
+      ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+      : 1;
+    
+    // 其他费用（含税）= 含税金额
+    // 其他费用（除税）= 含税金额 - 进项税额
+    // 所以：含税金额 = 其他费用（除税） + 进项税额
+    
+    const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+    const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+    // 进项税额 = 含税金额 / (1 + 税率) × 税率
+    const inputTax = directAmount * taxRate / (1 + taxRate);
+    
+    // 其他费用（除税）= 含税金额 - 进项税额
+    const excludingTax = directAmount - inputTax;
+    
+    // 含税金额 = 除税金额 + 进项税额
+    return excludingTax + inputTax;
+  }, [costConfig.otherExpenses, productionRates]);
+
+  // 导出总成本费用估算表为Excel（不含税版本）
+  // 使用 xlsx-js-style 库，支持样式设置和单元格合并
   const handleExportCostTable = () => {
-      if (!context) {
-        notifications.show({
-          title: '导出失败',
-          message: '项目上下文未加载',
-          color: 'red',
-        });
-        return;
+    if (!context) {
+      notifications.show({
+        title: '导出失败',
+        message: '项目上下文未加载',
+        color: 'red',
+      });
+      return;
+    }
+
+    const operationYears = context.operationYears;
+    const years = Array.from({ length: operationYears }, (_, i) => i + 1);
+
+    // 导入 xlsx-js-style
+    import('xlsx-js-style').then((XLSX) => {
+      // 准备Excel数据（使用数组形式，确保列顺序正确）
+      console.log('🔍 [Excel导出] context值:', context);
+      console.log('🔍 [Excel导出] constructionYears:', context?.constructionYears);
+      const constructionYears = context?.constructionYears || 0;
+      const totalYearColumns = constructionYears + operationYears;
+
+      // 第二行表头：年度列使用连续自然数列（建设期从1开始，运营期续接）
+      const yearHeaders: string[] = [];
+      for (let i = 1; i <= totalYearColumns; i++) {
+        yearHeaders.push(i.toString());
       }
 
-      const operationYears = context.operationYears;
-      const years = Array.from({ length: operationYears }, (_, i) => i + 1);
+      // 第一行表头：序号、成本项目、合计、"计算期"
+      const headerRow1: any[] = ['序号', '成本项目', '合计'];
+      // 添加"计算期"占位（后续需要合并单元格）
+      headerRow1.push('计算期');
+      // 填充剩余位置（使"计算期"横跨所有年度列）
+      for (let i = 1; i < totalYearColumns; i++) {
+        headerRow1.push('');
+      }
 
-      // 准备Excel数据
-      const excelData: any[] = [];
+      // 第二行表头：序号、成本项目、合计、各年度编号
+      const headerRow2: any[] = ['序号', '成本项目', '合计', ...yearHeaders];
+
+      const excelData: any[] = [headerRow1, headerRow2];
       
-      // 添加表头
-      const headerRow: any = { '序号': '', '成本项目': '', '合计': '' };
-      years.forEach((year) => {
-        headerRow[year.toString()] = year;
-      });
-      excelData.push(headerRow);
+      // 建设期成本数据为0（显示为空字符串以保持数据展示的清晰性）
+      const constructionZeros = Array(constructionYears).fill('');
 
       // 1. 营业成本
-      const row1: any = { '序号': '1', '成本项目': '营业成本' };
-      
-      // 营业成本合计列 = 第1.1行至第1.5行合计列数值的总和
+      const row1Data: number[] = [];
       let totalRow1 = 0;
-      
-      // 1.1 外购原材料费（除税）合计列
-      const rawMaterialsTotal = calculateRawMaterialsExcludingTax(undefined, years);
-      totalRow1 += rawMaterialsTotal;
-      
-      // 1.2 外购燃料及动力费（除税）合计列
-      const fuelPowerTotal = calculateFuelPowerExcludingTax(undefined, years);
-      totalRow1 += fuelPowerTotal;
-      
-      // 1.3 工资及福利费合计列
-      const wagesTotal = calculateWagesTotal(undefined, years);
-      totalRow1 += wagesTotal;
-      
-      // 1.4 修理费合计列
-      let repairTotal = 0;
       years.forEach((year) => {
-        let yearRepair = 0;
+        let yearTotal = 0;
+        
+        // 1.1 外购原材料费（除税）
+        yearTotal += calculateRawMaterialsExcludingTax(year, years);
+        
+        // 1.2 外购燃料及动力费（除税）
+        yearTotal += calculateFuelPowerExcludingTax(year, years);
+        
+        // 1.3 工资及福利费
+        yearTotal += calculateWagesTotal(year, years);
+        
+        // 1.4 修理费
         if (costConfig.repair.type === 'percentage') {
-          // 使用与修理费配置弹窗相同的计算基数
-          yearRepair += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+          yearTotal += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
         } else {
-          yearRepair += costConfig.repair.directAmount || 0;
+          yearTotal += costConfig.repair.directAmount || 0;
         }
-        // 修理费不应用达产率
-        repairTotal += yearRepair;
-      });
-      totalRow1 += repairTotal;
-      
-      // 1.5 其他费用合计列
-      let otherExpensesTotal = 0;
-      years.forEach((year) => {
+        
+        // 1.5 其他费用
         const productionRate = costConfig.otherExpenses.applyProductionRate
           ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
           : 1;
-          
-        // 1.5 其他费用（统一使用函数计算，自动应用税率）
-        let yearTotal = 0;
         if (costConfig.otherExpenses.type === 'percentage') {
-          const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
-            const income = calculateTaxableIncome(revItem);
-            return sum + income;
-          }, 0);
+          const revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
           yearTotal += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
         } else {
-          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
           const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
           const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
           const inputTax = directAmount * taxRate / (1 + taxRate);
           yearTotal += directAmount - inputTax;
         }
-        otherExpensesTotal += yearTotal;
+        
+        row1Data.push(yearTotal);
+        totalRow1 += yearTotal;
       });
-      totalRow1 += otherExpensesTotal;
-      
-      
-      // 营业成本运营期各年列 = 第1.1行至第1.5行对应年份列数据的求和
-      years.forEach((year) => {
-        let total = 0;
-        
-        // 1.1 外购原材料费（除税）对应年份列
-        const rawMaterialsYear = calculateRawMaterialsExcludingTax(year, years);
-        total += rawMaterialsYear;
-        
-        // 1.2 外购燃料及动力费（除税）对应年份列
-        const fuelPowerYear = calculateFuelPowerExcludingTax(year, years);
-        total += fuelPowerYear;
-        
-        // 1.3 工资及福利费对应年份列
-        const wagesYear = calculateWagesTotal(year, years);
-        total += wagesYear;
-        
-        // 1.4 修理费对应年份列
-        let yearRepair = 0;
-        if (costConfig.repair.type === 'percentage') {
-          // 使用与修理费配置弹窗相同的计算基数
-          yearRepair += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
-        } else {
-          yearRepair += costConfig.repair.directAmount || 0;
-        }
-        // 修理费不应用达产率
-        total += yearRepair;
-        
-        // 1.5 其他费用对应年份列
-        const productionRate = costConfig.otherExpenses.applyProductionRate
-          ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
-          : 1;
-        // 1.5 其他费用（统一使用函数计算，自动应用税率）
-        let yearOtherExpenses = 0;
-        if (costConfig.otherExpenses.type === 'percentage') {
-          const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
-            const income = calculateTaxableIncome(revItem);
-            return sum + income;
-          }, 0);
-          yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
-        } else {
-          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
-          const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
-          const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
-          const inputTax = directAmount * taxRate / (1 + taxRate);
-          yearOtherExpenses += directAmount - inputTax;
-        }
-        total += yearOtherExpenses;
-        
-        
-        row1[year.toString()] = total;
-      });
-      
-      row1['合计'] = totalRow1;
+      const row1: any = ['1', '营业成本', totalRow1, ...constructionZeros, ...row1Data];
       excelData.push(row1);
 
       // 1.1 外购原材料费
-      const row1_1: any = { '序号': '1.1', '成本项目': '外购原材料费' };
+      const row1_1: any = ['1.1', '外购原材料费', 0, ...constructionZeros];
       let totalRow1_1 = 0;
       years.forEach((year) => {
         const value = calculateRawMaterialsExcludingTax(year, years);
-        row1_1[year.toString()] = value;
+        row1_1.push(value);
         totalRow1_1 += value;
       });
-      row1_1['合计'] = totalRow1_1;
+      row1_1[2] = totalRow1_1;
       excelData.push(row1_1);
 
       // 1.2 外购燃料及动力费
-      const row1_2: any = { '序号': '1.2', '成本项目': '外购燃料及动力费' };
+      const row1_2: any = ['1.2', '外购燃料及动力费', 0, ...constructionZeros];
       let totalRow1_2 = 0;
       years.forEach((year) => {
         const value = calculateFuelPowerExcludingTax(year, years);
-        row1_2[year.toString()] = value;
+        row1_2.push(value);
         totalRow1_2 += value;
       });
-      row1_2['合计'] = totalRow1_2;
+      row1_2[2] = totalRow1_2;
       excelData.push(row1_2);
 
       // 1.3 工资及福利费
-      const row1_3: any = { '序号': '1.3', '成本项目': '工资及福利费' };
+      const row1_3: any = ['1.3', '工资及福利费', 0, ...constructionZeros];
       let totalRow1_3 = 0;
       years.forEach((year) => {
         const value = calculateWagesTotal(year, years);
-        row1_3[year.toString()] = value;
+        row1_3.push(value);
         totalRow1_3 += value;
       });
-      row1_3['合计'] = totalRow1_3;
+      row1_3[2] = totalRow1_3;
       excelData.push(row1_3);
 
       // 1.4 修理费
-      const row1_4: any = { '序号': '1.4', '成本项目': '修理费' };
+      const row1_4: any = ['1.4', '修理费', 0, ...constructionZeros];
       let totalRow1_4 = 0;
       years.forEach((year) => {
         let yearTotal = 0;
@@ -2504,51 +2544,45 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         } else {
           yearTotal += costConfig.repair.directAmount || 0;
         }
-        row1_4[year.toString()] = yearTotal;
+        row1_4.push(yearTotal);
         totalRow1_4 += yearTotal;
       });
-      row1_4['合计'] = totalRow1_4;
+      row1_4[2] = totalRow1_4;
       excelData.push(row1_4);
 
       // 1.5 其他费用
-      const row1_5: any = { '序号': '1.5', '成本项目': '其他费用' };
+      const row1_5: any = ['1.5', costConfig.otherExpenses.name || '其他费用', 0, ...constructionZeros];
       let totalRow1_5 = 0;
       years.forEach((year) => {
         const productionRate = costConfig.otherExpenses.applyProductionRate
           ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
           : 1;
-        
-        // 1.5 其他费用（统一使用函数计算，自动应用税率）
         let yearTotal = 0;
         if (costConfig.otherExpenses.type === 'percentage') {
-          const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
-            const income = calculateTaxableIncome(revItem);
-            return sum + income;
-          }, 0);
+          const revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
           yearTotal += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
         } else {
-          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
           const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
           const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
           const inputTax = directAmount * taxRate / (1 + taxRate);
           yearTotal += directAmount - inputTax;
         }
-        row1_5[year.toString()] = yearTotal;
+        row1_5.push(yearTotal);
         totalRow1_5 += yearTotal;
       });
-      row1_5['合计'] = totalRow1_5;
+      row1_5[2] = totalRow1_5;
       excelData.push(row1_5);
 
       // 2. 管理费用
-      const row2: any = { '序号': '2', '成本项目': '管理费用' };
-      years.forEach((year) => {
-        row2[year.toString()] = '0.00';
+      const row2: any = ['2', '管理费用', 0, ...constructionZeros];
+      years.forEach(() => {
+        row2.push('');
       });
-      row2['合计'] = '0.00';
+      row2[2] = 0;
       excelData.push(row2);
 
       // 3. 利息支出
-      const row3: any = { '序号': '3', '成本项目': '利息支出' };
+      const row3: any = ['3', '利息支出', 0, ...constructionZeros];
       let totalRow3 = 0;
       years.forEach((year) => {
         let yearInterest = 0;
@@ -2556,147 +2590,84 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
           yearInterest = interestRow.分年数据[year - 1];
         }
-        row3[year.toString()] = yearInterest;
+        row3.push(yearInterest);
         totalRow3 += yearInterest;
       });
-      row3['合计'] = totalRow3;
+      row3[2] = totalRow3;
       excelData.push(row3);
 
       // 4. 折旧费
-      const row4: any = { '序号': '4', '成本项目': '折旧费' };
+      const row4: any = ['4', '折旧费', 0, ...constructionZeros];
       let totalRow4 = 0;
       years.forEach((year) => {
         const yearIndex = year - 1;
         const rowA = depreciationData.find(row => row.序号 === 'A');
         const rowD = depreciationData.find(row => row.序号 === 'D');
         const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
-        row4[year.toString()] = yearDepreciation;
+        row4.push(yearDepreciation);
         totalRow4 += yearDepreciation;
       });
-      row4['合计'] = totalRow4;
+      row4[2] = totalRow4;
       excelData.push(row4);
 
       // 5. 摊销费
-      const row5: any = { '序号': '5', '成本项目': '摊销费' };
+      const row5: any = ['5', '摊销费', 0, ...constructionZeros];
       let totalRow5 = 0;
       years.forEach((year) => {
         const yearIndex = year - 1;
         const rowE = depreciationData.find(row => row.序号 === 'E');
         const yearAmortization = rowE?.分年数据[yearIndex] || 0;
-        row5[year.toString()] = yearAmortization;
+        row5.push(yearAmortization);
         totalRow5 += yearAmortization;
       });
-      row5['合计'] = totalRow5;
+      row5[2] = totalRow5;
       excelData.push(row5);
 
       // 6. 开发成本
-      const row6: any = { '序号': '6', '成本项目': '开发成本' };
-      years.forEach((year) => {
-        row6[year.toString()] = '0.00';
+      const row6: any = ['6', '开发成本', 0, ...constructionZeros];
+      years.forEach(() => {
+        row6.push('');
       });
-      row6['合计'] = '0.00';
+      row6[2] = 0;
       excelData.push(row6);
 
       // 7. 总成本费用合计
-      const row7: any = { '序号': '7', '成本项目': '总成本费用合计' };
-      
-      // 总成本费用合计列 = 自然数列1到6行的合计列数值的总和
+      const row7: any = ['7', '总成本费用合计', 0, ...constructionZeros];
       let totalRow7 = 0;
+      totalRow7 += totalRow1; // 营业成本
+      totalRow7 += totalRow3; // 利息支出
+      totalRow7 += totalRow4; // 折旧费
+      totalRow7 += totalRow5; // 摊销费
       
-      // 行1: 营业成本合计列 (已经计算为第1.1行至第1.5行合计列数值的总和)
-      totalRow7 += totalRow1; // 使用上面已经计算好的营业成本合计
-      
-      // 行2: 管理费用合计列（暂时为0）
-      // 暂时为0，待后续实现
-      
-      // 行3: 利息支出合计列
-      let row3Total = 0;
-      years.forEach((year) => {
-        const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
-        if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
-          row3Total += interestRow.分年数据[year - 1];
-        }
-      });
-      totalRow7 += row3Total;
-      
-      // 行4: 折旧费合计列
-      let row4Total = 0;
-      years.forEach((year) => {
-        const yearIndex = year - 1;
-        const rowA = depreciationData.find(row => row.序号 === 'A');
-        const rowD = depreciationData.find(row => row.序号 === 'D');
-        const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
-        row4Total += yearDepreciation;
-      });
-      totalRow7 += row4Total;
-      
-      // 行5: 摊销费合计列
-      let row5Total = 0;
-      years.forEach((year) => {
-        const yearIndex = year - 1;
-        const rowE = depreciationData.find(row => row.序号 === 'E');
-        const yearAmortization = rowE?.分年数据[yearIndex] || 0;
-        row5Total += yearAmortization;
-      });
-      totalRow7 += row5Total;
-      
-      // 行6: 开发成本合计列（暂时为0）
-      // 暂时为0，待后续实现
-      
-      
-      // 总成本费用运营期各年列 = 自然数列1到6行对应年份列数据的求和
       years.forEach((year) => {
         const yearIndex = year - 1;
         let yearTotal = 0;
         
-        // 行1: 营业成本对应年份列 (已经计算为第1.1行至第1.5行对应年份列数据的求和)
+        // 行1: 营业成本
         let yearRow1 = 0;
-        
-        // 1.1 外购原材料费（除税）对应年份列
         yearRow1 += calculateRawMaterialsExcludingTax(year, years);
-        
-        // 1.2 外购燃料及动力费（除税）对应年份列
         yearRow1 += calculateFuelPowerExcludingTax(year, years);
-        
-        // 1.3 工资及福利费对应年份列
         yearRow1 += calculateWagesTotal(year, years);
-        
-        // 1.4 修理费对应年份列
-        let yearRepair = 0;
         if (costConfig.repair.type === 'percentage') {
-          yearRepair += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+          yearRow1 += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
         } else {
-          yearRepair += costConfig.repair.directAmount || 0;
+          yearRow1 += costConfig.repair.directAmount || 0;
         }
-        yearRow1 += yearRepair;
-        
-        // 1.5 其他费用对应年份列
         const productionRate = costConfig.otherExpenses.applyProductionRate
           ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
           : 1;
-        // 1.5 其他费用（统一使用函数计算，自动应用税率）
-        let yearOtherExpenses = 0;
         if (costConfig.otherExpenses.type === 'percentage') {
-          const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
-            const income = calculateTaxableIncome(revItem);
-            return sum + income;
-          }, 0);
-          yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
+          const revenueBase = (revenueItems || []).reduce((sum, revItem) => sum + calculateTaxableIncome(revItem), 0);
+          yearRow1 += revenueBase * (costConfig.otherExpenses.percentage ?? 0) / 100 * productionRate;
         } else {
-          // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
           const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
           const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
           const inputTax = directAmount * taxRate / (1 + taxRate);
-          yearOtherExpenses += directAmount - inputTax;
+          yearRow1 += directAmount - inputTax;
         }
-        yearRow1 += yearOtherExpenses;
-        
         yearTotal += yearRow1;
         
-        // 行2: 管理费用对应年份列（暂时为0）
-        // 暂时为0，待后续实现
-        
-        // 行3: 利息支出对应年份列
+        // 行3: 利息支出
         let yearInterest = 0;
         const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
         if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
@@ -2704,29 +2675,122 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         }
         yearTotal += yearInterest;
         
-        // 行4: 折旧费对应年份列
+        // 行4: 折旧费
         const rowA = depreciationData.find(row => row.序号 === 'A');
         const rowD = depreciationData.find(row => row.序号 === 'D');
         const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
         yearTotal += yearDepreciation;
         
-        // 行5: 摊销费对应年份列
+        // 行5: 摊销费
         const rowE = depreciationData.find(row => row.序号 === 'E');
         const yearAmortization = rowE?.分年数据[yearIndex] || 0;
         yearTotal += yearAmortization;
         
-        // 行6: 开发成本对应年份列（暂时为0）
-        // 暂时为0，待后续实现
-        
-        
-        row7[year.toString()] = yearTotal;
+        row7.push(yearTotal);
       });
-      
-      row7['合计'] = totalRow7;
+      row7[2] = totalRow7;
       excelData.push(row7);
 
       // 创建工作簿和工作表
-      const ws = XLSX.utils.json_to_sheet(excelData);
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // 设置列宽
+      const cols: any[] = [
+        { wch: 3 }, // 序号
+        { wch: 18 }, // 成本项目
+        { wch: 7 }, // 合计
+      ];
+      // 添加建设期列宽
+      for (let i = 0; i < constructionYears; i++) {
+        cols.push({ wch: 7 }); // 建设期列
+      }
+      years.forEach(() => {
+        cols.push({ wch: 7 }); // 年度列
+      });
+      ws['!cols'] = cols;
+
+      // 设置合并单元格（双层列头）
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },  // "序号"跨2行
+        { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },  // "成本项目"跨2行
+        { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },  // "合计"跨2行
+        { s: { r: 0, c: 3 }, e: { r: 0, c: 3 + totalYearColumns - 1 } }  // "计算期"横向跨所有年度列
+      ];
+
+      // 设置表头样式（加粗，居中，带边框，字体大小12）
+      const headerStyle = {
+        font: { bold: true, sz: 8 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+
+      // 设置数值单元格样式（居中，带边框，字体大小11）
+      const cellStyle = {
+        font: { sz: 8 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+
+      // 设置成本项目列样式（左对齐，带边框，字体大小11）
+      const nameCellStyle = {
+        font: { sz: 8 },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+
+      // 遍历所有单元格设置样式
+      const range = XLSX.utils.decode_range(ws['!ref']!);
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+          
+          // 表头行加粗并居中
+          if (R === 0 || R === 1) {
+            ws[cellAddress].s = headerStyle;
+          } else {
+            // 成本项目列（C=1）左对齐，其他列居中
+            if (C === 1) {
+              ws[cellAddress].s = nameCellStyle;
+            } else {
+              // 判断是否为运营期列（建设期列之后的列）
+              // 列结构：0=序号, 1=成本项目, 2=合计, 3..3+constructionYears-1=建设期, 之后=运营期
+              const operationYearStartCol = 3 + constructionYears;
+              const isOperationYearColumn = C >= operationYearStartCol;
+              
+              // 对于运营期数值列，检查值是否为0，如果是则显示为空字符串
+              if (isOperationYearColumn && typeof ws[cellAddress].v === 'number' && ws[cellAddress].v === 0) {
+                ws[cellAddress].v = '';
+                ws[cellAddress].t = 's';  // 设置为字符串类型
+                ws[cellAddress].s = cellStyle;  // 应用样式但保留边框
+              } else {
+                ws[cellAddress].s = cellStyle;
+                // 设置数值格式为2位小数
+                if (typeof ws[cellAddress].v === 'number') {
+                  ws[cellAddress].z = '0.00';
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 使用 xlsx-js-style 的 book_new
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '总成本费用估算表');
 
@@ -2738,7 +2802,366 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
         message: '总成本费用估算表已导出为Excel文件',
         color: 'green',
       });
-    };
+    });
+  };
+
+  // 导出总成本费用估算表为Excel（含税版本）
+  // 使用 xlsx-js-style 库，支持样式设置和单元格合并
+  const handleExportCostTableWithTax = () => {
+    if (!context) {
+      notifications.show({
+        title: '导出失败',
+        message: '项目上下文未加载',
+        color: 'red',
+      });
+      return;
+    }
+
+    const operationYears = context.operationYears;
+    const years = Array.from({ length: operationYears }, (_, i) => i + 1);
+
+    // 导入 xlsx-js-style
+    import('xlsx-js-style').then((XLSX) => {
+      // 准备Excel数据（使用数组形式，确保列顺序正确）
+      console.log('🔍 [Excel导出-含税] context值:', context);
+      console.log('🔍 [Excel导出-含税] constructionYears:', context?.constructionYears);
+      const constructionYears = context?.constructionYears || 0;
+      const totalYearColumns = constructionYears + operationYears;
+
+      // 第二行表头：年度列使用连续自然数列（建设期从1开始，运营期续接）
+      const yearHeaders: string[] = [];
+      for (let i = 1; i <= totalYearColumns; i++) {
+        yearHeaders.push(i.toString());
+      }
+
+      // 第一行表头：序号、成本项目、合计、"计算期"
+      const headerRow1: any[] = ['序号', '成本项目', '合计'];
+      // 添加"计算期"占位（后续需要合并单元格）
+      headerRow1.push('计算期');
+      // 填充剩余位置（使"计算期"横跨所有年度列）
+      for (let i = 1; i < totalYearColumns; i++) {
+        headerRow1.push('');
+      }
+
+      // 第二行表头：序号、成本项目、合计、各年度编号
+      const headerRow2: any[] = ['序号', '成本项目', '合计', ...yearHeaders];
+
+      const excelData: any[] = [headerRow1, headerRow2];
+      
+      // 建设期成本数据为0（显示为空字符串以保持数据展示的清晰性）
+      const constructionZeros = Array(constructionYears).fill('');
+
+      // 1. 营业成本
+      const row1Data: number[] = [];
+      let totalRow1 = 0;
+      years.forEach((year) => {
+        let yearTotal = 0;
+        
+        // 1.1 外购原材料费（含税）
+        yearTotal += calculateRawMaterialsWithTax(year, years);
+        
+        // 1.2 外购燃料及动力费（含税）
+        yearTotal += calculateFuelPowerWithTax(year, years);
+        
+        // 1.3 工资及福利费（含税，不变）
+        yearTotal += calculateWagesTotal(year, years);
+        
+        // 1.4 修理费（含税，不变）
+        if (costConfig.repair.type === 'percentage') {
+          yearTotal += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+        } else {
+          yearTotal += costConfig.repair.directAmount || 0;
+        }
+        
+        // 1.5 其他费用（含税）
+        yearTotal += calculateOtherExpensesWithTax(year);
+        
+        row1Data.push(yearTotal);
+        totalRow1 += yearTotal;
+      });
+      const row1: any = ['1', '营业成本', totalRow1, ...constructionZeros, ...row1Data];
+      excelData.push(row1);
+
+      // 1.1 外购原材料费
+      const row1_1: any = ['1.1', '外购原材料费', 0, ...constructionZeros];
+      let totalRow1_1 = 0;
+      years.forEach((year) => {
+        const value = calculateRawMaterialsWithTax(year, years);
+        row1_1.push(value);
+        totalRow1_1 += value;
+      });
+      row1_1[2] = totalRow1_1;
+      excelData.push(row1_1);
+
+      // 1.2 外购燃料及动力费
+      const row1_2: any = ['1.2', '外购燃料及动力费', 0, ...constructionZeros];
+      let totalRow1_2 = 0;
+      years.forEach((year) => {
+        const value = calculateFuelPowerWithTax(year, years);
+        row1_2.push(value);
+        totalRow1_2 += value;
+      });
+      row1_2[2] = totalRow1_2;
+      excelData.push(row1_2);
+
+      // 1.3 工资及福利费
+      const row1_3: any = ['1.3', '工资及福利费', 0, ...constructionZeros];
+      let totalRow1_3 = 0;
+      years.forEach((year) => {
+        const value = calculateWagesTotal(year, years);
+        row1_3.push(value);
+        totalRow1_3 += value;
+      });
+      row1_3[2] = totalRow1_3;
+      excelData.push(row1_3);
+
+      // 1.4 修理费
+      const row1_4: any = ['1.4', '修理费', 0, ...constructionZeros];
+      let totalRow1_4 = 0;
+      years.forEach((year) => {
+        let yearTotal = 0;
+        if (costConfig.repair.type === 'percentage') {
+          yearTotal += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+        } else {
+          yearTotal += costConfig.repair.directAmount || 0;
+        }
+        row1_4.push(yearTotal);
+        totalRow1_4 += yearTotal;
+      });
+      row1_4[2] = totalRow1_4;
+      excelData.push(row1_4);
+
+      // 1.5 其他费用
+      const row1_5: any = ['1.5', costConfig.otherExpenses.name || '其他费用', 0, ...constructionZeros];
+      let totalRow1_5 = 0;
+      years.forEach((year) => {
+        const value = calculateOtherExpensesWithTax(year);
+        row1_5.push(value);
+        totalRow1_5 += value;
+      });
+      row1_5[2] = totalRow1_5;
+      excelData.push(row1_5);
+
+      // 2. 管理费用
+      const row2: any = ['2', '管理费用', 0, ...constructionZeros];
+      years.forEach(() => {
+        row2.push('');
+      });
+      row2[2] = 0;
+      excelData.push(row2);
+
+      // 3. 利息支出
+      const row3: any = ['3', '利息支出', 0, ...constructionZeros];
+      let totalRow3 = 0;
+      years.forEach((year) => {
+        let yearInterest = 0;
+        const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
+        if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
+          yearInterest = interestRow.分年数据[year - 1];
+        }
+        row3.push(yearInterest);
+        totalRow3 += yearInterest;
+      });
+      row3[2] = totalRow3;
+      excelData.push(row3);
+
+      // 4. 折旧费
+      const row4: any = ['4', '折旧费', 0, ...constructionZeros];
+      let totalRow4 = 0;
+      years.forEach((year) => {
+        const yearIndex = year - 1;
+        const rowA = depreciationData.find(row => row.序号 === 'A');
+        const rowD = depreciationData.find(row => row.序号 === 'D');
+        const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
+        row4.push(yearDepreciation);
+        totalRow4 += yearDepreciation;
+      });
+      row4[2] = totalRow4;
+      excelData.push(row4);
+
+      // 5. 摊销费
+      const row5: any = ['5', '摊销费', 0, ...constructionZeros];
+      let totalRow5 = 0;
+      years.forEach((year) => {
+        const yearIndex = year - 1;
+        const rowE = depreciationData.find(row => row.序号 === 'E');
+        const yearAmortization = rowE?.分年数据[yearIndex] || 0;
+        row5.push(yearAmortization);
+        totalRow5 += yearAmortization;
+      });
+      row5[2] = totalRow5;
+      excelData.push(row5);
+
+      // 6. 开发成本
+      const row6: any = ['6', '开发成本', 0, ...constructionZeros];
+      years.forEach(() => {
+        row6.push('');
+      });
+      row6[2] = 0;
+      excelData.push(row6);
+
+      // 7. 总成本费用合计
+      const row7: any = ['7', '总成本费用合计', 0, ...constructionZeros];
+      let totalRow7 = 0;
+      totalRow7 += totalRow1; // 营业成本
+      totalRow7 += totalRow3; // 利息支出
+      totalRow7 += totalRow4; // 折旧费
+      totalRow7 += totalRow5; // 摊销费
+      
+      years.forEach((year) => {
+        const yearIndex = year - 1;
+        let yearTotal = 0;
+        
+        // 行1: 营业成本
+        let yearRow1 = 0;
+        yearRow1 += calculateRawMaterialsWithTax(year, years);
+        yearRow1 += calculateFuelPowerWithTax(year, years);
+        yearRow1 += calculateWagesTotal(year, years);
+        if (costConfig.repair.type === 'percentage') {
+          yearRow1 += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+        } else {
+          yearRow1 += costConfig.repair.directAmount || 0;
+        }
+        yearRow1 += calculateOtherExpensesWithTax(year);
+        yearTotal += yearRow1;
+        
+        // 行3: 利息支出
+        let yearInterest = 0;
+        const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
+        if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
+          yearInterest = interestRow.分年数据[year - 1];
+        }
+        yearTotal += yearInterest;
+        
+        // 行4: 折旧费
+        const rowA = depreciationData.find(row => row.序号 === 'A');
+        const rowD = depreciationData.find(row => row.序号 === 'D');
+        const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
+        yearTotal += yearDepreciation;
+        
+        // 行5: 摊销费
+        const rowE = depreciationData.find(row => row.序号 === 'E');
+        const yearAmortization = rowE?.分年数据[yearIndex] || 0;
+        yearTotal += yearAmortization;
+        
+        row7.push(yearTotal);
+      });
+      row7[2] = totalRow7;
+      excelData.push(row7);
+
+      // 创建工作簿和工作表
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // 设置列宽
+      const cols: any[] = [
+        { wch: 3 }, // 序号
+        { wch: 18 }, // 成本项目
+        { wch: 7 }, // 合计
+      ];
+      // 添加建设期列宽
+      for (let i = 0; i < constructionYears; i++) {
+        cols.push({ wch: 7 }); // 建设期列
+      }
+      years.forEach(() => {
+        cols.push({ wch: 7 }); // 年度列
+      });
+      ws['!cols'] = cols;
+
+      // 设置合并单元格（双层列头）
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },  // "序号"跨2行
+        { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },  // "成本项目"跨2行
+        { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },  // "合计"跨2行
+        { s: { r: 0, c: 3 }, e: { r: 0, c: 3 + totalYearColumns - 1 } }  // "计算期"横向跨所有年度列
+      ];
+
+      // 设置表头样式（加粗，居中，带边框，字体大小12）
+      const headerStyle = {
+        font: { bold: true, sz: 8 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+
+      // 设置数值单元格样式（居中，带边框，字体大小11）
+      const cellStyle = {
+        font: { sz: 8 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+
+      // 设置成本项目列样式（左对齐，带边框，字体大小11）
+      const nameCellStyle = {
+        font: { sz: 8 },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+
+      // 遍历所有单元格设置样式
+      const range = XLSX.utils.decode_range(ws['!ref']!);
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+          
+          // 表头行加粗并居中
+          if (R === 0 || R === 1) {
+            ws[cellAddress].s = headerStyle;
+          } else {
+            // 成本项目列（C=1）左对齐，其他列居中
+            if (C === 1) {
+              ws[cellAddress].s = nameCellStyle;
+            } else {
+              // 判断是否为运营期列（建设期列之后的列）
+              // 列结构：0=序号, 1=成本项目, 2=合计, 3..3+constructionYears-1=建设期, 之后=运营期
+              const operationYearStartCol = 3 + constructionYears;
+              const isOperationYearColumn = C >= operationYearStartCol;
+              
+              // 对于运营期数值列，检查值是否为0，如果是则显示为空字符串
+              if (isOperationYearColumn && typeof ws[cellAddress].v === 'number' && ws[cellAddress].v === 0) {
+                ws[cellAddress].v = '';
+                ws[cellAddress].t = 's';  // 设置为字符串类型
+                ws[cellAddress].s = cellStyle;  // 应用样式但保留边框
+              } else {
+                ws[cellAddress].s = cellStyle;
+                // 设置数值格式为2位小数
+                if (typeof ws[cellAddress].v === 'number') {
+                  ws[cellAddress].z = '0.00';
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 使用 xlsx-js-style 的 book_new
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '含税总成本费用估算表');
+
+      // 导出文件
+      XLSX.writeFile(wb, `含税总成本费用估算表_${context.projectName || '项目'}.xlsx`);
+
+      notifications.show({
+        title: '导出成功',
+        message: '含税总成本费用估算表已导出为Excel文件',
+        color: 'green',
+      });
+    });
+  };
 
   // 根据费用项目名称获取数量标签
   const getQuantityLabel = (itemName: string) => {
@@ -3617,16 +4040,30 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             <Text size="md">
               📊 总成本费用估算表
             </Text>
-            <Tooltip label="导出Excel">
-              <ActionIcon
-                variant="light"
-                color="green"
-                size={18}
-                onClick={handleExportCostTable}
-              >
-                <IconDownload size={20} />
-              </ActionIcon>
-            </Tooltip>
+            <Group gap="xs">
+              {/* 不含税版本导出按钮 */}
+              <Tooltip label="导出Excel（不含税版本）">
+                <ActionIcon
+                  variant="light"
+                  color="gray"
+                  size={18}
+                  onClick={handleExportCostTable}
+                >
+                  <IconDownload size={20} />
+                </ActionIcon>
+              </Tooltip>
+              {/* 含税版本导出按钮 */}
+              <Tooltip label="导出Excel（含税版本）">
+                <ActionIcon
+                  variant="light"
+                  color="green"
+                  size={18}
+                  onClick={handleExportCostTableWithTax}
+                >
+                  <IconDownload size={20} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
         }
         size="calc(100vw - 100px)"

@@ -900,7 +900,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
       
       // 传递表格和图表资源用于变量替换
       await reportApi.exportHtml({
-        title: reportTitle,
+        title: '',  // 空字符串，不输出报告标题到Word文档
         htmlContent,
         styleConfig: completeConfig,
         resources
