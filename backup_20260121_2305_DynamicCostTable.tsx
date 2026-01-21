@@ -344,6 +344,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     management: {
       directAmount: 0, // 直接金额
       applyProductionRate: false, // 是否应用达产率
+      taxRate: 6, // 进项税率
     }
   });
 
@@ -923,7 +924,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
   // 计算管理费用的函数（需要放在totalCostTableData之前）
   const calculateManagementExpenses = useCallback((targetYear?: number, yearsArray?: number[]) => {
     // 防御性检查：如果 management 配置不存在，使用默认值
-    const managementConfig = costConfig.management || { directAmount: 0, applyProductionRate: false };
+    const managementConfig = costConfig.management || { directAmount: 0, applyProductionRate: false, taxRate: 6 };
     
     if (targetYear !== undefined) {
       // 计算指定年份的管理费用
@@ -4205,8 +4206,8 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                   name: newExpenseType === 'landTransfer' ? '土地流转费' : '其他费用',
                   // 土地流转费类型：税率固定为0%
                   taxRate: newExpenseType === 'landTransfer' ? 0 : currentConfig.taxRate,
-                  // 如果切换到土地流转费，自动应用达产率；切换到直接填金额时，不应用达产率
-                  applyProductionRate: newExpenseType === 'landTransfer' ? true : false
+                  // 如果切换到土地流转费，自动应用达产率
+                  applyProductionRate: newExpenseType === 'landTransfer' ? true : currentConfig.applyProductionRate
                 });
               }}
               allowDeselect={false}
@@ -4410,20 +4411,14 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
     // 初始化临时配置（当弹窗打开时）- 防御性检查：如果 management 不存在，使用默认值
     React.useEffect(() => {
       if (showManagementModal && !tempManagementConfig) {
-        const savedConfig = costConfig.management;
-        if (savedConfig) {
-          // 有配置数据时，从配置中读取达产率
-          setTempManagementConfig({...savedConfig});
-        } else {
-          // 没有配置数据时，默认应用达产率为 false
-          setTempManagementConfig({ directAmount: 0, applyProductionRate: false });
-        }
+        const managementConfig = costConfig.management || { directAmount: 0, applyProductionRate: false, taxRate: 6 };
+        setTempManagementConfig({...managementConfig});
       }
     }, [showManagementModal, costConfig.management, tempManagementConfig]);
     
     // 计算管理费用金额（使用临时配置）- 防御性检查
     const calculateManagementAmount = () => {
-      const config = tempManagementConfig || (costConfig.management || { directAmount: 0, applyProductionRate: false });
+      const config = tempManagementConfig || (costConfig.management || { directAmount: 0, applyProductionRate: false, taxRate: 6 });
       return config.directAmount || 0;
     };
     
@@ -4458,7 +4453,7 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
       setShowManagementModal(false);
     };
     
-    const currentConfig = tempManagementConfig || costConfig.management || { directAmount: 0, applyProductionRate: false };
+    const currentConfig = tempManagementConfig || costConfig.management || { directAmount: 0, applyProductionRate: false, taxRate: 6 };
   
     return (
       <Modal
@@ -4494,6 +4489,32 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             }
           />
           
+          <NumberInput
+            label="进项税率 (%)"
+            value={currentConfig.taxRate ?? 6}
+            onChange={(value) => setTempManagementConfig({
+              ...currentConfig,
+              taxRate: Number(value)
+            })}
+            min={0}
+            max={100}
+            decimalScale={2}
+            rightSection={
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => setTempManagementConfig({
+                  ...currentConfig,
+                  taxRate: 0
+                })}
+                title="清除"
+                style={{ marginLeft: '-3px' }}
+              >
+                <IconX size={14} />
+              </ActionIcon>
+            }
+          />
+          
           <Checkbox
             label="应用达产率"
             checked={currentConfig.applyProductionRate}
@@ -4503,7 +4524,26 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
             })}
           />
           
-
+          {/* 费用金额计算说明 */}
+          <div style={{
+            padding: '12px 16px',
+            backgroundColor: '#E8F7FF',
+            borderRadius: '8px',
+            borderLeft: '4px solid #165DFF'
+          }}>
+            <Text size="sm" c="#165DFF" fw={500}>
+              💰 费用金额计算：
+            </Text>
+            <Text size="md" c="#165DFF" fw={600} mt={4}>
+              {formatNumberNoRounding(calculateManagementAmount())} 万元/年
+            </Text>
+            {currentConfig.applyProductionRate && (
+              <Text size="xs" c="#666" mt={4}>
+                💡 费用金额将随达产率变化
+              </Text>
+            )}
+          </div>
+          
           <Group justify="flex-end" mt="xl">
             <Button variant="default" onClick={handleCancelManagementConfig}>
               取消
@@ -5235,20 +5275,183 @@ const DynamicCostTable: React.FC<DynamicCostTableProps> = ({
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
                   </Table.Tr>
                   
-                                    {/* 7. 总成本费用合计 */}
+                  {/* 7. 总成本费用合计 */}
                   <Table.Tr>
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>7</Table.Td>
                     <Table.Td style={{ border: '1px solid #dee2e6' }}>总成本费用合计</Table.Td>
                     <Table.Td style={{ textAlign: 'right', border: '1px solid #dee2e6' }}>
-                      {/* 【大模型编程规范修复】直接使用totalCostTableData中预计算的数据 */}
-                      {formatNumber(totalCostTableData?.rows?.[11]?.total ?? 0)}
+                      {(() => {
+                        // 总成本费用合计列 = 运营期各年数值的总和
+                        let total = 0;
+                        years.forEach((year) => {
+                          const yearIndex = year - 1;
+                          let yearTotal = 0;
+                          
+                          // 行1: 营业成本对应年份列
+                          let yearRow1 = 0;
+                          
+                          // 1.1 外购原材料费（除税）对应年份列
+                          yearRow1 += calculateRawMaterialsExcludingTax(year, years);
+                          
+                          // 1.2 外购燃料及动力费（除税）对应年份列
+                          yearRow1 += calculateFuelPowerExcludingTax(year, years);
+                          
+                          // 1.3 工资及福利费对应年份列
+                          yearRow1 += calculateWagesTotal(year, years);
+                          
+                          // 1.4 修理费对应年份列
+                          let yearRepair = 0;
+                          if (costConfig.repair.type === 'percentage') {
+                            yearRepair += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+                          } else {
+                            yearRepair += costConfig.repair.directAmount || 0;
+                          }
+                          yearRow1 += yearRepair;
+                          
+                          // 1.5 其他费用对应年份列
+                          // 土地流转费类型：固定金额，不应用达产率
+                          const isLandTransfer = costConfig.otherExpenses.expenseType === 'landTransfer';
+                          
+                          let yearOtherExpenses = 0;
+                          if (isLandTransfer) {
+                            const acreage = costConfig.otherExpenses.acreage ?? 0;
+                            const unitPrice = costConfig.otherExpenses.unitPrice ?? 0;
+                            yearOtherExpenses = acreage * unitPrice;
+                          } else {
+                            const productionRate = costConfig.otherExpenses.applyProductionRate
+                              ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                              : 1;
+                            if (costConfig.otherExpenses.type === 'percentage') {
+                              const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
+                                const income = calculateTaxableIncome(revItem);
+                                return sum + income;
+                              }, 0);
+                              yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+                            } else {
+                              // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                              const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                              const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                              const inputTax = directAmount * taxRate / (1 + taxRate);
+                              yearOtherExpenses += directAmount - inputTax;
+                            }
+                          }
+                          yearRow1 += yearOtherExpenses;
+                          
+                          yearTotal += yearRow1;
+                          
+                          // 行2: 管理费用对应年份列（暂时为0）
+                          
+                          // 行3: 利息支出对应年份列
+                          let yearInterest = 0;
+                          const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
+                          if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
+                            yearInterest = interestRow.分年数据[year - 1];
+                          }
+                          yearTotal += yearInterest;
+                          
+                          // 行4: 折旧费对应年份列
+                          const rowA = depreciationData.find(row => row.序号 === 'A');
+                          const rowD = depreciationData.find(row => row.序号 === 'D');
+                          const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
+                          yearTotal += yearDepreciation;
+                          
+                          // 行5: 摊销费对应年份列
+                          const rowE = depreciationData.find(row => row.序号 === 'E');
+                          const yearAmortization = rowE?.分年数据[yearIndex] || 0;
+                          yearTotal += yearAmortization;
+                          
+                          // 行6: 开发成本对应年份列（暂时为0）
+                          
+                          // 累加原始数值（不四舍五入）
+                          total += yearTotal;
+                        });
+                        
+                        // 只在显示时才四舍五入到2位小数
+                        return formatNumber(total);
+                      })()}
                     </Table.Td>
-                    {totalCostTableData?.rows?.[11]?.years?.map((yearData) => (
-                      <Table.Td key={yearData.year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
-                        {/* 【大模型编程规范修复】直接使用totalCostTableData中预计算的数据 */}
-                        {formatNumber(yearData.value ?? 0)}
-                      </Table.Td>
-                    ))}
+                    {years.map((year) => {
+                      const yearIndex = year - 1; // 转换为0-based索引
+                      return (
+                        <Table.Td key={year} style={{ textAlign: 'center', border: '1px solid #dee2e6' }}>
+                          {(() => {
+                            // 总成本费用运营期各年列 = 自然数列1到6行对应年份列数据的求和
+                            let yearTotal = 0;
+                            
+                            // 行1: 营业成本对应年份列 (已经计算为第1.1行至第1.5行对应年份列数据的求和)
+                            let yearRow1 = 0;
+                            
+                            // 1.1 外购原材料费（除税）对应年份列
+                            yearRow1 += calculateRawMaterialsExcludingTax(year, years);
+                            
+                            // 1.2 外购燃料及动力费（除税）对应年份列
+                            yearRow1 += calculateFuelPowerExcludingTax(year, years);
+                            
+                            // 1.3 工资及福利费对应年份列
+                            yearRow1 += calculateWagesTotal(year, years);
+                            
+                            // 1.4 修理费对应年份列
+                            let yearRepair = 0;
+                            if (costConfig.repair.type === 'percentage') {
+                              yearRepair += fixedAssetsInvestment * (costConfig.repair.percentageOfFixedAssets || 0) / 100;
+                            } else {
+                              yearRepair += costConfig.repair.directAmount || 0;
+                            }
+                            yearRow1 += yearRepair;
+                            
+                            // 1.5 其他费用对应年份列
+                            const productionRate = costConfig.otherExpenses.applyProductionRate
+                              ? (productionRates.find(p => p.yearIndex === year)?.rate || 1)
+                              : 1;
+                            let yearOtherExpenses = 0;
+                            if (costConfig.otherExpenses.type === 'percentage') {
+                              const revenueBase = (revenueItems || []).reduce((sum, revItem) => {
+                                const income = calculateTaxableIncome(revItem);
+                                return sum + income;
+                              }, 0);
+                              yearOtherExpenses += revenueBase * (costConfig.otherExpenses.percentage || 0) / 100 * productionRate;
+                            } else {
+                              // 直接金额 - 其他费用（除税）= 含税金额 - 进项税额
+                              const directAmount = (costConfig.otherExpenses.directAmount ?? 0) * productionRate;
+                              const taxRate = (costConfig.otherExpenses.taxRate ?? 9) / 100;
+                              const inputTax = directAmount * taxRate / (1 + taxRate);
+                              yearOtherExpenses += directAmount - inputTax;
+                            }
+                            yearRow1 += yearOtherExpenses;
+                            
+                            yearTotal += yearRow1;
+                            
+                            // 行2: 管理费用对应年份列（暂时为0）
+                            // 暂时为0，待后续实现
+                            
+                            // 行3: 利息支出对应年份列
+                            let yearInterest = 0;
+                            const interestRow = repaymentTableData.find(row => row.序号 === '2.2');
+                            if (interestRow && interestRow.分年数据 && interestRow.分年数据[year - 1] !== undefined) {
+                              yearInterest = interestRow.分年数据[year - 1];
+                            }
+                            yearTotal += yearInterest;
+                            
+                            // 行4: 折旧费对应年份列
+                            const rowA = depreciationData.find(row => row.序号 === 'A');
+                            const rowD = depreciationData.find(row => row.序号 === 'D');
+                            const yearDepreciation = (rowA?.分年数据[yearIndex] || 0) + (rowD?.分年数据[yearIndex] || 0);
+                            yearTotal += yearDepreciation;
+                            
+                            // 行5: 摊销费对应年份列
+                            const rowE = depreciationData.find(row => row.序号 === 'E');
+                            const yearAmortization = rowE?.分年数据[yearIndex] || 0;
+                            yearTotal += yearAmortization;
+                            
+                            // 行6: 开发成本对应年份列（暂时为0）
+                            // 暂时为0，待后续实现
+                            
+                            
+                            return formatNumber(yearTotal);
+                          })()}
+                        </Table.Td>
+                      );
+                    })}
                     <Table.Td style={{ textAlign: 'center', border: '1px solid #dee2e6' }}></Table.Td>
                   </Table.Tr>
                 </Table.Tbody>
