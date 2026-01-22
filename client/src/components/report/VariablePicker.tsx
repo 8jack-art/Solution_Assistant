@@ -207,6 +207,31 @@ export function VariablePicker() {
             >
               运营负荷
             </Badge>
+            {/* 【新增】计算期 */}
+            <Badge
+              variant="light"
+              color="blue"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleCopyVariable('{{calculation_period}}')}
+              title="点击复制"
+              rightSection={
+                <Tooltip label="查看JSON数据">
+                  <ActionIcon
+                    size="xs"
+                    variant="transparent"
+                    color="blue"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleViewJson('{{calculation_period}}', '项目计算期')
+                    }}
+                  >
+                    <Eye size={12} />
+                  </ActionIcon>
+                </Tooltip>
+              }
+            >
+              计算期
+            </Badge>
           </Group>
         </div>
 

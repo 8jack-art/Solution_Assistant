@@ -716,6 +716,29 @@ export const useReportStore = create<ReportState>((set, get) => ({
           
           return JSON.stringify({ name: '管理费用', yearlyData: [], 年均管理费: 0, 运营期合计: 0 }, null, 2)
         })() },
+        // 【新增】计算期变量
+        { key: '{{calculation_period}}', label: '计算期', value: (() => {
+          // 从 loan_repayment_section12 中提取建设期年限和运营期年限
+          const section12JSON = tableDataJSON['DATA:loan_repayment_section12'] || '{}'
+          let section12Data = {}
+          try {
+            section12Data = typeof section12JSON === 'string' ? JSON.parse(section12JSON) : section12JSON
+          } catch (e) {
+            section12Data = {}
+          }
+          
+          const basicInfo = section12Data.basicInfo || {}
+          const constructionYears = basicInfo.建设期年限 || 0
+          const operationYears = basicInfo.运营期年限 || 0
+          const calculationPeriod = constructionYears + operationYears
+          
+          return JSON.stringify({
+            title: '项目计算期',
+            计算期: calculationPeriod,
+            建设期年限: constructionYears,
+            运营期年限: operationYears
+          }, null, 2)
+        })() },
         { key: '{{land_transfer}}', label: '土地流转信息', category: 'project', value: landTransferValue },
         // 表格数据（JSON格式，用于LLM提示词）
         { key: '{{DATA:investment_estimate}}', label: '投资估算简表JSON', category: 'tableData', value: tableDataJSON['DATA:investment_estimate'] || '{}' },

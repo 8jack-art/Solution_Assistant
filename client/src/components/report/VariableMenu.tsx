@@ -24,7 +24,7 @@ const variableGroups = [
     label: '投资数据',
     icon: <DollarSign size={14} />,
     color: 'green',
-    filterKeys: ['{{total_investment}}', '{{construction_years}}', '{{operation_years}}', '{{construction_unit}}']
+    filterKeys: ['{{total_investment}}', '{{construction_years}}', '{{operation_years}}', '{{construction_unit}}', '{{calculation_period}}']
   },
   {
     label: '财务指标',
@@ -80,6 +80,7 @@ const variableDetails: Record<string, { label: string; description: string }> = 
   '{{construction_years}}': { label: '建设期', description: '项目建设周期（年）' },
   '{{operation_years}}': { label: '运营期', description: '项目运营周期（年）' },
   '{{construction_unit}}': { label: '建设单位', description: '项目承建单位' },
+  '{{calculation_period}}': { label: '计算期', description: '项目计算期JSON数据，包含计算期、建设期年限、运营期年限' },
   '{{roi}}': { label: '投资回报率', description: '投资回报率（%）' },
   '{{irr}}': { label: '内部收益率', description: '内部收益率（%）' },
   '{{npv}}': { label: '净现值', description: '净现值（万元）' },
