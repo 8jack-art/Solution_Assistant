@@ -30,6 +30,12 @@ export function buildFuelPowerJSON(fuelPowerData: any): string {
     
     // 计算各年的达产率
     const getProductionRate = (year: number) => {
+      // 【修复】优先检查外购燃料和动力费是否配置了"应用达产率"
+      const applyProductionRate = fuelPowerData.costConfig?.fuelPower?.applyProductionRate
+      if (applyProductionRate === false) {
+        return 1  // 不应用达产率，返回100%
+      }
+      
       const productionRates = fuelPowerData.productionRates || []
       return productionRates.find(p => p.yearIndex === year)?.rate || 1
     }

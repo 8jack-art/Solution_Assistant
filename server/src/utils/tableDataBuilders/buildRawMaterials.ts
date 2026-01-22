@@ -69,6 +69,12 @@ export function buildRawMaterialsJSON(rawMaterialsData: any): string {
     
     // 计算各年的达产率
     const getProductionRate = (year: number) => {
+      // 【修复】优先检查外购原材料费是否配置了"应用达产率"
+      const applyProductionRate = rawMaterialsData.costConfig?.rawMaterials?.applyProductionRate
+      if (applyProductionRate === false) {
+        return 1  // 不应用达产率，返回100%
+      }
+      
       const productionRates = rawMaterialsData.productionRates || []
       return productionRates.find(p => p.yearIndex === year)?.rate || 1
     }
